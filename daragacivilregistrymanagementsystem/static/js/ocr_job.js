@@ -60,6 +60,9 @@
     var pageText = document.getElementById("ocr-progress-text");
     if (pageFill) pageFill.style.width = n + "%";
     if (pageText) pageText.textContent = n + "%";
+    if (window.DaragaOcrTargets && typeof window.DaragaOcrTargets.setProgress === "function") {
+      window.DaragaOcrTargets.setProgress(n);
+    }
   }
 
   function fileLabel(path) {
@@ -109,6 +112,9 @@
       dt.value = data.doc_type;
       if (window.DaragaDocType && typeof window.DaragaDocType.apply === "function") {
         window.DaragaDocType.apply(data.doc_type);
+      }
+      if (window.DaragaOcrTargets && typeof window.DaragaOcrTargets.setType === "function") {
+        window.DaragaOcrTargets.setType();
       }
     }
     var hid = document.getElementById("image_filename");
@@ -171,6 +177,9 @@
     if (state) state.textContent = "OCR PROCESSING";
     if (next) next.textContent = "Please wait";
     lockScanInputs(true);
+    if (window.DaragaOcrTargets && typeof window.DaragaOcrTargets.start === "function") {
+      window.DaragaOcrTargets.start();
+    }
   }
 
   function clearScanDocumentPreview() {
@@ -236,6 +245,9 @@
     var next = document.getElementById("workflow-next");
     if (state) state.textContent = "—";
     if (next) next.textContent = "Scan";
+    if (window.DaragaOcrTargets && typeof window.DaragaOcrTargets.stop === "function") {
+      window.DaragaOcrTargets.stop();
+    }
   }
 
   function showBar(running) {

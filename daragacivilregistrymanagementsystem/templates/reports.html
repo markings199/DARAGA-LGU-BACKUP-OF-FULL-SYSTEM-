@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
 {% block title %}Civil Registry Reports{% endblock %}
-{% block body_class %}page-registry-reports{% if focus %} reg-focus{% endif %}{% endblock %}
+{% block body_class %}page-registry-reports{% if focus %} reg-focus reg-is-fitted{% endif %}{% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/civil_registry_reports.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/civil_registry_reports.css') }}?v=birth-sign-3" />
 {% endblock %}
 
 {% block content %}
@@ -85,8 +85,8 @@
       <span class="reg-doc-label">Zoom</span>
       <div class="reg-zoom-row">
         <button type="button" class="btn btn-secondary" id="reg-zoom-out" title="Zoom out">−</button>
-        <button type="button" class="btn btn-primary" id="reg-zoom-fit" title="See the full register width">Fit</button>
-        <span class="reg-zoom-pct" id="reg-zoom-pct">100%</span>
+        <button type="button" class="btn btn-secondary" id="reg-zoom-fit" title="See the full register width">Fit</button>
+        <span class="reg-zoom-pct" id="reg-zoom-pct">Fit</span>
         <button type="button" class="btn btn-secondary" id="reg-zoom-in" title="Zoom in">+</button>
         <button type="button" class="btn btn-secondary" id="reg-zoom-100">100%</button>
       </div>
@@ -123,7 +123,7 @@
       <span class="reg-status-dot" aria-hidden="true"></span>
       Page {{ page }} of {{ total_pages }}
       <span class="reg-status-dot" aria-hidden="true"></span>
-      Drag the bottom bar, or hold Shift and scroll, to move right
+      {% if focus %}Fit shows every column. Zoom in only if you need larger text.{% else %}Drag the bottom bar, or hold Shift and scroll, to move right{% endif %}
     </span>
     <span class="reg-pager">
       {% if page > 1 %}

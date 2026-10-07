@@ -3,85 +3,85 @@
   "fields": [
     {
       "key": "Registry Number",
-      "box": [0.68, 0.070, 0.965, 0.106],
+      "box": [0.70, 0.068, 0.965, 0.098],
       "kind": "registry",
       "printed": "Registry No Number"
     },
     {
       "key": "Name of Deceased",
-      "box": [0.14, 0.118, 0.74, 0.150],
+      "box": [0.12, 0.115, 0.76, 0.142],
       "kind": "name",
       "printed": "Name First Middle Last"
     },
     {
       "key": "Sex",
-      "box": [0.80, 0.118, 0.965, 0.150],
+      "box": [0.78, 0.115, 0.965, 0.142],
       "kind": "sex",
       "printed": "Sex Male Female"
     },
     {
       "key": "Date of Death",
-      "box": [0.05, 0.158, 0.32, 0.190],
+      "box": [0.07, 0.155, 0.32, 0.185],
       "kind": "date",
       "printed": "Date of Death Day Month Year"
     },
     {
       "key": "Age",
-      "box": [0.56, 0.162, 0.72, 0.192],
+      "box": [0.54, 0.155, 0.70, 0.185],
       "kind": "age",
       "printed": "If 1 year or above Completed years Years"
     },
     {
       "key": "Place of Death",
-      "box": [0.14, 0.208, 0.70, 0.232],
+      "box": [0.045, 0.208, 0.64, 0.224],
       "kind": "place",
       "printed": "Place of Death Name of Hospital Clinic Institution House No St Barangay City Municipality Province"
     },
     {
       "key": "Civil Status",
-      "box": [0.74, 0.208, 0.965, 0.232],
+      "box": [0.80, 0.210, 0.955, 0.224],
       "kind": "status",
       "printed": "Civil Status Single Married Widow Widower Annulled Divorced"
     },
     {
       "key": "Nationality",
-      "box": [0.34, 0.236, 0.54, 0.270],
+      "box": [0.276, 0.247, 0.346, 0.261],
       "kind": "citizenship",
       "printed": "Citizenship"
     },
     {
       "key": "Name of Mother",
-      "box": [0.62, 0.248, 0.965, 0.286],
+      "box": [0.64, 0.278, 0.965, 0.301],
       "kind": "name",
       "printed": "Maiden Name of Mother First Middle Last"
     },
     {
       "key": "Cause of Death",
-      "box": [0.22, 0.355, 0.62, 0.385],
+      "box": [0.20, 0.338, 0.55, 0.354],
       "kind": "cause",
       "printed": "Immediate cause a Interval between onset and death"
     },
     {
       "key": "Cause of Death",
-      "box": [0.22, 0.395, 0.62, 0.425],
+      "box": [0.20, 0.354, 0.55, 0.370],
       "kind": "cause",
       "printed": "Antecedent cause b"
     },
     {
       "key": "Cause of Death",
-      "box": [0.22, 0.435, 0.62, 0.465],
+      "box": [0.20, 0.370, 0.55, 0.386],
       "kind": "cause",
       "printed": "Underlying cause c"
     },
     {
       "key": "Date of Registration",
-      "box": [0.12, 0.792, 0.46, 0.836],
+      "box": [0.12, 0.804, 0.32, 0.816],
       "kind": "date",
       "printed": "Date"
     },
     {
       "key": "Date of Registration",
-      "box": [0.50, 0.792, 0.84, 0.836],
+      "box": [0.64, 0.830, 0.80, 0.842],
       "kind": "date",
       "printed": "Date"
     }

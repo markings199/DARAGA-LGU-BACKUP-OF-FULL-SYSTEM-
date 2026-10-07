@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import traceback
 from multiprocessing import get_context
 from queue import Empty, Full
@@ -63,18 +64,36 @@ def run_worker(in_q, out_q) -> None:
     # Do not inherit Flask's 2-thread cap; this process exists to run OCR quickly.
     limit_ocr_cpu_env(force=True, worker=True)
     try:
+        import cv2
+
+        cv2.setUseOptimized(True)
+        try:
+            cv2.setNumThreads(max(1, int(os.environ.get("OCR_CPU_THREADS") or "4")))
+        except Exception:
+            pass
         from ocr.birth import extract_birth_data
         from ocr.death import extract_death_data
         from ocr.detect import detect_from_image
         from ocr.marriage import extract_marriage_data
-        from ocr.shared import get_ocr
+        from ocr.shared import get_ocr, warmup_ocr
     except Exception:
         out_q.put({"type": "boot_error", "error": traceback.format_exc()})
         return
 
-    # Accept jobs immediately. Loading Paddle on a dummy page doubled first-scan time.
+    # Accept jobs immediately. Load Paddle in the background so the first scan is not waiting on import.
     out_q.put({"type": "ready"})
     engine_ready = False
+
+    def _preload_engine():
+        nonlocal engine_ready
+        try:
+            get_ocr()
+            warmup_ocr()
+            engine_ready = True
+        except Exception:
+            pass
+
+    threading.Thread(target=_preload_engine, daemon=True, name="ocr-preload").start()
 
     while True:
         try:
@@ -100,6 +119,7 @@ def run_worker(in_q, out_q) -> None:
                         }
                     )
                 get_ocr()
+                warmup_ocr()
                 engine_ready = True
             if job_type == "detect":
                 result = detect_from_image(path)

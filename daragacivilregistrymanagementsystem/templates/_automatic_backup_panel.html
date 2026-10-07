@@ -1,287 +1,321 @@
-{# Automatic Backup tab — keep form field names unchanged for backend compatibility. #}
+{# Automatic backup — compact hub: schedule, server path, document restore, full rebuild. #}
 {% set abs = auto_backup_settings or {} %}
 {% set br = backup_readiness or {} %}
-<div class="admin-section main-card backup-restore-page backup-auto-page">
-  <header class="ab-page-head">
-    <div>
-      <p class="ab-kicker">Administration</p>
-      <h2 class="section-title">Automatic Backup</h2>
-      <p class="ab-page-sub">Turn on → pick times → choose folder → save</p>
+{% set vi = vault_info or {} %}
+{% set freq = abs.frequency or 'daily' %}
+<div class="admin-section main-card backup-restore-page backup-auto-page backup-hub">
+  <header class="bh-hero">
+    <div class="bh-hero-copy">
+      <h2 class="section-title">Backup and restore</h2>
+      <p class="bh-lead">{{ backup_schedule_hint or "Automatic backup on the application server" }}</p>
     </div>
-    <label class="auto-backup-switch ab-master-switch" for="auto_backup_enabled">
-      <span class="ab-master-copy">
-        <strong>Schedule</strong>
-        <span>{{ 'Running' if abs.enabled else 'Paused' }}</span>
+    <div class="bh-hero-aside">
+      {% if abs.last_run_at %}
+        <span class="bh-chip {% if abs.last_run_status == 'error' %}is-warn{% else %}is-ok{% endif %}">Last {{ abs.last_run_at }}</span>
+      {% endif %}
+      <span class="bh-chip {% if br.server_writable %}is-ok{% elif br.system_ready %}is-ok{% else %}is-warn{% endif %}">
+        {% if br.server_writable %}Daraga ready{% elif br.system_ready %}System ready{% else %}Backup not ready{% endif %}
       </span>
-      <input type="checkbox" form="auto-backup-form" name="auto_backup_enabled" id="auto_backup_enabled" value="1" {% if abs.enabled %}checked{% endif %} />
-      <span class="auto-backup-switch-ui" aria-hidden="true"></span>
-      <span class="auto-backup-switch-label">{{ 'On' if abs.enabled else 'Off' }}</span>
-    </label>
+      <label class="auto-backup-switch ab-master-switch bh-switch" for="auto_backup_enabled">
+        <span class="ab-master-copy">
+          <strong>Auto</strong>
+          <span>{{ 'On' if abs.enabled else 'Off' }}</span>
+        </span>
+        <input type="checkbox" form="auto-backup-form" name="auto_backup_enabled" id="auto_backup_enabled" value="1" {% if abs.enabled %}checked{% endif %} />
+        <span class="auto-backup-switch-ui" aria-hidden="true"></span>
+        <span class="auto-backup-switch-label">{{ 'On' if abs.enabled else 'Off' }}</span>
+      </label>
+    </div>
   </header>
 
-  <form method="post" action="{{ url_for('administration_auto_backup_settings') }}" class="auto-backup-form ab-form" id="auto-backup-form">
-    <section class="ab-section" aria-labelledby="ab-schedule-title">
-      <div class="ab-section-head">
-        <span class="ab-step">1</span>
-        <div>
-          <h3 id="ab-schedule-title">When to back up</h3>
-          <p class="ab-section-tip">Keep the app open at these times. Missed runs catch up on restart.</p>
+  <div class="bh-board">
+    <form method="post" action="{{ url_for('administration_auto_backup_settings') }}" class="auto-backup-form ab-form bh-form" id="auto-backup-form">
+      <section class="bh-card" aria-labelledby="bh-when-title">
+        <h3 id="bh-when-title">Schedule</h3>
+        <div class="bh-freq">
+          <label class="bh-freq-card">
+            <input type="radio" name="auto_backup_frequency" value="daily" {% if freq == 'daily' %}checked{% endif %} />
+            <span><strong>Daily</strong></span>
+          </label>
+          <label class="bh-freq-card">
+            <input type="radio" name="auto_backup_frequency" value="weekly" {% if freq == 'weekly' %}checked{% endif %} />
+            <span><strong>Weekly</strong></span>
+          </label>
+          <label class="bh-freq-card">
+            <input type="radio" name="auto_backup_frequency" value="monthly" {% if freq == 'monthly' %}checked{% endif %} />
+            <span><strong>Monthly</strong></span>
+          </label>
         </div>
-      </div>
-      <div class="auto-backup-kind-grid ab-plan-grid">
-        <article class="ab-plan">
-          <label class="ab-plan-toggle">
-            <input type="checkbox" name="auto_backup_daily_enabled" value="1" {% if abs.daily_enabled %}checked{% endif %} />
-            <span class="ab-plan-copy">
-              <strong>Daily</strong>
-              <em>Today’s new scans</em>
-            </span>
-          </label>
-          <label class="ab-plan-time">
+        <div class="bh-when-grid">
+          <label class="bh-field">
             <span>Time</span>
-            <input type="time" name="auto_backup_daily_time" value="{{ abs.daily_time or abs.time or '20:00' }}" />
+            <input type="time" name="auto_backup_time" value="{{ abs.time or abs.full_time or abs.daily_time or '20:00' }}" />
           </label>
-        </article>
-        <article class="ab-plan">
-          <label class="ab-plan-toggle">
-            <input type="checkbox" name="auto_backup_monthly_enabled" value="1" {% if abs.monthly_enabled %}checked{% endif %} />
-            <span class="ab-plan-copy">
-              <strong>Monthly</strong>
-              <em>This month’s scans</em>
-            </span>
+          <label class="bh-field" id="bh-weekday-wrap">
+            <span>Weekday</span>
+            <select name="auto_backup_weekday">
+              {% set days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}
+              {% for i in range(7) %}
+                <option value="{{ i }}" {% if abs.weekday == i %}selected{% endif %}>{{ days[i] }}</option>
+              {% endfor %}
+            </select>
           </label>
-          <label class="ab-plan-time">
-            <span>Time</span>
-            <input type="time" name="auto_backup_monthly_time" value="{{ abs.monthly_time or '20:00' }}" />
+          <label class="bh-field" id="bh-monthday-wrap">
+            <span>Month day</span>
+            <select name="auto_backup_day">
+              {% for d in range(1, 29) %}
+                <option value="{{ d }}" {% if abs.day_of_month == d %}selected{% endif %}>{{ d }}</option>
+              {% endfor %}
+            </select>
           </label>
-        </article>
-        <article class="ab-plan">
-          <label class="ab-plan-toggle">
-            <input type="checkbox" name="auto_backup_yearly_enabled" value="1" {% if abs.yearly_enabled %}checked{% endif %} />
-            <span class="ab-plan-copy">
-              <strong>Yearly</strong>
-              <em>This year’s scans</em>
-            </span>
-          </label>
-          <label class="ab-plan-time">
-            <span>Time</span>
-            <input type="time" name="auto_backup_yearly_time" value="{{ abs.yearly_time or '20:00' }}" />
-          </label>
-        </article>
-        <article class="ab-plan ab-plan-priority">
-          <label class="ab-plan-toggle">
-            <input type="checkbox" name="auto_backup_full_enabled" value="1" {% if abs.full_enabled %}checked{% endif %} />
-            <span class="ab-plan-copy">
-              <strong>Full</strong>
-              <em>Database + scans (for restore)</em>
-            </span>
-          </label>
-          <label class="ab-plan-time">
-            <span>Time</span>
-            <input type="time" name="auto_backup_full_time" value="{{ abs.full_time or '20:05' }}" />
-          </label>
-        </article>
-      </div>
-      <div class="ab-timing">
-        <div class="form-row">
-          <label for="auto_backup_day">Monthly / yearly day</label>
-          <select name="auto_backup_day" id="auto_backup_day">
-            {% for d in range(1, 29) %}
-              <option value="{{ d }}" {% if abs.day_of_month == d %}selected{% endif %}>{{ d }}</option>
-            {% endfor %}
-          </select>
         </div>
-        <div class="form-row">
-          <label for="auto_backup_month">Yearly month</label>
-          <select name="auto_backup_month" id="auto_backup_month">
-            {% set month_names = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
-            {% for m in range(1, 13) %}
-              <option value="{{ m }}" {% if abs.month == m %}selected{% endif %}>{{ month_names[m - 1] }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="ab-section" aria-labelledby="ab-dest-title">
-      <div class="ab-section-head">
-        <span class="ab-step">2</span>
-        <div>
-          <h3 id="ab-dest-title">Where to save</h3>
-          <p class="ab-section-tip">
-            {% if br.deploy_ready %}
-              Office server ready · local copy always kept
-            {% elif br.server_configured and not br.server_writable %}
-              Check the office path · local copy still works
-            {% else %}
-              Optional office folder · local copy always kept
-            {% endif %}
-          </p>
-        </div>
-      </div>
-      <div class="ab-dest-grid ab-dest-locations">
-        <div class="ab-loc {% if abs.destination_path %}ab-loc-ready{% endif %}">
-          <div class="ab-loc-top">
-            <span class="ab-loc-name">Office server</span>
-            <span class="ab-loc-badge {% if br.server_writable %}ab-loc-badge-on{% elif abs.destination_path %}ab-loc-badge-warn{% else %}ab-loc-badge-off{% endif %}">
-              {% if br.server_writable %}Ready{% elif abs.destination_path %}Check path{% else %}Optional{% endif %}
-            </span>
-          </div>
-          <label class="ab-loc-path-label" for="auto_backup_destination">Shared folder</label>
+      <section class="bh-card" aria-labelledby="bh-where-title">
+        <h3 id="bh-where-title">Save location</h3>
+        <label class="bh-field bh-field-wide">
+          <span>Daraga LGU server folder</span>
           <input
             type="text"
             name="auto_backup_destination"
             id="auto_backup_destination"
-            value="{{ abs.destination_path or '' }}"
-            placeholder="\\DARAGA-SERVER\CivilRegistryBackups"
+            value="{{ abs.destination_path or br.server_path or '' }}"
+            placeholder="C:\CivilRegistryBackups"
             autocomplete="off"
             spellcheck="false"
           />
-          <p class="ab-loc-hint">Example: \\DARAGA-SERVER\CivilRegistryBackups</p>
-        </div>
-        <div class="ab-loc">
-          <div class="ab-loc-top">
-            <span class="ab-loc-name">This computer</span>
-            <span class="ab-loc-badge ab-loc-badge-on">Always</span>
-          </div>
-          <code class="auto-backup-path">{{ auto_backup_folder }}</code>
-          <p class="ab-loc-hint">Safety copy stays here if the server is offline.</p>
-        </div>
-      </div>
-      {% if abs.last_run_at %}
-      <p class="ab-last-run">Last backup: {{ abs.last_run_at }}{% if abs.last_run_status == 'partial' %} · server copy failed{% endif %}</p>
-      {% endif %}
-    </section>
-
-    {% if current_user and (current_user.role or '')|upper == 'ADMIN' %}
-    <section class="ab-section ab-now" aria-labelledby="ab-now-title">
-      <div class="ab-section-head">
-        <span class="ab-step">3</span>
-        <div>
-          <h3 id="ab-now-title">Backup now</h3>
-          <p class="ab-section-tip">Run once without waiting for the schedule.</p>
-        </div>
-      </div>
-      <div class="ab-now-row">
-        <label class="ab-now-type" for="backup_kind_now">
-          <span>Type</span>
-          <select name="backup_kind" id="backup_kind_now">
-            <option value="daily">Daily — today’s scans</option>
-            <option value="monthly">Monthly — this month</option>
-            <option value="yearly">Yearly — this year</option>
-            <option value="full" selected>Full — database + scans</option>
-          </select>
+          <small class="bh-field-hint">Kept in Admin Backup. Copied to the Daraga server when it is online.</small>
         </label>
-        <button type="submit" class="btn btn-secondary" formaction="{{ url_for('administration_auto_backup_run_now') }}" formmethod="post">Save now</button>
-        <button type="submit" class="btn btn-primary" formaction="{{ url_for('administration_auto_backup_get_now') }}" formmethod="post">Save and download</button>
+      </section>
+
+      {% if current_user and (current_user.role or '')|upper == 'ADMIN' %}
+      <section class="bh-card bh-actions-card">
+        <div class="bh-btn-row">
+          <button type="submit" class="btn btn-primary" name="backup_kind" value="{{ freq }}" formaction="{{ url_for('administration_auto_backup_run_now') }}" formmethod="post" data-backup-run="period">Backup now</button>
+          <button type="submit" class="btn btn-secondary" name="backup_kind" value="{{ freq }}" formaction="{{ url_for('administration_auto_backup_get_now') }}" formmethod="post" data-backup-run="copy" title="Save another copy in Admin Backup. Copied to the Daraga server when it is online.">Save copy now</button>
+          <button type="submit" class="btn btn-primary" formaction="{{ url_for('administration_auto_backup_settings') }}">Save schedule</button>
+        </div>
+        <div class="bh-full-backup">
+          <p class="bh-full-backup-title">Full system backup</p>
+          <p class="bh-full-backup-hint">One zip with the whole system: all certificates and scans, users, logs, and database records. It is kept in Admin Backup. When the Daraga LGU folder is connected, the same zip is also saved there. Restore it later with <strong>Full rebuild</strong>.</p>
+          <button
+            type="submit"
+            class="btn btn-primary bh-full-backup-btn"
+            name="backup_kind"
+            value="full"
+            formaction="{{ url_for('administration_auto_backup_run_now') }}"
+            formmethod="post"
+            data-app-confirm
+            data-confirm-title="Full system backup"
+            data-confirm-message="Create a full backup of this system now? It includes all certificates, scans, users, and logs. When the Daraga LGU server is connected, a copy is also saved there."
+            data-backup-run="full"
+            data-confirm-ok="Create full backup"
+            data-confirm-cancel="Go back"
+          >Full system backup</button>
+        </div>
+      </section>
+      {% else %}
+      <div class="bh-toolbar">
+        <button type="submit" class="btn btn-primary">Save schedule</button>
       </div>
-    </section>
-    {% endif %}
-
-    <div class="ab-toolbar">
-      <button type="submit" class="btn btn-primary">Save schedule</button>
-    </div>
-  </form>
-
-  <section class="ab-history ab-restore-panel" aria-labelledby="ab-restore-title">
-    <div class="ab-history-head">
-      <span class="ab-step">4</span>
-      <div>
-        <h3 id="ab-restore-title">Restore</h3>
-        <p class="ab-section-tip">Use a Full backup zip only. This replaces current data.</p>
-      </div>
-    </div>
-    <div class="ab-restore-row">
-      <form method="post" action="{{ url_for('administration_restore') }}" enctype="multipart/form-data" class="restore-form ab-restore-form">
-        <input type="file" name="backup_file" accept=".zip" required class="restore-file-input" />
-        <button type="submit" class="btn btn-secondary">Restore</button>
-      </form>
-    </div>
-  </section>
-
-  <section class="ab-history" aria-labelledby="ab-history-title">
-    <div class="ab-history-head">
-      <h3 id="ab-history-title">History</h3>
-      {% if backup_history %}
-        <span class="ab-history-count">{{ backup_history|length }}</span>
       {% endif %}
+    </form>
+
+    <div class="bh-side">
+      <section class="bh-card bh-restore" aria-labelledby="bh-restore-title">
+        <h3 id="bh-restore-title">Restore</h3>
+        <form
+          method="post"
+          action="{{ url_for('administration_restore') }}"
+          enctype="multipart/form-data"
+          class="restore-form bh-restore-form"
+          data-restore-ajax="1"
+          data-confirm-cancel="Cancel"
+        >
+          <div class="bh-restore-modes">
+            <label class="bh-mode">
+              <input type="radio" name="restore_mode" value="documents" checked
+                data-confirm-title="Restore documents"
+                data-confirm-message="Add or update only the certificates in this zip. Other days stay in the system. Your login stays signed in."
+                data-confirm-ok="Restore documents"
+                data-confirm-danger="1" />
+              <span>
+                <strong>Documents</strong>
+                Certificates and scans
+              </span>
+            </label>
+            <label class="bh-mode">
+              <input type="radio" name="restore_mode" value="full"
+                data-confirm-title="Full rebuild"
+                data-confirm-message="Replace the whole system from this zip, including users. Use only if this computer must be rebuilt."
+                data-confirm-ok="Rebuild system"
+                data-confirm-danger="1" />
+              <span>
+                <strong>Full rebuild</strong>
+                Users, logs, and files from a full system zip
+              </span>
+            </label>
+          </div>
+          <div class="bh-restore-row">
+            <input type="file" name="backup_file" accept=".zip" required class="restore-file-input" />
+            <button type="submit" class="btn btn-secondary">Restore</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="bh-card bh-history" aria-labelledby="bh-history-title">
+        <div class="ab-history-head">
+          <h3 id="bh-history-title">History</h3>
+          {% if backup_history %}
+            <span class="ab-history-count">{{ backup_history|length }}</span>
+          {% endif %}
+        </div>
+        {% if backup_history %}
+          <div class="table-wrap auto-backup-table-wrap">
+            <table class="table auto-backup-table auto-backup-history-table">
+              <colgroup>
+                <col class="ab-col-when" />
+                <col class="ab-col-type" />
+                <col class="ab-col-docs" />
+                <col class="ab-col-status" />
+                <col class="ab-col-actions" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col" class="ab-col-when">When</th>
+                  <th scope="col" class="ab-col-type">Type</th>
+                  <th scope="col" class="ab-col-docs">Docs</th>
+                  <th scope="col" class="ab-col-status">Status</th>
+                  <th scope="col" class="ab-col-actions"> </th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for h in backup_history %}
+                  <tr>
+                    <td class="ab-col-when" title="{{ h.created_at }}">{{ h.created_at }}</td>
+                    <td class="ab-col-type">{% if (h.kind or '')|lower == 'full' %}Full system{% else %}{{ h.kind|capitalize }}{% endif %}</td>
+                    <td class="ab-col-docs">{{ h.record_count }}</td>
+                    <td class="ab-col-status">
+                      {% if h.status == 'success' %}
+                        <span class="auto-backup-pill auto-backup-pill-ok">OK</span>
+                      {% elif h.status == 'partial' %}
+                        <span class="auto-backup-pill auto-backup-pill-warn">Partial</span>
+                      {% elif h.status == 'skipped' %}
+                        <span class="auto-backup-pill">Skip</span>
+                      {% else %}
+                        <span class="auto-backup-pill auto-backup-pill-err">Failed</span>
+                      {% endif %}
+                    </td>
+                    <td class="ab-col-actions">
+                      <div class="auto-backup-row-actions">
+                        {% if h.file_rel %}
+                          <a href="{{ url_for('administration_auto_backup_download_period', path=h.file_rel) }}" class="btn btn-secondary btn-sm" data-no-page-transition="1">Get</a>
+                        {% endif %}
+                        {% if h.status == 'error' %}
+                          <form method="post" action="{{ url_for('administration_auto_backup_retry', run_id=h.id) }}" class="auto-backup-delete-form">
+                            <button type="submit" class="btn btn-secondary btn-sm">Retry</button>
+                          </form>
+                        {% endif %}
+                        {% if current_user and (current_user.role or '')|upper == 'ADMIN' %}
+                          <form method="post" action="{{ url_for('administration_auto_backup_delete_run', run_id=h.id) }}" class="auto-backup-delete-form" data-app-confirm data-confirm-danger="1" data-confirm-title="Delete backup" data-confirm-message="Delete this backup zip? Registry records will not be changed." data-confirm-ok="Delete backup" data-confirm-cancel="Go back">
+                            <button type="submit" class="btn-delete-sm">Delete</button>
+                          </form>
+                        {% endif %}
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="auto-backup-empty">No backups yet.</p>
+        {% endif %}
+      </section>
     </div>
-    {% if backup_history %}
-      <div class="table-wrap auto-backup-table-wrap">
-        <table class="table auto-backup-table auto-backup-history-table">
-          <colgroup>
-            <col class="ab-col-when" />
-            <col class="ab-col-type" />
-            <col class="ab-col-period" />
-            <col class="ab-col-docs" />
-            <col class="ab-col-status" />
-            <col class="ab-col-actions" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th scope="col" class="ab-col-when">When</th>
-              <th scope="col" class="ab-col-type">Type</th>
-              <th scope="col" class="ab-col-period">Period</th>
-              <th scope="col" class="ab-col-docs">Documents</th>
-              <th scope="col" class="ab-col-status">Status</th>
-              <th scope="col" class="ab-col-actions"><span class="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for h in backup_history %}
-              <tr>
-                <td class="ab-col-when">{{ h.created_at }}</td>
-                <td class="ab-col-type">{{ h.kind|capitalize }}</td>
-                <td class="ab-col-period">{{ h.period_key }}</td>
-                <td class="ab-col-docs">{{ h.record_count }}</td>
-                <td class="ab-col-status">
-                  {% if h.status == 'success' %}
-                    <span class="auto-backup-pill auto-backup-pill-ok">Success</span>
-                  {% elif h.status == 'partial' %}
-                    <span class="auto-backup-pill auto-backup-pill-warn">Partial</span>
-                  {% elif h.status == 'skipped' %}
-                    <span class="auto-backup-pill">Skipped</span>
-                  {% else %}
-                    <span class="auto-backup-pill auto-backup-pill-err">Failed</span>
-                  {% endif %}
-                </td>
-                <td class="ab-col-actions">
-                  <div class="auto-backup-row-actions">
-                    {% if h.file_rel %}
-                      <a href="{{ url_for('administration_auto_backup_download_period', path=h.file_rel) }}" class="btn btn-secondary btn-sm">Download</a>
-                    {% endif %}
-                    {% if h.status == 'error' %}
-                      <form method="post" action="{{ url_for('administration_auto_backup_retry', run_id=h.id) }}" class="auto-backup-delete-form">
-                        <button type="submit" class="btn btn-secondary btn-sm">Retry</button>
-                      </form>
-                    {% endif %}
-                    {% if current_user and (current_user.role or '')|upper == 'ADMIN' %}
-                      <form method="post" action="{{ url_for('administration_auto_backup_delete_run', run_id=h.id) }}" class="auto-backup-delete-form" data-app-confirm data-confirm-danger="1" data-confirm-title="Delete backup" data-confirm-message="Delete this backup zip? Registry records will not be changed." data-confirm-ok="Delete backup" data-confirm-cancel="Go back">
-                        <button type="submit" class="btn-delete-sm">Delete</button>
-                      </form>
-                    {% endif %}
-                  </div>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <p class="auto-backup-empty">No backups yet. Use Backup now or wait for the schedule.</p>
-    {% endif %}
-  </section>
+  </div>
+
   <script>
     (function() {
       var toggle = document.getElementById('auto_backup_enabled');
-      var toggleLabel = document.querySelector('.auto-backup-switch-label');
-      var masterCopy = document.querySelector('.ab-master-copy span');
+      var toggleLabel = document.querySelector('.backup-hub .auto-backup-switch-label');
+      var masterCopy = document.querySelector('.backup-hub .ab-master-copy span');
       function updateSwitchLabel() {
         if (toggleLabel && toggle) toggleLabel.textContent = toggle.checked ? 'On' : 'Off';
-        if (masterCopy && toggle) masterCopy.textContent = toggle.checked ? 'Running' : 'Paused';
+        if (masterCopy && toggle) masterCopy.textContent = toggle.checked ? 'On' : 'Off';
       }
       if (toggle) toggle.addEventListener('change', updateSwitchLabel);
       updateSwitchLabel();
+
+      function syncFreq() {
+        var checked = document.querySelector('input[name="auto_backup_frequency"]:checked');
+        var freq = checked ? checked.value : 'daily';
+        var week = document.getElementById('bh-weekday-wrap');
+        var month = document.getElementById('bh-monthday-wrap');
+        if (week) week.hidden = freq !== 'weekly';
+        if (month) month.hidden = freq !== 'monthly';
+      }
+      document.querySelectorAll('input[name="auto_backup_frequency"]').forEach(function(el) {
+        el.addEventListener('change', syncFreq);
+      });
+      syncFreq();
     })();
   </script>
+  <div
+    id="backup-progress"
+    class="restore-progress backup-progress"
+    hidden
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="backup-progress-title"
+    aria-describedby="backup-progress-step backup-progress-time"
+  >
+    <div class="restore-progress-panel">
+      <div class="restore-progress-mark backup-progress-mark" aria-hidden="true">
+        <span class="restore-progress-ring"></span>
+        <span class="restore-progress-pulse"></span>
+        <span class="backup-progress-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H14l6 6v7.5A2.5 2.5 0 0 1 17.5 21h-11A2.5 2.5 0 0 1 4 18.5v-11Z"/>
+            <path d="M14 5v5h6"/>
+            <path d="M8.5 15.5h7"/>
+            <path d="M8.5 12.5h4"/>
+          </svg>
+        </span>
+      </div>
+      <h3 id="backup-progress-title">Creating backup</h3>
+      <p id="backup-progress-step" class="restore-progress-step">Preparing…</p>
+      <div class="restore-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <span class="restore-progress-fill"></span>
+      </div>
+      <p id="backup-progress-time" class="restore-progress-time">Elapsed 00:00</p>
+      <p class="restore-progress-hint">Keep this window open. The zip is saved in Admin Backup and on the Daraga LGU server when it is connected.</p>
+    </div>
+  </div>
+  <div
+    id="restore-progress"
+    class="restore-progress"
+    hidden
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="restore-progress-title"
+    aria-describedby="restore-progress-step restore-progress-time"
+  >
+    <div class="restore-progress-panel">
+      <div class="restore-progress-mark" aria-hidden="true">
+        <span class="restore-progress-ring"></span>
+        <span class="restore-progress-pulse"></span>
+      </div>
+      <h3 id="restore-progress-title">Restoring</h3>
+      <p id="restore-progress-step" class="restore-progress-step">Preparing…</p>
+      <div class="restore-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <span class="restore-progress-fill"></span>
+      </div>
+      <p id="restore-progress-time" class="restore-progress-time">Elapsed 00:00</p>
+      <p class="restore-progress-hint">Keep this window open.</p>
+      <p class="restore-progress-error" hidden></p>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='js/backup_progress.js') }}?v=backup-load-2"></script>
+  <script src="{{ url_for('static', filename='js/restore_progress.js') }}"></script>
 </div>

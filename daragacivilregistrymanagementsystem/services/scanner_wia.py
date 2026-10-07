@@ -180,7 +180,13 @@ def scan_to_file(device_index=1, output_dir=None, save_as_png=True):
     if output_dir is None:
         output_dir = Path(tempfile.gettempdir())
     output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return False, (
+            "Cannot save the scan on the office server. "
+            "The scan was not stored. Check that server storage is available and has free space."
+        )
 
     stamp = int(time.time() * 1000)
     out_png = output_dir / f"scan_{stamp}.png"

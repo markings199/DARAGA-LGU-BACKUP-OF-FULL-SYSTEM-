@@ -120,6 +120,9 @@
       if (valueEl) valueEl.textContent = Math.round(scale * 100) + "%";
       if (zoomOutBtn) zoomOutBtn.disabled = scale <= minScale;
       if (zoomInBtn) zoomInBtn.disabled = scale >= maxScale;
+      try {
+        section.dispatchEvent(new CustomEvent("document-viewer-layout"));
+      } catch (err) {}
     }
 
     section.__dvReapplyZoom = applyZoom;

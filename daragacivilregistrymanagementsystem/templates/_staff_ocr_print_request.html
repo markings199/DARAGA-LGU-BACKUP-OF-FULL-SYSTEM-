@@ -1,0 +1,13 @@
+{% if image_filename and current_user and (current_user.role or '')|upper == 'STAFF' and not can_print %}
+  <button
+    type="submit"
+    class="btn btn-secondary"
+    name="after_save"
+    value="request_print"
+    data-app-confirm
+    data-confirm-title="Request print"
+    data-confirm-message="This saves the document and sends a print request to Admin. You cannot print until Admin approves."
+    data-confirm-ok="Save and request print"
+    data-confirm-cancel="Go back"
+  >Print (admin approval)</button>
+{% endif %}

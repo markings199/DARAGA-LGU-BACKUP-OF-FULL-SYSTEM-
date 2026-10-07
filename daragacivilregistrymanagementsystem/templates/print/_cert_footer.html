@@ -1,30 +1,30 @@
 {% from 'print/_cert_macros.html' import cert_pay_row %}
 <div class="cert-signoff">
-  <div class="cert-signoff-left">
-    <div class="cert-verifier-row">
-      <div class="cert-verified-label">Verified by:</div>
-      <div class="cert-sign-card cert-sign-card--left">
-        <span class="cert-official-name" contenteditable="true" spellcheck="false" data-signer-slot="verifier">ANGELY M. CEDRO</span>
-        <span class="cert-official-title" contenteditable="true" spellcheck="false" data-signer-title="verifier">Administrative Aide VI</span>
-      </div>
-    </div>
-    <table class="cert-pay-table" aria-label="Payment">
-      <colgroup>
-        <col class="cert-pay-label-col" />
-        <col class="cert-pay-colon-col" />
-        <col class="cert-pay-blank-col" />
-      </colgroup>
-      {{ cert_pay_row('Amount Paid', '', true) }}
-      {{ cert_pay_row('OR Number') }}
-      {{ cert_pay_row('Date Paid') }}
-    </table>
-  </div>
-  <div class="cert-signoff-right">
+  <div class="cert-signoff-registrar">
     <div class="cert-sign-card cert-sign-card--right">
       <span class="cert-official-name" contenteditable="true" spellcheck="false" data-signer-slot="registrar">MICHELLE M. MARINAY</span>
       <span class="cert-official-title" contenteditable="true" spellcheck="false" data-signer-title="registrar">MGDH I / Municipal Civil Registrar I</span>
     </div>
   </div>
+
+  <div class="cert-signoff-verify">
+    <div class="cert-verified-label">Verified by:</div>
+    <div class="cert-sign-card cert-sign-card--left">
+      <span class="cert-official-name" contenteditable="true" spellcheck="false" data-signer-slot="verifier">ANGELY M. CEDRO</span>
+      <span class="cert-official-title" contenteditable="true" spellcheck="false" data-signer-title="verifier">Administrative Aide VI</span>
+    </div>
+  </div>
+
+  <table class="cert-pay-table" aria-label="Payment">
+    <colgroup>
+      <col class="cert-pay-label-col" />
+      <col class="cert-pay-colon-col" />
+      <col class="cert-pay-blank-col" />
+    </colgroup>
+    {{ cert_pay_row('Amount Paid', '', true) }}
+    {{ cert_pay_row('OR Number') }}
+    {{ cert_pay_row('Date Paid') }}
+  </table>
 </div>
 
 <p class="cert-footer-note">Note: A mark, erasure or alteration of any entry invalidates this certification.</p>

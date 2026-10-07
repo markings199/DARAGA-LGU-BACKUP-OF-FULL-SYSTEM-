@@ -1,4 +1,4 @@
-{% from 'print/_cert_macros.html' import cert_line_row %}
+{% from 'print/_cert_macros.html' import cert_line_row, cert_issued_row %}
 {% set meta = form_meta %}
 {% include 'print/_cert_header.html' %}
 
@@ -21,9 +21,6 @@
   {{ cert_line_row('Date of marriage of Parents', cert_field(data, 'Date of Marriage of Parents') or cert_field(data, 'Date of marriage of Parents'), 'Date of Marriage of Parents', true) }}
   {{ cert_line_row('Place of marriage of Parents', cert_field(data, 'Place of Marriage of Parents') or cert_field(data, 'Place of marriage of Parents'), 'Place of Marriage of Parents', true) }}
   {{ cert_line_row('Remarks', cert_field(data, 'Remarks'), 'Remarks', true) }}
-  {{ cert_line_row('This certification is issued to', '', 'Issued To', false) }}
-  <tr>
-    <td class="cert-issued-upon" colspan="3">upon his/her request.</td>
-  </tr>
+  {{ cert_issued_row() }}
 </table>
 {% include 'print/_cert_footer.html' %}

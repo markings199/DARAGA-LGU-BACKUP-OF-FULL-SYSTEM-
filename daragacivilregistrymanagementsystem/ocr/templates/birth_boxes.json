@@ -4,10 +4,10 @@
     {
       "key": "Registry Number",
       "box": [
-        0.68,
-        0.098,
+        0.70,
+        0.068,
         0.965,
-        0.128
+        0.098
       ],
       "kind": "registry",
       "printed": "Registry No Number"
@@ -15,10 +15,10 @@
     {
       "key": "Name of Child",
       "box": [
-        0.18,
-        0.128,
+        0.14,
+        0.118,
         0.965,
-        0.166
+        0.142
       ],
       "kind": "name",
       "printed": "Name First Middle Last"
@@ -26,10 +26,10 @@
     {
       "key": "Sex",
       "box": [
-        0.14,
-        0.168,
-        0.34,
-        0.204
+        0.096,
+        0.159,
+        0.214,
+        0.176
       ],
       "kind": "sex",
       "printed": "Sex Male Female"
@@ -37,27 +37,27 @@
     {
       "key": "Date of Birth",
       "box": [
-        0.42,
-        0.168,
+        0.34,
+        0.150,
         0.965,
-        0.204
+        0.176
       ],
       "kind": "date",
       "printed": "Date of Birth Day Month Year"
     },
     {
       "key": "Place of Birth",
-      "box": [0.20, 0.208, 0.96, 0.242],
+      "box": [0.14, 0.185, 0.965, 0.210],
       "kind": "place",
       "printed": "Place of Birth Name Hospital Clinic Institution House Street Barangay City Municipality Province"
     },
     {
       "key": "Type of Birth",
       "box": [
-        0.14,
-        0.252,
-        0.36,
-        0.292
+        0.08,
+        0.220,
+        0.32,
+        0.255
       ],
       "kind": "text",
       "printed": "Type of Birth Single Twin Triplet"
@@ -65,10 +65,10 @@
     {
       "key": "Birth Order",
       "box": [
-        0.5,
-        0.252,
+        0.50,
+        0.220,
         0.74,
-        0.292
+        0.255
       ],
       "kind": "text",
       "printed": "Birth Order First Second Third"
@@ -76,10 +76,10 @@
     {
       "key": "Name of Mother",
       "box": [
-        0.16,
+        0.18,
         0.268,
         0.965,
-        0.312
+        0.291
       ],
       "kind": "name",
       "printed": "Maiden Name First Middle Last including fetal Second Third etc Birth Order"
@@ -87,10 +87,10 @@
     {
       "key": "Citizenship of Mother",
       "box": [
-        0.16,
-        0.318,
-        0.5,
-        0.352
+        0.12,
+        0.298,
+        0.50,
+        0.322
       ],
       "kind": "citizenship",
       "printed": "Citizenship"
@@ -98,10 +98,10 @@
     {
       "key": "Religion of Mother",
       "box": [
-        0.54,
-        0.318,
+        0.52,
+        0.298,
         0.965,
-        0.352
+        0.322
       ],
       "kind": "text",
       "printed": "Religion Religious Sect"
@@ -109,10 +109,10 @@
     {
       "key": "Name of Father",
       "box": [
-        0.16,
-        0.400,
+        0.14,
+        0.408,
         0.965,
-        0.442
+        0.429
       ],
       "kind": "name",
       "printed": "Name First Middle Last"
@@ -120,10 +120,10 @@
     {
       "key": "Citizenship of Father",
       "box": [
-        0.14,
+        0.12,
         0.438,
-        0.36,
-        0.472
+        0.32,
+        0.467
       ],
       "kind": "citizenship",
       "printed": "Citizenship"
@@ -131,10 +131,10 @@
     {
       "key": "Religion of Father",
       "box": [
-        0.38,
+        0.33,
         0.438,
-        0.62,
-        0.472
+        0.55,
+        0.467
       ],
       "kind": "text",
       "printed": "Religion Religious Sect"
@@ -142,32 +142,32 @@
     {
       "key": "Date of Marriage of Parents",
       "box": [
-        0.16,
-        0.516,
+        0.06,
+        0.522,
         0.48,
-        0.554
+        0.546
       ],
       "kind": "date",
-      "printed": "Date Day Month Year"
+      "printed": "20a DATE Month Day Year Marriage of Parents"
     },
     {
       "key": "Place of Marriage of Parents",
       "box": [
-        0.5,
-        0.516,
+        0.48,
+        0.522,
         0.965,
-        0.554
+        0.546
       ],
       "kind": "place",
-      "printed": "Place City Municipality Province Country"
+      "printed": "20b PLACE City Municipality Province Country Marriage of Parents If not married"
     },
     {
       "key": "Date of Registration",
       "box": [
-        0.52,
-        0.796,
-        0.82,
-        0.832
+        0.56,
+        0.832,
+        0.84,
+        0.852
       ],
       "kind": "date",
       "printed": "Date"
@@ -175,10 +175,10 @@
     {
       "key": "Remarks",
       "box": [
-        0.16,
-        0.836,
+        0.12,
+        0.852,
         0.965,
-        0.876
+        0.875
       ],
       "kind": "text",
       "printed": "Remarks Annotations LCRO CRG Use Only"

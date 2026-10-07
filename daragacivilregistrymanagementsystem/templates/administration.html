@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Administration{% endblock %}
-{% block body_class %}page-administration{% if tab == 'dashboard' %} page-admin-dashboard{% endif %}{% endblock %}
+{% block body_class %}page-administration{% if tab == 'dashboard' %} page-admin-dashboard{% endif %}{% if tab == 'automatic_backup' %} page-admin-backup{% endif %}{% if tab == 'office_logs' %} page-admin-office-logs{% endif %}{% endblock %}
 
 {% block extra_head %}{% endblock %}
 
@@ -37,7 +37,8 @@
     <a href="{{ url_for('administration', tab='audit') }}" class="admin-tab {% if tab == 'audit' %}active{% endif %}">Audit log</a>
     <a href="{{ url_for('administration', tab='users') }}" class="admin-tab {% if tab == 'users' %}active{% endif %}">Users</a>
     <a href="{{ url_for('civil_registry_reports') }}" class="admin-tab">Reports</a>
-    <a href="{{ url_for('administration', tab='automatic_backup') }}" class="admin-tab {% if tab == 'automatic_backup' %}active{% endif %}">Automatic Backup</a>
+    <a href="{{ url_for('administration', tab='automatic_backup') }}" class="admin-tab {% if tab == 'automatic_backup' %}active{% endif %}">Backup</a>
+    <a href="{{ url_for('administration', tab='office_logs') }}" class="admin-tab {% if tab == 'office_logs' %}active{% endif %}">Office logs</a>
   </nav>
 
   {% if tab == 'dashboard' %}
@@ -193,8 +194,15 @@
           <a href="{{ url_for('administration', tab='automatic_backup') }}" class="admin-qa-card">
             <span class="admin-qa-ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg></span>
             <span class="admin-qa-copy">
-              <span class="admin-qa-title">Automatic Backup</span>
-              <span class="admin-qa-meta">Saved on this system and, when set, on the LGU server</span>
+              <span class="admin-qa-title">Backup</span>
+              <span class="admin-qa-meta">Scheduled backup on the office server</span>
+            </span>
+          </a>
+          <a href="{{ url_for('administration', tab='office_logs') }}" class="admin-qa-card">
+            <span class="admin-qa-ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg></span>
+            <span class="admin-qa-copy">
+              <span class="admin-qa-title">Office logs</span>
+              <span class="admin-qa-meta">{% if log_retention and log_retention.get('enabled') %}Keep closed logs {{ log_retention.get('keep_days', 30) }} days{% else %}Retention off{% endif %} · requests and audit only</span>
             </span>
           </a>
           <a href="{{ url_for('archiving') }}" class="admin-qa-card">
@@ -333,7 +341,7 @@
   {% elif tab == 'edit_requests' %}
     <div class="admin-section main-card admin-section--table-scroll">
       <h2 class="section-title">Edit requests</h2>
-      <p class="section-desc">Approve or reject staff requests to edit civil records. Approved requests receive a 5-digit code for the staff to complete the edit.</p>
+      <p class="section-desc">Approve or reject staff requests to edit civil records. Approved requests receive a 5-digit code for the staff to complete the edit. {{ log_retention_hint }}</p>
       <form method="get" action="{{ url_for('administration') }}" class="request-doc-type-filter admin-doc-type-filter">
         <input type="hidden" name="tab" value="edit_requests" />
         <label for="admin-document-type-filter">Document type</label>
@@ -422,7 +430,7 @@
   {% elif tab == 'print_requests' %}
     <div class="admin-section main-card admin-section--table-scroll">
       <h2 class="section-title">Print requests</h2>
-      <p class="section-desc">Approve or reject staff requests to print civil records. Each approved request allows one print; staff must request again for another copy.</p>
+      <p class="section-desc">Approve or reject staff requests to print civil records. Each approved request allows one print; staff must request again for another copy. {{ log_retention_hint }}</p>
       <form method="get" action="{{ url_for('administration') }}" class="request-doc-type-filter admin-doc-type-filter">
         <input type="hidden" name="tab" value="print_requests" />
         <label for="admin-print-doc-type-filter">Document type</label>
@@ -522,6 +530,7 @@
   {% elif tab == 'print_logs' %}
     <div class="admin-section main-card">
       <h2 class="section-title">Print logs</h2>
+      <p class="section-desc">{{ log_retention_hint }}</p>
       {% if print_logs %}
         <div class="table-wrap admin-log-table-wrap">
           <table class="table admin-log-table">
@@ -561,6 +570,7 @@
   {% elif tab == 'audit' %}
     <div class="admin-section main-card">
       <h2 class="section-title">Audit log</h2>
+      <p class="section-desc">{{ log_retention_hint }}</p>
       {% if audit_logs %}
         <div class="table-wrap admin-log-table-wrap">
           <table class="table admin-log-table">
@@ -594,6 +604,7 @@
       <h2 class="section-title">Users</h2>
       <p class="section-desc">
         Create office accounts and assign a role: <strong>Administrator</strong> (this page, approvals, backups) or <strong>Staff</strong> (encoding, search, requests).
+        Username is the login name (for example encoder1) — it is not the same as Role. <code>Staff</code> and <code>staff</code> count as the same username.
         Passwords are issued once — they cannot be viewed later. If someone forgets theirs, set a new password from the account row.
       </p>
 
@@ -797,6 +808,9 @@
 
   {% elif tab == 'automatic_backup' %}
     {% include '_automatic_backup_panel.html' %}
+
+  {% elif tab == 'office_logs' %}
+    {% include '_office_logs_panel.html' %}
 
   {% endif %}
 

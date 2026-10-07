@@ -72,7 +72,9 @@
               {% include '_ocr_meta_field.html' %}
             {% endfor %}
           </div>
+          {% if current_user and (current_user.role or '')|upper == 'ADMIN' %}
           {% include '_document_annotation_fields.html' %}
+          {% endif %}
         </div>
 
         <div class="button-row form-review-actions">
@@ -90,9 +92,7 @@
           >
             Cancel
           </button>
-          {% if image_filename and current_user and (current_user.role or '')|upper == 'STAFF' and not can_print %}
-            <button type="button" class="btn btn-secondary" disabled title="Staff need admin approval to print">Print (admin approval)</button>
-          {% endif %}
+          {% include '_staff_ocr_print_request.html' %}
           <button type="submit" class="btn btn-primary form-review-confirm">Confirm marriage data</button>
         </div>
       </div>

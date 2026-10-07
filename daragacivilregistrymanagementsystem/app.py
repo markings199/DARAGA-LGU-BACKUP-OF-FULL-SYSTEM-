@@ -86,20 +86,41 @@ from pathlib import Path
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, send_file, jsonify
 from sqlalchemy import or_
+from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from models import db, User, Record, EditRequest, AuditLog, PrintLog, PrintRequest, BackupRun
+from services.vault_storage import (
+    apply_vault,
+    vault_status,
+    prepare_upload_storage,
+    describe_storage_error,
+    local_upload_dir,
+    ensure_upload_layout,
+    ALLOWED_IMAGE_EXTS,
+    ALLOWED_UPLOAD_TOP,
+)
+from services.log_retention import (
+    load_settings as load_log_retention_settings,
+    save_settings as save_log_retention_settings,
+    settings_from_form as log_retention_from_form,
+    retention_hint,
+    office_log_counts,
+)
 from services.auto_backup import (
     auto_backup_dir,
     apply_schedule,
+    schedule_summary,
     server_backup_display,
-    local_backup_root,
+    backup_storage_display,
+    resolve_backup_root,
     daily_backup_stamp,
     daily_full_backup_filename,
     delete_auto_backup,
     delete_backup_run,
     ensure_backup_dir_writable,
-    clean_destination_path,
+    office_backup_destination,
+    env_backup_root,
     get_backup_readiness,
     init_auto_backup_scheduler,
     list_auto_backups,
@@ -113,6 +134,10 @@ from services.auto_backup import (
     run_full_backup,
     run_period_backup,
     save_settings as save_auto_backup_settings,
+    copy_backup_to_host_downloads,
+    this_server_name,
+    require_lgu_backup_root,
+    scheduled_backup_kind,
     settings_from_form,
     sync_local_backups_to_server,
     write_full_backup_zip,
@@ -176,11 +201,50 @@ except ImportError:
 
 
 BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = BASE_DIR / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
-(UPLOAD_DIR / "temp").mkdir(exist_ok=True)
-for sub in ("birth", "marriage", "death"):
-    (UPLOAD_DIR / sub).mkdir(exist_ok=True)
+
+
+def _load_env_files() -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(BASE_DIR / ".env")
+    load_dotenv(BASE_DIR.parent / ".env")
+
+
+_load_env_files()
+
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+
+UPLOAD_DIR, _UPLOAD_STORAGE_ERROR = prepare_upload_storage(BASE_DIR)
+if _UPLOAD_STORAGE_ERROR:
+    logging.getLogger(__name__).warning("Server storage not ready: %s", _UPLOAD_STORAGE_ERROR)
+
+
+def _require_server_storage() -> Optional[str]:
+    """Refuse writes unless the configured server volume is usable. Never falls back to a client disk."""
+    global UPLOAD_DIR, _UPLOAD_STORAGE_ERROR
+    dest, err = prepare_upload_storage(BASE_DIR)
+    UPLOAD_DIR = dest
+    _UPLOAD_STORAGE_ERROR = err
+    return err
+
+
+def _safe_path_under(root: Path, norm: str) -> Path | None:
+    if not norm:
+        return None
+    try:
+        upload_root = root.resolve()
+        full = (root / norm).resolve()
+        full.relative_to(upload_root)
+        return full
+    except (ValueError, OSError):
+        full = root / norm
+        root_text = str(root).replace("/", "\\").rstrip("\\").lower()
+        full_text = str(full).replace("/", "\\").rstrip("\\").lower()
+        if full_text == root_text or full_text.startswith(root_text + "\\"):
+            return full
+        return None
 
 
 def _normalize_upload_relpath(rel: str) -> str:
@@ -198,18 +262,26 @@ def _normalize_upload_relpath(rel: str) -> str:
     return "/".join(parts)
 
 
-def _upload_file_path(rel: str) -> Path | None:
-    """Resolve a stored image path under UPLOAD_DIR, or None if unsafe/empty."""
+def _upload_file_path(rel: str, *, for_write: bool = False) -> Path | None:
+    """Resolve a stored image path under server uploads. Legacy app-folder files are read-only."""
     norm = _normalize_upload_relpath(rel)
     if not norm:
         return None
-    upload_root = UPLOAD_DIR.resolve()
-    full = (UPLOAD_DIR / norm).resolve()
+    primary = _safe_path_under(UPLOAD_DIR, norm)
+    if for_write:
+        return primary
+    if primary is not None and primary.is_file():
+        return primary
+    legacy = local_upload_dir(BASE_DIR)
     try:
-        full.relative_to(upload_root)
-    except ValueError:
-        return None
-    return full
+        same = primary is not None and legacy.resolve() == UPLOAD_DIR.resolve()
+    except OSError:
+        same = str(legacy).rstrip("\\/").lower() == str(UPLOAD_DIR).rstrip("\\/").lower()
+    if not same:
+        candidate = _safe_path_under(legacy, norm)
+        if candidate is not None and candidate.is_file():
+            return candidate
+    return primary
 
 
 def _existing_upload_relpath(rel: str) -> str:
@@ -239,19 +311,10 @@ def _flatten_nested_uploads() -> None:
     shutil.rmtree(nested, ignore_errors=True)
 
 
-_flatten_nested_uploads()
-
-
-def _load_env_files() -> None:
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        return
-    load_dotenv(BASE_DIR / ".env")
-    load_dotenv(BASE_DIR.parent / ".env")
-
-
-_load_env_files()
+try:
+    _flatten_nested_uploads()
+except OSError:
+    pass
 
 DEFAULT_POSTGRES_URI = "postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/daraga_civil_registry"
 
@@ -304,10 +367,14 @@ def _existing_columns(table: str) -> set[str]:
 
 
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.jinja_env.auto_reload = True
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 app.secret_key = os.environ.get("SECRET_KEY", "change-this-secret-key")
 app.config["SQLALCHEMY_DATABASE_URI"] = resolve_database_uri()
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024
 
 db.init_app(app)
 
@@ -390,6 +457,33 @@ def user_can_print_record(user, record_id: int) -> bool:
 def user_can_print_during_review(user) -> bool:
     """OCR review forms (before save): admins only."""
     return _is_admin_user(user)
+
+
+def _create_staff_print_request_after_ocr(user, record) -> bool:
+    """Save-time print request from OCR review. Admin still must approve. Does not print."""
+    if not user or not record or (user.role or "").upper() != "STAFF":
+        return False
+    pending = PrintRequest.query.filter_by(
+        record_id=record.id, requested_by_id=user.id, status="PENDING"
+    ).first()
+    if pending:
+        return False
+    has_scan = bool((record.image_path or record.image_front_path or "").strip())
+    print_format = PRINT_FORMAT_BOTH if has_scan else PRINT_FORMAT_CERTIFICATION
+    req = PrintRequest(
+        record_id=record.id,
+        requested_by_id=user.id,
+        reason="Requested after scan and OCR review.",
+        print_format=print_format,
+    )
+    db.session.add(req)
+    db.session.commit()
+    _log_audit(
+        user.id,
+        "PRINT_REQUEST_SUBMIT",
+        f"record_id={record.id} request_id={req.id} print_format={print_format} source=ocr_review",
+    )
+    return True
 
 
 # Available in every Jinja template (context processors alone can fail to apply in some run setups).
@@ -588,17 +682,38 @@ def _save_ocr_image_from_request():
     file = request.files.get("image")
     image_filename_form = (request.form.get("image_filename") or "").strip()
 
+    storage_err = _require_server_storage()
+    if storage_err:
+        return None, None, storage_err
+
     if file and file.filename:
-        ext = os.path.splitext(file.filename)[1].lower()
-        if ext not in {".jpg", ".jpeg", ".png"}:
+        content_len = request.content_length
+        if content_len is not None and content_len > MAX_UPLOAD_BYTES + 1024 * 1024:
+            return None, None, "The file is too large to store on the server. It was not saved."
+        original_name = Path(file.filename).name
+        ext = os.path.splitext(original_name)[1].lower()
+        if ext not in ALLOWED_IMAGE_EXTS:
             return None, None, "Only JPG and PNG images are supported."
         subdir = UPLOAD_DIR / "temp"
-        subdir.mkdir(exist_ok=True)
-        original_name = Path(file.filename).name
         stem = _sanitize_filename_part(Path(original_name).stem, 36)
-        ext = os.path.splitext(original_name)[1].lower() or ".jpg"
         save_path = subdir / f"scan_{uuid.uuid4().hex[:10]}_{stem}{ext}"
-        file.save(save_path)
+        try:
+            subdir.mkdir(parents=True, exist_ok=True)
+            file.save(save_path)
+        except OSError as exc:
+            return None, None, describe_storage_error(exc, subdir)
+        if not save_path.is_file() or save_path.stat().st_size <= 0:
+            try:
+                save_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return None, None, "The file could not be saved on the server. The upload was not marked as successful."
+        if save_path.stat().st_size > MAX_UPLOAD_BYTES:
+            try:
+                save_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return None, None, "The file is too large to store on the server. It was not saved."
         image_filename = f"temp/{save_path.name}"
         return save_path, image_filename, None
     if image_filename_form:
@@ -676,6 +791,12 @@ def _get_staged_scan() -> dict | None:
         "doc_type": (staged.get("doc_type") or "").strip(),
         "original_name": (staged.get("original_name") or Path(rel).name).strip(),
     }
+
+
+def _ocr_field_guides() -> dict:
+    from ocr.field_boxes import all_metadata_field_guides
+
+    return all_metadata_field_guides()
 
 
 def _get_active_ocr_for_page() -> dict | None:
@@ -1061,19 +1182,37 @@ def login():
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
+        ajax = request.headers.get("X-Login-Intent") == "ajax"
+
         if not username or not password:
+            if ajax:
+                return jsonify({"ok": False, "error": "Please enter username and password."}), 400
             flash("Please enter username and password.")
             return redirect(url_for("login"))
 
-        user = User.query.filter_by(username=username).first()
+        try:
+            user = _find_user_by_username(username)
+        except Exception:
+            db.session.rollback()
+            message = "Database is not running. Start PostgreSQL, then try again."
+            if ajax:
+                return jsonify({"ok": False, "error": message}), 503
+            flash(message)
+            return redirect(url_for("login"))
         if not user:
+            if ajax:
+                return jsonify({"ok": False, "error": "Invalid username or password."}), 401
             flash("Invalid username or password.")
             return redirect(url_for("login"))
         try:
             if not check_password_hash(user.password_hash or "", password):
+                if ajax:
+                    return jsonify({"ok": False, "error": "Invalid username or password."}), 401
                 flash("Invalid username or password.")
                 return redirect(url_for("login"))
         except ValueError:
+            if ajax:
+                return jsonify({"ok": False, "error": "Invalid username or password."}), 401
             flash("Invalid username or password.")
             return redirect(url_for("login"))
 
@@ -1084,6 +1223,18 @@ def login():
         user.last_login_at = datetime.utcnow()
         db.session.commit()
         _remember_password_vault(user, password)
+        if ajax:
+            role = (user.role or "").strip().lower()
+            role_label = "Administrator" if role == "admin" else "Staff"
+            return jsonify(
+                {
+                    "ok": True,
+                    "redirect": url_for("index"),
+                    "username": user.username,
+                    "role": role,
+                    "role_label": role_label,
+                }
+            )
         return redirect(url_for("index"))
 
     return render_template("login.html")
@@ -1204,6 +1355,7 @@ def index():
         active_ocr=active_ocr,
         staged_scan=staged_scan,
         scan_preview=scan_preview,
+        ocr_field_guides=_ocr_field_guides(),
     )
 
 
@@ -1219,9 +1371,15 @@ def api_scanners():
 @login_required
 def api_scan():
     """Perform a scan from the selected physical scanner and return the image path."""
+    storage_err = _require_server_storage()
+    if storage_err:
+        return {"ok": False, "error": storage_err}, 507
     device_index = request.form.get("device_index", type=int) or 1
     temp_dir = UPLOAD_DIR / "temp"
-    ok, path_or_error = scan_to_file(device_index=device_index, output_dir=temp_dir, save_as_png=True)
+    try:
+        ok, path_or_error = scan_to_file(device_index=device_index, output_dir=temp_dir, save_as_png=True)
+    except OSError as exc:
+        return {"ok": False, "error": describe_storage_error(exc, temp_dir)}, 507
     if not ok:
         return {"ok": False, "error": path_or_error}, 400
     # path_or_error is absolute; we need a path relative to UPLOAD_DIR for image_filename
@@ -1296,12 +1454,44 @@ def api_ocr_start():
     return {"ok": True, "job_id": job_id}
 
 
+@app.route("/api/ocr/field-guides", methods=["GET"])
+@login_required
+def api_ocr_field_guides():
+    """Write-in boxes for Document preview targeting, mapped onto the staged scan."""
+    doc_type = (request.args.get("doc_type") or "").strip().lower()
+    if doc_type not in ("birth", "marriage", "death"):
+        staged = _get_staged_scan()
+        job = _get_active_ocr_for_page()
+        doc_type = ((job or {}).get("doc_type") or (staged or {}).get("doc_type") or "").strip().lower()
+    if doc_type not in ("birth", "marriage", "death"):
+        return {"ok": True, "doc_type": "", "fields": []}
+
+    rel = _normalize_upload_relpath(request.args.get("image") or "")
+    if not rel:
+        staged = _get_staged_scan()
+        job = _get_active_ocr_for_page()
+        rel = (job or {}).get("image_filename") or (staged or {}).get("image_filename") or ""
+        rel = _normalize_upload_relpath(rel)
+    path = _upload_file_path(rel) if rel else None
+    from ocr.field_boxes import align_field_guides_to_image, metadata_field_guides
+
+    try:
+        if path is not None and path.is_file():
+            fields = align_field_guides_to_image(doc_type, str(path))
+        else:
+            fields = metadata_field_guides(doc_type)
+    except Exception:
+        fields = metadata_field_guides(doc_type)
+    return {"ok": True, "doc_type": doc_type, "fields": fields}
+
+
 @app.route("/api/ocr/status/<job_id>", methods=["GET"])
 @login_required
 def api_ocr_status(job_id):
+    user_id = session.get("user_id")
     with _OCR_JOBS_LOCK:
         job = _OCR_JOBS.get(job_id)
-        if not job:
+        if not job or job.get("user_id") not in (None, user_id):
             return {"ok": True, "status": "cancelled", "progress": 0, "message": "OCR cancelled."}
         payload = {
             "ok": True,
@@ -1653,6 +1843,9 @@ def ocr_result(job_id):
         if job.get("status") != "done":
             flash("OCR is still processing. Please wait.")
             return redirect(url_for("index"))
+        if job.get("user_id") not in (None, session.get("user_id")):
+            flash("OCR session not found. Please run OCR again.")
+            return redirect(url_for("index"))
         doc_type = job.get("doc_type")
         stored_image = job.get("image_filename") or ""
         image_filename = _existing_upload_relpath(stored_image)
@@ -1723,7 +1916,13 @@ def _strip_hidden_metadata(data: dict | None) -> dict:
 
 def _submitted_from_request_form():
     """Build flat dict from POST; last value wins per field (fixes duplicate keys / MultiDict quirks)."""
-    skip = {"csrf_token", "submit", "clear_annotation"} | set(ANNOTATION_FORM_KEYS) | set(HIDDEN_METADATA_KEYS)
+    skip = {
+        "csrf_token",
+        "submit",
+        "clear_annotation",
+        "after_save",
+        "job_id",
+    } | set(ANNOTATION_FORM_KEYS) | set(HIDDEN_METADATA_KEYS)
     submitted = {}
     for key in request.form:
         if key in skip:
@@ -2229,7 +2428,7 @@ def administration():
     tab = (request.args.get("tab") or "dashboard").strip().lower()
     if tab == "backup_restore":
         return redirect(url_for("administration", tab="automatic_backup"))
-    if tab not in ("dashboard", "audit", "edit_requests", "print_requests", "users", "print_logs", "automatic_backup"):
+    if tab not in ("dashboard", "audit", "edit_requests", "print_requests", "users", "print_logs", "automatic_backup", "office_logs"):
         tab = "dashboard"
     request_doc_type = _parse_doc_type_filter_arg(request.args.get("doc_type"))
     edit_requests_list = []
@@ -2321,8 +2520,13 @@ def administration():
         auto_backup_files=auto_backup_files,
         backup_history=backup_history,
         backup_readiness=backup_readiness,
-        auto_backup_folder=str(local_backup_root(BASE_DIR)) if backup_tabs else "",
+        auto_backup_folder=backup_storage_display(BASE_DIR, auto_backup_settings) if backup_tabs else "",
         auto_backup_server_folder=server_backup_display(BASE_DIR, auto_backup_settings) if backup_tabs else "",
+        vault_info=vault_status(BASE_DIR, UPLOAD_DIR) if backup_tabs else None,
+        backup_schedule_hint=schedule_summary(auto_backup_settings) if backup_tabs and auto_backup_settings else "",
+        log_retention=load_log_retention_settings(BASE_DIR),
+        log_retention_hint=retention_hint(load_log_retention_settings(BASE_DIR)),
+        office_log_stats=office_log_counts() if tab in ("office_logs", "dashboard") else None,
         today_backup_stamp=daily_backup_stamp(),
         revealed_password=session.pop("admin_password_reveal", None) if tab == "users" else None,
         password_target=password_target,
@@ -2508,7 +2712,7 @@ def civil_registry_reports_pdf():
 def administration_create_user():
     """Create a new system user with a chosen role (ADMIN or STAFF)."""
     admin = get_current_user()
-    username = (request.form.get("username") or "").strip()
+    username = _normalize_username(request.form.get("username") or "")
     password = (request.form.get("password") or "").strip()
     if request.form.get("generate_password") or not password:
         password = _issue_office_password()
@@ -2526,8 +2730,9 @@ def administration_create_user():
     if role not in ("ADMIN", "STAFF"):
         flash("Invalid role. Choose Administrator or Staff.")
         return redirect(url_for("administration", tab="users"))
-    if User.query.filter_by(username=username).first():
-        flash("That username is already in use.")
+    existing = _find_user_by_username(username)
+    if existing:
+        flash(f'Username "{existing.username}" is already in use (names are unique even if capital letters differ).')
         return redirect(url_for("administration", tab="users"))
 
     user = User(
@@ -2661,7 +2866,7 @@ def administration_delete_user(user_id):
 @app.route("/administration/backup")
 @admin_required
 def administration_backup():
-    """Create a full zip backup on this system (and the LGU server if set), then download it."""
+    """Create a full zip backup on office-server storage, then download it if the user asked to."""
     ok, message, rel_file = run_auto_backup(
         base_dir=BASE_DIR,
         upload_dir=UPLOAD_DIR,
@@ -2678,12 +2883,12 @@ def administration_backup():
         flash(err or "Full backup file not found.", "error")
         return redirect(url_for("administration", tab="automatic_backup"))
     _log_audit(session.get("user_id"), "BACKUP_FULL", full_path.name)
-    return send_file(
-        full_path,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=full_path.name,
-    )
+    dest, copy_err = copy_backup_to_host_downloads(full_path)
+    if dest is not None:
+        flash(f"Full backup saved on the Daraga server.", "success")
+    else:
+        flash(copy_err or message, "error" if copy_err else "success")
+    return redirect(url_for("administration", tab="automatic_backup"))
 
 
 def _auto_backup_audit(action: str, details: str) -> None:
@@ -2693,28 +2898,17 @@ def _auto_backup_audit(action: str, details: str) -> None:
 @app.route("/administration/auto-backup/settings", methods=["POST"])
 @admin_required
 def administration_auto_backup_settings():
-    """Save automatic backup schedule (daily / weekly / monthly / yearly)."""
+    """Save automatic backup schedule even if the Daraga share is not reachable from this laptop yet."""
     settings = settings_from_form(request.form, BASE_DIR)
     previous_dest = _norm_dest_text(load_auto_backup_settings(BASE_DIR).get("destination_path") or "")
-    dest_error = None
-    folder = None
     folder, dest_error = resolve_server_backup_root(BASE_DIR, settings)
-    if dest_error:
-        previous = load_auto_backup_settings(BASE_DIR)
-        settings["destination_path"] = previous.get("destination_path") or ""
-        flash(dest_error, "error")
-        folder = None
-    elif folder is not None:
-        dest_error = ensure_backup_dir_writable(folder)
-        if dest_error:
-            flash(dest_error, "error")
-            previous = load_auto_backup_settings(BASE_DIR)
-            settings["destination_path"] = previous.get("destination_path") or ""
-            folder = None
+    reach_error = dest_error
+    if folder is not None and not dest_error:
+        reach_error = ensure_backup_dir_writable(folder)
     save_auto_backup_settings(BASE_DIR, settings)
     copied = failed = 0
     new_dest = _norm_dest_text(settings.get("destination_path") or "")
-    path_changed = bool(folder is not None and not dest_error and new_dest and new_dest != previous_dest)
+    path_changed = bool(folder is not None and not reach_error and new_dest and new_dest != previous_dest)
     if path_changed:
         copied, failed, _sync_err = sync_local_backups_to_server(BASE_DIR)
     try:
@@ -2736,31 +2930,25 @@ def administration_auto_backup_settings():
         "AUTO_BACKUP_SETTINGS",
         f"status={status} frequency={settings.get('frequency')} dest={dest_note}",
     )
-    if not dest_error:
-        if folder is not None:
-            flash("Schedule saved. Backups go to the office server and this laptop.", "success")
-            if copied:
-                flash(f"Copied {copied} existing backup(s) to the office server.", "success")
-            if failed:
-                flash(f"{failed} existing backup(s) could not be copied to the office server.", "error")
-        else:
-            flash("Schedule saved. Backups stay on this laptop until an office server path is set.", "success")
+    flash(f"Schedule saved. {schedule_summary(settings)}", "success")
+    if copied:
+        flash(f"Copied {copied} backup(s) to the Daraga server.", "success")
+    if failed:
+        flash(f"{failed} backup(s) could not be copied to Daraga yet.", "error")
     return redirect(url_for("administration", tab="automatic_backup"))
 
 
 def _persist_server_path_from_form() -> Optional[str]:
-    """Save the office server path from the current form so Backup now can copy there immediately."""
+    """Remember the Daraga folder. Backup still runs in Admin if that folder is not online yet."""
     settings = load_auto_backup_settings(BASE_DIR)
-    raw = clean_destination_path(request.form.get("auto_backup_destination") or "")
+    raw = office_backup_destination(BASE_DIR, request.form.get("auto_backup_destination") or "")
     trial = dict(settings)
     trial["destination_path"] = raw
     folder, dest_error = resolve_server_backup_root(BASE_DIR, trial)
     if dest_error:
-        return dest_error
-    if folder is not None:
-        dest_error = ensure_backup_dir_writable(folder)
-        if dest_error:
-            return dest_error
+        settings["destination_path"] = raw
+        save_auto_backup_settings(BASE_DIR, settings)
+        return None
     settings["destination_path"] = raw
     save_auto_backup_settings(BASE_DIR, settings)
     return None
@@ -2771,13 +2959,14 @@ def _flash_backup_result(ok: bool, message: str) -> None:
     if not ok:
         flash(f"Backup failed: {text}", "error")
         return
-    flash(text, "error" if "failed" in text.lower() else "success")
+    flash(text, "error" if ("backup failed" in text.lower() or text.lower().startswith("backup failed")) else "success")
 
 
 def _run_requested_backup(kind: str, trigger: str):
-    kind = (kind or "daily").strip().lower()
-    if kind not in ("daily", "monthly", "yearly", "full"):
-        kind = "daily"
+    settings = load_auto_backup_settings(BASE_DIR)
+    kind = (kind or "").strip().lower()
+    if kind not in ("daily", "weekly", "monthly", "yearly", "full"):
+        kind = scheduled_backup_kind(settings)
     return run_auto_backup(
         base_dir=BASE_DIR,
         upload_dir=UPLOAD_DIR,
@@ -2791,7 +2980,7 @@ def _run_requested_backup(kind: str, trigger: str):
 @app.route("/administration/auto-backup/run-now", methods=["POST"])
 @admin_required
 def administration_auto_backup_run_now():
-    """Create a backup immediately and keep it on this system (and the LGU server if set)."""
+    """Create a backup immediately on office-server storage (no workstation copy)."""
     dest_err = _persist_server_path_from_form()
     if dest_err:
         flash(dest_err, "error")
@@ -2803,7 +2992,7 @@ def administration_auto_backup_run_now():
 @app.route("/administration/auto-backup/get-now", methods=["POST"])
 @admin_required
 def administration_auto_backup_get_now():
-    """Create the backup if needed, then download it now (before the scheduled time)."""
+    """Create a backup immediately on the Daraga LGU server (not this laptop)."""
     dest_err = _persist_server_path_from_form()
     if dest_err:
         flash(dest_err, "error")
@@ -2812,17 +3001,8 @@ def administration_auto_backup_get_now():
         flash(f"Backup failed: {message}", "error")
         return redirect(url_for("administration", tab="automatic_backup"))
     _flash_backup_result(True, message)
-    full_path, err = resolve_period_backup_path(BASE_DIR, rel_file)
-    if err or full_path is None:
-        flash(err or message or "Backup file not found.", "error")
-        return redirect(url_for("administration", tab="automatic_backup"))
-    _log_audit(session.get("user_id"), "AUTO_BACKUP_GET", f"kind={kind} file={full_path.name}")
-    return send_file(
-        full_path,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=full_path.name,
-    )
+    _log_audit(session.get("user_id"), "AUTO_BACKUP_GET", f"kind={kind} file={rel_file}")
+    return redirect(url_for("administration", tab="automatic_backup"))
 
 
 @app.route("/administration/auto-backup/retry/<int:run_id>", methods=["POST"])
@@ -2838,6 +3018,8 @@ def administration_auto_backup_retry(run_id):
     try:
         if kind == "full" or kind == "daily":
             when = datetime.strptime(row.period_key, "%Y-%m-%d")
+        elif kind == "weekly":
+            when = datetime.strptime(row.period_key + "-1", "%G-W%V-%u")
         elif kind == "monthly":
             when = datetime.strptime(row.period_key + "-01", "%Y-%m-%d")
         else:
@@ -2889,13 +3071,17 @@ def administration_auto_backup_delete_run(run_id):
 @app.route("/administration/auto-backup/download-period")
 @admin_required
 def administration_auto_backup_download_period():
-    """Download a date-based backup zip from the Year/Month/Day folder."""
+    """Send a history zip from the Daraga LGU server. Does not copy it into laptop Downloads."""
     file_rel = request.args.get("path") or ""
     full_path, err = resolve_period_backup_path(BASE_DIR, file_rel)
-    if err:
-        flash(err)
+    if err or full_path is None:
+        flash(err or "Backup file not found.", "error")
         return redirect(url_for("administration", tab="automatic_backup"))
-    return send_from_directory(full_path.parent, full_path.name, as_attachment=True)
+    try:
+        return send_file(full_path, as_attachment=True, download_name=full_path.name)
+    except OSError:
+        flash("Backup file is not available right now.", "error")
+        return redirect(url_for("administration", tab="automatic_backup"))
 
 
 @app.route("/administration/auto-backup/download/<path:filename>")
@@ -2924,105 +3110,373 @@ def administration_auto_backup_delete(filename):
     return redirect(url_for("administration", tab="automatic_backup"))
 
 
+@app.route("/administration/office-logs/settings", methods=["POST"])
+@admin_required
+def administration_office_logs_settings():
+    """Save rolling retention for edit/print queues and logs. Does not touch registry records."""
+    settings = save_log_retention_settings(BASE_DIR, log_retention_from_form(request.form, BASE_DIR))
+    _log_audit(
+        session.get("user_id"),
+        "LOG_RETENTION_SETTINGS",
+        f"enabled={bool(settings.get('enabled'))} keep_days={settings.get('keep_days')}",
+    )
+    flash("Office log settings saved.", "success")
+    return redirect(url_for("administration", tab="office_logs"))
+
+
 @app.route("/administration/restore", methods=["POST"])
 @admin_required
 def administration_restore():
-    """Restore database and uploads from an uploaded backup zip. Current data is backed up first."""
+    """Restore database and scans from a full backup zip. Live scans stay in place until the zip is verified."""
+    storage_err = _require_server_storage()
+    if storage_err:
+        return _restore_reply(False, storage_err)
     if "backup_file" not in request.files:
-        flash("Please select a backup file (.zip) to restore.")
-        return redirect(url_for("administration", tab="automatic_backup"))
+        return _restore_reply(False, "Please select a backup file (.zip) to restore.")
     file = request.files["backup_file"]
     if not file or file.filename == "":
-        flash("Please select a backup file.")
-        return redirect(url_for("administration", tab="automatic_backup"))
-    if not file.filename.lower().endswith(".zip"):
-        flash("Only .zip backup files are allowed.")
-        return redirect(url_for("administration", tab="automatic_backup"))
+        return _restore_reply(False, "Please select a backup file.")
+    if not (file.filename or "").lower().endswith(".zip"):
+        return _restore_reply(False, "Only .zip backup files are allowed.")
 
+    incoming = UPLOAD_DIR.parent / f"_restore_upload_{uuid.uuid4().hex}.zip"
+    work_root = UPLOAD_DIR.parent
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    unique = uuid.uuid4().hex[:8]
+    tmp_dump = work_root / f"_restore_{stamp}_{unique}.json"
+    staging = work_root / f"_restore_uploads_{unique}"
+    extracted = False
     try:
-        data = file.read()
-        with zipfile.ZipFile(BytesIO(data), "r") as zf:
+        incoming.parent.mkdir(parents=True, exist_ok=True)
+        file.save(str(incoming))
+        with zipfile.ZipFile(incoming, "r") as zf:
             names = zf.namelist()
-    except zipfile.BadZipFile:
-        flash("Invalid or corrupted zip file.")
-        return redirect(url_for("administration", tab="automatic_backup"))
-
-    has_pg_dump = "database.json" in names
-    if has_pg_dump:
-        return _restore_postgres_backup(file.filename, data, names)
-    if "civil_registry.db" in names:
-        flash(
-            "This zip is a SQLite backup from the original offline project. "
-            "This copy uses PostgreSQL only. Import that file with: "
-            "python scripts/migrate_sqlite_to_postgres.py --sqlite path-to-civil_registry.db",
-            "error",
+            dump_member = _zip_database_member(names)
+            if not dump_member:
+                lowered = {_zip_norm_name(n).lower() for n in names}
+                if any(n.endswith("civil_registry.db") or n == "civil_registry.db" for n in lowered):
+                    return _restore_reply(
+                        False,
+                        "This zip is a SQLite backup from the original offline project. "
+                        "This copy uses PostgreSQL only. Import that file with: "
+                        "python scripts/migrate_sqlite_to_postgres.py --sqlite path-to-civil_registry.db",
+                    )
+                return _restore_reply(False, "Invalid backup: zip must contain database.json.")
+            with zf.open(dump_member) as src, open(tmp_dump, "wb") as dst:
+                shutil.copyfileobj(src, dst, 1024 * 1024)
+            _extract_uploads_from_zip(zf, names, staging)
+            extracted = True
+        try:
+            incoming.unlink(missing_ok=True)
+        except OSError:
+            pass
+        incoming = None
+        return _restore_postgres_backup(
+            file.filename,
+            tmp_dump,
+            staging,
+            (request.form.get("restore_mode") or "documents").strip().lower(),
         )
-        return redirect(url_for("administration", tab="automatic_backup"))
-    flash("Invalid backup: zip must contain database.json.")
+    except zipfile.BadZipFile:
+        return _restore_reply(False, "Invalid or corrupted zip file.")
+    except OSError as e:
+        return _restore_reply(False, describe_storage_error(e, work_root) or str(e))
+    except Exception as e:
+        return _restore_reply(False, f"Restore failed: {e}. Existing documents were not replaced.")
+    finally:
+        if incoming is not None:
+            try:
+                incoming.unlink(missing_ok=True)
+            except OSError:
+                pass
+        if not extracted:
+            tmp_dump.unlink(missing_ok=True)
+            shutil.rmtree(staging, ignore_errors=True)
+
+
+def _restore_wants_json() -> bool:
+    try:
+        return request.headers.get("X-Daraga-Restore") == "1"
+    except RuntimeError:
+        return False
+
+
+@app.errorhandler(413)
+def _request_too_large(_e):
+    message = "The backup zip is too large (maximum 2 GB)."
+    if _restore_wants_json():
+        return jsonify({"ok": False, "message": message}), 413
+    flash(message, "error")
     return redirect(url_for("administration", tab="automatic_backup"))
 
 
-def _restore_uploads_from_zip(zf, names) -> None:
-    uploads_in_zip = [n for n in names if n.startswith("uploads/") and not n.endswith("/")]
-    if uploads_in_zip:
-        for item in list(UPLOAD_DIR.iterdir()) if UPLOAD_DIR.exists() else []:
-            if item.is_file():
+@app.errorhandler(Exception)
+def _unhandled_error(exc):
+    """Keep the demo on a normal page instead of Internal Server Error."""
+    if isinstance(exc, HTTPException):
+        return exc
+    logging.getLogger(__name__).exception("Unhandled application error")
+    message = "Something went wrong. Please try again."
+    try:
+        wants_json = (
+            request.headers.get("X-Daraga-Restore") == "1"
+            or request.headers.get("X-Login-Intent") == "ajax"
+            or (request.path or "").startswith("/api/")
+            or "application/json" in (request.headers.get("Accept") or "")
+        )
+        if wants_json:
+            return jsonify({"ok": False, "error": message, "message": message}), 500
+        flash(message, "error")
+        if session.get("user_id"):
+            target = request.referrer or url_for("index")
+            return redirect(target)
+        return redirect(url_for("login"))
+    except Exception:
+        return message, 500
+
+
+def _restore_reply(ok: bool, message: str, extra=None):
+    extra = extra or {}
+    redirect_to = url_for("administration", tab="automatic_backup")
+    if _restore_wants_json():
+        if ok:
+            flash(message, "success")
+        payload = {"ok": ok, "message": message, "redirect": redirect_to}
+        payload.update(extra)
+        return jsonify(payload), (200 if ok else 400)
+    flash(message, "success" if ok else "error")
+    return redirect(redirect_to)
+
+
+def _zip_norm_name(name: str) -> str:
+    return (name or "").replace("\\", "/").strip()
+
+
+def _zip_database_member(names) -> str:
+    preferred = ""
+    for n in names:
+        norm = _zip_norm_name(n).rstrip("/")
+        if Path(norm).name.lower() != "database.json":
+            continue
+        if norm.lower() == "database.json":
+            return n
+        if not preferred:
+            preferred = n
+    return preferred
+
+
+def _zip_upload_rel(member_name: str) -> str:
+    """Map a zip member onto birth|marriage|death|temp/... regardless of backslashes or wrapper folders."""
+    norm = _zip_norm_name(member_name)
+    if not norm or norm.endswith("/"):
+        return ""
+    lower = f"/{norm.lower()}/"
+    if "/__macosx/" in lower:
+        return ""
+    base = Path(norm).name.lower()
+    if base in {"database.json", "readme.txt", "manifest.csv", ".ds_store"} or base.startswith("."):
+        return ""
+    parts = [p for p in norm.split("/") if p and p != "."]
+    if any(p == ".." for p in parts):
+        return ""
+    wrappers = {"full", "backups", "auto", "backup", "uploads"}
+    while len(parts) >= 2 and parts[0].lower() in wrappers:
+        parts = parts[1:]
+    if parts and parts[0].lower() not in ALLOWED_UPLOAD_TOP and len(parts) >= 2:
+        rest = parts[1:]
+        while rest and rest[0].lower() in wrappers:
+            rest = rest[1:]
+        if rest and rest[0].lower() in ALLOWED_UPLOAD_TOP:
+            parts = rest
+    rel = _normalize_upload_relpath("/".join(parts))
+    if not rel:
+        return ""
+    top = rel.split("/", 1)[0].lower()
+    if top not in ALLOWED_UPLOAD_TOP:
+        return ""
+    if Path(rel).suffix.lower() not in ALLOWED_IMAGE_EXTS:
+        return ""
+    return rel
+
+
+def _clear_directory_contents(folder: Path) -> None:
+    if not folder.exists():
+        return
+    for item in list(folder.iterdir()):
+        try:
+            if item.is_file() or item.is_symlink():
                 item.unlink(missing_ok=True)
             else:
                 shutil.rmtree(item, ignore_errors=True)
+        except OSError:
+            pass
+
+
+def _copy_tree_replace(source: Path, dest: Path) -> None:
+    """Copy source into dest, replacing existing files. Avoids WinError 183 on Windows."""
+    dest.mkdir(parents=True, exist_ok=True)
+    _clear_directory_contents(dest)
+    shutil.copytree(source, dest, dirs_exist_ok=True)
+
+
+def _extract_uploads_from_zip(zf, names, staging: Path) -> int:
+    """Write scan images from the zip into a staging folder. Live uploads are not touched."""
+    if staging.exists():
+        shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True, exist_ok=True)
+    written = 0
     for name in names:
-        if not name.startswith("uploads/") or name.endswith("/"):
+        rel = _zip_upload_rel(name)
+        if not rel:
             continue
-        rel = _normalize_upload_relpath(name)
-        dest = _upload_file_path(rel)
-        if dest is None:
-            continue
+        dest = staging / Path(rel)
         dest.parent.mkdir(parents=True, exist_ok=True)
         with zf.open(name) as src, open(dest, "wb") as dst:
-            dst.write(src.read())
+            shutil.copyfileobj(src, dst, 1024 * 1024)
+        written += 1
+    nested = staging / "uploads"
+    if nested.is_dir():
+        for src in nested.rglob("*"):
+            if not src.is_file():
+                continue
+            dest = staging / src.relative_to(nested)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if not dest.exists():
+                try:
+                    shutil.move(str(src), str(dest))
+                except OSError:
+                    pass
+        shutil.rmtree(nested, ignore_errors=True)
+    ensure_upload_layout(staging)
+    return written
+
+
+def _swap_upload_dir(staging: Path) -> None:
+    """Replace live uploads with the restored tree after records are already loaded."""
+    global UPLOAD_DIR
+    parent = UPLOAD_DIR.parent
+    live = UPLOAD_DIR
+    old = parent / f"_uploads_replaced_{uuid.uuid4().hex[:8]}"
+    renamed_live = False
+    try:
+        if live.exists():
+            live.rename(old)
+            renamed_live = True
+        staging.rename(live)
+        UPLOAD_DIR = live
+        shutil.rmtree(old, ignore_errors=True)
+    except OSError:
+        if renamed_live:
+            try:
+                if not live.exists():
+                    old.rename(live)
+            except OSError:
+                pass
+        _copy_tree_replace(staging, live)
+        UPLOAD_DIR = live
+        shutil.rmtree(staging, ignore_errors=True)
+        shutil.rmtree(old, ignore_errors=True)
+    ensure_upload_layout(UPLOAD_DIR)
     _flatten_nested_uploads()
 
 
-def _restore_postgres_backup(filename, data, names):
-    backup_dir = BASE_DIR / "backups"
-    backup_dir.mkdir(exist_ok=True)
-    timestamp = daily_backup_stamp()
-    dump_backup = backup_dir / f"database_pre_restore_{timestamp}.json"
-    uploads_backup = None
+def _resync_session_after_restore() -> None:
+    """Keep the current admin signed in after user rows are replaced from the dump."""
+    db.session.expire_all()
+    uid = session.get("user_id")
+    user = db.session.get(User, uid) if uid else None
+    if user is None:
+        uname = (session.get("username") or "").strip()
+        if uname:
+            user = _find_user_by_username(uname)
+    if user is None:
+        return
+    session["user_id"] = user.id
+    session["username"] = user.username
+    session["role"] = user.role
+    session["session_version"] = int(getattr(user, "session_version", 0) or 0)
+    session.modified = True
+
+
+def _merge_restored_uploads(staging: Path) -> int:
+    """Copy restored scans into live storage. Does not delete or rename the uploads folder."""
+    copied = 0
+    if not staging.exists():
+        return 0
+    ensure_upload_layout(UPLOAD_DIR)
+    for src in staging.rglob("*"):
+        if not src.is_file():
+            continue
+        rel = _normalize_upload_relpath(src.relative_to(staging).as_posix())
+        dest = _upload_file_path(rel, for_write=True)
+        if dest is None:
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dest)
+        copied += 1
+    shutil.rmtree(staging, ignore_errors=True)
+    _flatten_nested_uploads()
+    return copied
+
+
+def _restore_postgres_backup(filename, tmp_dump, staging, mode="documents"):
+    merged = False
+    full = mode == "full"
+    files_n = 0
+    if staging.exists():
+        files_n = sum(1 for p in staging.rglob("*") if p.is_file())
     try:
-        from services.postgres_backup import dump_database_json, restore_database_json
+        from services.postgres_backup import restore_database_json, restore_documents_from_json
 
-        dump_database_json(dump_backup)
-        if UPLOAD_DIR.exists():
-            uploads_backup = BASE_DIR / f"uploads_backup_{timestamp}"
-            shutil.copytree(UPLOAD_DIR, uploads_backup, dirs_exist_ok=False)
-
-        with zipfile.ZipFile(BytesIO(data), "r") as zf:
-            tmp_dump = backup_dir / f"_restore_{timestamp}.json"
-            with zf.open("database.json") as src, open(tmp_dump, "wb") as dst:
-                dst.write(src.read())
-            try:
-                restore_database_json(tmp_dump)
-                _restore_uploads_from_zip(zf, names)
-            finally:
-                tmp_dump.unlink(missing_ok=True)
-
-        if uploads_backup is not None and uploads_backup.exists():
-            shutil.rmtree(uploads_backup, ignore_errors=True)
-        _log_audit(session.get("user_id"), "RESTORE_DATA", f"from {filename}")
-        flash("PostgreSQL data restored successfully. A pre-restore dump was saved in backups/.", "success")
-    except Exception as e:
         try:
-            if dump_backup.exists():
-                from services.postgres_backup import restore_database_json
-                restore_database_json(dump_backup)
-            if uploads_backup is not None and uploads_backup.exists():
-                shutil.rmtree(UPLOAD_DIR, ignore_errors=True)
-                shutil.copytree(uploads_backup, UPLOAD_DIR)
-        except Exception:
-            pass
-        flash(f"Restore failed: {e}. Previous data was restored if possible.")
-    return redirect(url_for("administration", tab="automatic_backup"))
+            payload = json.loads(tmp_dump.read_text(encoding="utf-8"))
+            scope = str(payload.get("scope") or "full").strip().lower()
+        except (OSError, json.JSONDecodeError) as exc:
+            return _restore_reply(False, f"Invalid backup database.json: {exc}")
+
+        if full and scope == "period":
+            return _restore_reply(
+                False,
+                "This file is a daily (or weekly/monthly) document backup. "
+                "Use Restore documents, not Full rebuild, so other days are not wiped.",
+            )
+        if full:
+            loaded_n = restore_database_json(tmp_dump)
+        else:
+            loaded_n = restore_documents_from_json(tmp_dump)
+        copied_n = _merge_restored_uploads(staging)
+        merged = True
+        _resync_session_after_restore()
+        _log_audit(
+            session.get("user_id"),
+            "RESTORE_DATA",
+            f"mode={'full' if full else 'documents'} scope={scope} from {filename} rows={loaded_n} files={copied_n or files_n}",
+        )
+        extra = {"records": loaded_n, "files": copied_n or files_n, "mode": "full" if full else "documents"}
+        scans = copied_n or files_n
+        if full:
+            msg = f"Full rebuild complete. Loaded {loaded_n} row(s) and {scans} scan(s)."
+        elif scope == "period":
+            if scans:
+                msg = f"Restored {loaded_n} document(s) and {scans} scan(s). Other days in the registry were kept."
+            else:
+                msg = f"Restored {loaded_n} document(s). Other days in the registry were kept."
+        elif scans:
+            msg = f"Restored {loaded_n} document(s) and {scans} scan(s) from this backup."
+        else:
+            msg = f"Restored {loaded_n} document(s) from this backup."
+        return _restore_reply(True, msg, extra)
+    except Exception as e:
+        db.session.rollback()
+        _resync_session_after_restore()
+        return _restore_reply(
+            False,
+            f"Restore failed: {e}. Existing documents were not replaced.",
+        )
+    finally:
+        Path(tmp_dump).unlink(missing_ok=True)
+        if not merged:
+            shutil.rmtree(staging, ignore_errors=True)
 
 
 @app.route("/administration/print-request/<int:request_id>/approve", methods=["POST"])
@@ -3158,7 +3612,13 @@ def record_edit(record_id):
             flash("Enter the 5-digit approval code on the record page first.")
             return redirect(url_for("record_detail", record_id=record_id))
         req = db.session.get(EditRequest, allowed_request_id)
-        if not req or req.record_id != record_id or req.code_used_at:
+        if (
+            not req
+            or req.record_id != record_id
+            or req.code_used_at
+            or (req.status or "").upper() != "APPROVED"
+            or req.requested_by_id != user.id
+        ):
             session.pop("allowed_edit_request_id", None)
             session.pop("allowed_edit_record_id", None)
             flash("This edit link has expired. Request a new code from admin.")
@@ -3170,8 +3630,8 @@ def record_edit(record_id):
         if record.document_type == "death":
             submitted.pop("Name of Mother", None)
         if (request.form.get("clear_annotation") or "").strip():
-            annotation = None
-        elif "annotation_text" not in request.form:
+            annotation = None if is_admin else document_annotation_from_data(existing)
+        elif not is_admin or "annotation_text" not in request.form:
             annotation = document_annotation_from_data(existing)
         else:
             annotation = annotation_from_form(request.form) or document_annotation_from_data(existing)
@@ -3392,11 +3852,22 @@ def my_print_requests():
 @app.route("/uploads/<path:path>")
 @login_required
 def serve_upload(path):
-    """Serve uploaded certificate images (e.g. birth/foo.jpg)."""
+    """Serve uploaded certificate images from server storage (view only; not a client save)."""
     rel = _normalize_upload_relpath(path)
     if not rel:
         return ("", 404)
-    return send_from_directory(UPLOAD_DIR, rel)
+    parts = [p for p in rel.split("/") if p]
+    if not parts or parts[0].lower() not in ALLOWED_UPLOAD_TOP:
+        return ("", 404)
+    if Path(rel).suffix.lower() not in ALLOWED_IMAGE_EXTS:
+        return ("", 404)
+    full = _upload_file_path(rel)
+    if full is None or not full.is_file():
+        return ("", 404)
+    resp = send_file(full, as_attachment=False, conditional=True)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Cache-Control"] = "private, no-store"
+    return resp
 
 
 @app.route("/confirm/<doc_type>", methods=["POST"])
@@ -3410,7 +3881,9 @@ def confirm(doc_type):
     if doc_type == "death":
         submitted.pop("Name of Mother", None)
     submitted = _normalize_submitted_registry_keys(submitted)
-    submitted = apply_annotation_to_data(submitted, annotation_from_form(request.form))
+    user = get_current_user()
+    if user and (user.role or "").upper() == "ADMIN":
+        submitted = apply_annotation_to_data(submitted, annotation_from_form(request.form))
 
     registry_number = _registry_number_from_submitted(submitted)
     full_name = _full_name_from_data(doc_type, submitted)
@@ -3439,25 +3912,79 @@ def confirm(doc_type):
 
     # Auto-rename file for archive: LastName_FirstName_RegistryNumber_birth|marriage|death.ext
     if image_filename and not (Path(image_filename).is_absolute() or ".." in image_filename):
+        storage_err = _require_server_storage()
+        if storage_err:
+            flash(storage_err, "error")
+            return render_template(
+                f"form_{doc_type}.html",
+                doc_type=doc_type,
+                doc_label=DOCUMENT_TYPES[doc_type],
+                data=submitted,
+                image_filename=image_filename,
+                current_user=get_current_user(),
+                nav_active="form",
+                can_print=user_can_print_during_review(get_current_user()),
+            )
         image_filename = _normalize_upload_relpath(image_filename)
         source_path = _upload_file_path(image_filename)
         if source_path is not None and source_path.exists():
             new_basename = _archive_image_filename(doc_type, full_name, registry_number, image_filename)
-            subdir = UPLOAD_DIR / doc_type
-            subdir.mkdir(exist_ok=True)
-            target_path = subdir / new_basename
-            if source_path.resolve() != target_path.resolve():
-                try:
-                    shutil.copy2(source_path, target_path)
-                    image_filename = f"{doc_type}/{new_basename}"
-                    # Remove original if it was in temp/ (scan) or a different path
-                    if "temp" in str(source_path) or source_path != target_path:
+            dest_path = _upload_file_path(f"{doc_type}/{new_basename}", for_write=True)
+            if dest_path is None:
+                flash("Invalid archive path. The record was not saved.", "error")
+                return render_template(
+                    f"form_{doc_type}.html",
+                    doc_type=doc_type,
+                    doc_label=DOCUMENT_TYPES[doc_type],
+                    data=submitted,
+                    image_filename=image_filename,
+                    current_user=get_current_user(),
+                    nav_active="form",
+                    can_print=user_can_print_during_review(get_current_user()),
+                )
+            if dest_path.exists() and source_path.resolve() != dest_path.resolve():
+                dest_path = dest_path.with_name(
+                    f"{dest_path.stem}_{uuid.uuid4().hex[:8]}{dest_path.suffix}"
+                )
+            try:
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                if source_path.resolve() != dest_path.resolve():
+                    shutil.copy2(source_path, dest_path)
+                    image_filename = f"{doc_type}/{dest_path.name}"
+                    if "temp" in str(source_path) or source_path != dest_path:
                         try:
                             source_path.unlink()
                         except OSError:
                             pass
-                except OSError:
-                    pass  # keep original path if rename fails
+                else:
+                    image_filename = f"{doc_type}/{dest_path.name}"
+            except OSError as exc:
+                flash(describe_storage_error(exc, dest_path), "error")
+                return render_template(
+                    f"form_{doc_type}.html",
+                    doc_type=doc_type,
+                    doc_label=DOCUMENT_TYPES[doc_type],
+                    data=submitted,
+                    image_filename=image_filename,
+                    current_user=get_current_user(),
+                    nav_active="form",
+                    can_print=user_can_print_during_review(get_current_user()),
+                )
+            if dest_path is None or not dest_path.is_file() or dest_path.stat().st_size <= 0:
+                flash(
+                    "The certificate file could not be stored on the server. The record was not saved.",
+                    "error",
+                )
+                return render_template(
+                    f"form_{doc_type}.html",
+                    doc_type=doc_type,
+                    doc_label=DOCUMENT_TYPES[doc_type],
+                    data=submitted,
+                    image_filename=image_filename,
+                    current_user=get_current_user(),
+                    nav_active="form",
+                    can_print=user_can_print_during_review(get_current_user()),
+                )
 
     data_json_str = json.dumps(submitted, ensure_ascii=False)
     image_front = image_filename or ""
@@ -3476,6 +4003,14 @@ def confirm(doc_type):
     db.session.commit()
     _consume_ocr_session()
 
+    user = get_current_user()
+    want_print = (request.form.get("after_save") or "").strip().lower() == "request_print"
+    if want_print and _create_staff_print_request_after_ocr(user, record):
+        flash(
+            f"{DOCUMENT_TYPES[doc_type]} saved. Print request sent. Wait for Admin to approve or reject."
+        )
+        return redirect(url_for("record_detail", record_id=record.id))
+
     flash(f"{DOCUMENT_TYPES[doc_type]} data has been saved. View it in Archiving or Search Records. Scan a new document to start another Auto-Filled Form.")
     return render_template(
         "confirm.html",
@@ -3491,6 +4026,17 @@ def confirm(doc_type):
 
 def _safe_hash(password: str) -> str:
     return generate_password_hash(password, method="pbkdf2:sha256")
+
+
+def _normalize_username(username: str) -> str:
+    return " ".join((username or "").split())
+
+
+def _find_user_by_username(username: str):
+    key = _normalize_username(username)
+    if not key:
+        return None
+    return User.query.filter(db.func.lower(User.username) == key.lower()).first()
 
 
 def _issue_office_password(length: int = 10) -> str:
@@ -3666,6 +4212,16 @@ def _migrate_users():
     if "last_login_at" not in existing:
         db.session.execute(db.text("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP"))
         db.session.commit()
+    try:
+        db.session.execute(
+            db.text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_idx "
+                "ON users (LOWER(username))"
+            )
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def _ensure_database_ready() -> None:
@@ -3712,7 +4268,7 @@ def _bootstrap_users():
             ("staff", "staff123", "STAFF"),
         ]
         for username, password, role in default_passwords:
-            user = User.query.filter_by(username=username).first()
+            user = _find_user_by_username(username)
             if user:
                 if not (getattr(user, "password_vault", None) or "").strip():
                     try:
@@ -3769,6 +4325,15 @@ def _print_startup_banner(host: str, port: int) -> None:
     print("  Status   Ready", flush=True)
     print("  Database PostgreSQL", flush=True)
     print(f"  This PC  {local_url}", flush=True)
+    try:
+        from services.lgu_office import is_lgu_office_server, lgu_server_computer_name
+
+        if is_lgu_office_server():
+            print(f"  Office   {lgu_server_computer_name()} (daily backup on this server)", flush=True)
+        else:
+            print(f"  Office   Connect on {lgu_server_computer_name()} for production", flush=True)
+    except Exception:
+        pass
     if lan_ip:
         print(f"  Network  http://{lan_ip}:{port}", flush=True)
         print("  Other devices: same Wi-Fi, open the Network URL", flush=True)
@@ -3789,6 +4354,7 @@ if __name__ == "__main__":
     _host = "0.0.0.0"
     _port = 5001
     _use_reloader = os.environ.get("FLASK_USE_RELOADER", "").strip().lower() in ("1", "true", "yes")
+    _flask_debug = os.environ.get("FLASK_DEBUG", "").strip().lower() in ("1", "true", "yes")
     _print_startup_banner(_host, _port)
     _ensure_database_ready()
     _bootstrap_users()
@@ -3799,6 +4365,17 @@ if __name__ == "__main__":
         audit_callback=_auto_backup_audit,
         resolve_upload=_upload_file_path,
     )
+    try:
+        from services.auto_backup import get_backup_readiness, load_settings as load_backup_settings, schedule_summary
+
+        _bs = load_backup_settings(BASE_DIR)
+        _br = get_backup_readiness(BASE_DIR, _bs)
+        print(f"  Backup   {'ON' if _bs.get('enabled') else 'OFF'} — {schedule_summary(_bs)}", flush=True)
+        print(f"  Folder   {_br.get('server_path') or 'not ready'}", flush=True)
+        if not _br.get("server_writable"):
+            print(f"  Warning  {_br.get('server_message') or 'Backup folder is not writable'}", flush=True)
+    except Exception as exc:
+        print(f"  Backup   could not report status ({exc})", flush=True)
     atexit.register(stop_ocr_worker)
     if start_ocr_worker():
         _ensure_ocr_listener()
@@ -3808,7 +4385,7 @@ if __name__ == "__main__":
     except Exception:
         pass
     try:
-        app.run(host=_host, port=_port, debug=True, use_reloader=_use_reloader, threaded=True)
+        app.run(host=_host, port=_port, debug=_flask_debug, use_reloader=_use_reloader, threaded=True)
     except KeyboardInterrupt:
         print("\nDaraga Civil Registry stopped.", flush=True)
         stop_ocr_worker()

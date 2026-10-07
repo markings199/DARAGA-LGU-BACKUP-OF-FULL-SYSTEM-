@@ -1,4 +1,4 @@
-{% from 'print/_cert_macros.html' import cert_line_row %}
+{% from 'print/_cert_macros.html' import cert_line_row, cert_issued_row %}
 {% set meta = form_meta %}
 {% include 'print/_cert_header.html' %}
 
@@ -18,9 +18,6 @@
   {{ cert_line_row('Date of Death', cert_field(data, 'Date of Death'), 'Date of Death', true) }}
   {{ cert_line_row('Place of Death', cert_field(data, 'Place of Death'), 'Place of Death', true) }}
   {{ cert_line_row('Cause of Death', cert_field(data, 'Cause of Death'), 'Cause of Death', true) }}
-  {{ cert_line_row('This certification is issued to', '', 'Issued To', false) }}
-  <tr>
-    <td class="cert-issued-upon" colspan="3">upon his/her request.</td>
-  </tr>
+  {{ cert_issued_row() }}
 </table>
 {% include 'print/_cert_footer.html' %}

@@ -14,8 +14,9 @@ body.page-registry-reports .main {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  width: 100% !important;
   padding: 8px 12px 10px;
-  max-width: none;
+  max-width: none !important;
 }
 body.page-registry-reports .page-header,
 body.page-registry-reports .reports-page-header {
@@ -69,6 +70,14 @@ body.page-registry-reports.reg-focus .sidebar {
 body.page-registry-reports.reg-focus .layout {
   height: 100vh;
   min-height: 100vh;
+  width: 100% !important;
+  max-width: none !important;
+}
+body.page-registry-reports.reg-focus .main {
+  max-width: none !important;
+  width: 100% !important;
+  flex: 1 1 auto;
+  padding: 8px 10px 10px;
 }
 body.page-registry-reports.reg-focus .page-header {
   display: none;
@@ -357,7 +366,7 @@ body.page-registry-reports.reg-focus .reg-status {
   min-width: 0;
   width: 100%;
   max-width: 100%;
-  overflow-x: scroll;
+  overflow-x: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -365,10 +374,67 @@ body.page-registry-reports.reg-focus .reg-status {
   border: 1px solid rgba(15, 23, 42, 0.16);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(11, 42, 90, 0.08);
-  padding: 10px 12px 18px;
+  padding: 10px 16px 16px 12px;
   scrollbar-gutter: stable;
-  scrollbar-width: auto;
+  scrollbar-width: thin;
   scrollbar-color: #002080 #e8eef8;
+}
+body.page-registry-reports.reg-focus .reg-scroll {
+  padding: 8px 20px 14px 10px;
+}
+body.page-registry-reports.reg-focus.reg-is-fitted .reg-scroll {
+  overflow-x: auto;
+}
+body.page-registry-reports.reg-focus.reg-is-fitted .reg-zoom-stage,
+body.page-registry-reports.reg-focus.reg-is-fitted .reg-form,
+body.page-registry-reports.reg-focus.reg-is-fitted .reg-table,
+body.page-registry-reports.reg-focus.reg-is-fitted #register-birth.reg-form,
+body.page-registry-reports.reg-focus.reg-is-fitted #register-birth .reg-table,
+body.page-registry-reports.reg-focus.reg-is-fitted #register-death.reg-form,
+body.page-registry-reports.reg-focus.reg-is-fitted #register-death .reg-table,
+body.page-registry-reports.reg-focus.reg-is-fitted #register-marriage.reg-form,
+body.page-registry-reports.reg-focus.reg-is-fitted #register-marriage .reg-table {
+  min-width: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  zoom: 1 !important;
+  transform: none !important;
+}
+body.page-registry-reports.reg-focus.reg-is-fitted .reg-zoom-stage,
+body.page-registry-reports.reg-focus.reg-is-fitted .reg-form {
+  display: block;
+}
+body.page-registry-reports.reg-focus.reg-is-fitted .reg-table {
+  display: table;
+  table-layout: fixed;
+}
+body.page-registry-reports.reg-focus.reg-is-fitted .reg-form-foot,
+body.page-registry-reports.reg-focus.reg-is-fitted .reg-footnotes,
+body.page-registry-reports.reg-focus.reg-is-fitted .reg-cert,
+body.page-registry-reports.reg-focus.reg-is-fitted .reg-cert-copy {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+body.page-registry-reports.reg-focus.reg-is-fitted #register-birth .reg-form-foot {
+  margin-top: 8px;
+}
+body.page-registry-reports.reg-focus.reg-is-fitted #register-birth .reg-cert {
+  display: flex !important;
+}
+.page-registry-reports .reg-zoom-row .btn.is-zoom-on {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #002080;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+}
+body.page-registry-reports.reg-focus .reg-zoom-row .btn.is-zoom-on {
+  background: #ffffff;
+  border-color: #7dd3fc;
+  color: #002080 !important;
 }
 .page-registry-reports .reg-scroll::-webkit-scrollbar {
   height: 14px;
@@ -521,6 +587,39 @@ body.page-registry-reports.reg-focus .reg-status {
 }
 #register-birth .w-father16 {
   width: 10%;
+}
+#register-birth .reg-form-foot {
+  width: 100%;
+  margin-top: 10px;
+}
+#register-birth .reg-footnotes {
+  margin-bottom: 10px;
+}
+#register-birth .reg-cert {
+  display: flex !important;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  width: 100%;
+}
+#register-birth .reg-cert-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+#register-birth .reg-sign {
+  flex: 0 0 250px;
+  display: block !important;
+  min-width: 250px;
+  text-align: center;
+}
+#register-birth .reg-sign .reg-sign-line {
+  margin-top: 28px;
+  border-top: 1px solid #111;
+  padding-top: 4px;
+  font-weight: 700;
 }
 
 #register-death.reg-form,
@@ -847,6 +946,11 @@ body.page-registry-reports.reg-focus #register-marriage .reg-table tbody td {
   #register-birth .reg-footnotes,
   #register-birth .reg-cert {
     font-size: 8px;
+  }
+  #register-birth .reg-cert {
+    display: grid;
+    grid-template-columns: 1fr 55mm;
+    column-gap: 10mm;
   }
   #register-death.reg-form,
   #register-death .reg-table {

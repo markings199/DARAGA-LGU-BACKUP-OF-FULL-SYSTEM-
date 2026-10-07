@@ -2,9 +2,7 @@
 Birth certificate OCR extraction.
 Fixed implementation - addresses extraction issues with better field detection.
 """
-import os
 import re
-import tempfile
 import difflib
 from typing import Dict, Any, List
 
@@ -27,12 +25,12 @@ DEBUG_LABELS = False
 # =========================================================
 # PREPROCESS: CROP
 # =========================================================
-def create_temp_cropped_image(image_path, crop_left, crop_right):
+def load_cropped_birth_image(image_path, crop_left, crop_right):
     img = cv2.imread(image_path)
     if img is None:
         raise FileNotFoundError(f"Could not read image: {image_path}")
 
-    h, w = img.shape[:2]
+    _h, w = img.shape[:2]
 
     if crop_left < 0 or crop_right < 0:
         raise ValueError("Crop values must be 0 or greater.")
@@ -40,21 +38,7 @@ def create_temp_cropped_image(image_path, crop_left, crop_right):
     if crop_left + crop_right >= w:
         raise ValueError("Left + right crop is too large for the image width.")
 
-    cropped = img[:, crop_left:w - crop_right]
-
-    ext = os.path.splitext(image_path)[1]
-    if not ext:
-        ext = ".jpg"
-
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
-    temp_path = temp_file.name
-    temp_file.close()
-
-    ok = cv2.imwrite(temp_path, cropped)
-    if not ok:
-        raise RuntimeError("Failed to write temporary cropped image.")
-
-    return temp_path
+    return img[:, crop_left:w - crop_right]
 
 
 def enhance_birth_image(img):
@@ -200,9 +184,11 @@ def _is_plausible_place(text: str) -> bool:
     if _is_citizenship(nt):
         return False
     if any(bad in nt for bad in (
-        "INFORMANT", "SIGNATURE", "CERTIFY", "PARENTS", "PRINT", "REMARKS",
+        "INFORMANT", "SIGNATURE", "CERTIFY", "PRINT", "REMARKS",
         "ANNOTATION", "REGISTRY", "RELIGION", "TITLE", "POSITION",
     )):
+        return False
+    if "MARRIAGE OF PARENTS" in nt:
         return False
     # Printed Place of Birth prompt with no real locality.
     if ("HOUSE NO" in nt or "ST BARANGAY" in nt) and not any(
@@ -240,6 +226,35 @@ def _is_plausible_place(text: str) -> bool:
     if len(words) < 2 and len(nt) < 10:
         return False
     return True
+
+
+_MARRIAGE_PLACE_PRINTED = re.compile(
+    r"(?i)\b(?:20\s*[AB]\.?|MARRIAGE OF PARENTS|IF NOT MARRIED|ACCOMPLISH|"
+    r"AFFIDAVIT|ACKNOWLEDG(?:E)?MENT|ADMISSION OF PATERNITY|AT THE BACK|"
+    r"MONTH|DAY|YEAR|CITY/?\s*MUNICIPALITY|PROVINCE|COUNTRY)\b"
+)
+
+
+def sanitize_place_of_marriage_of_parents(text: str) -> str:
+    """Keep locality from Form 102 item 20b; drop printed 20a/20b prompts."""
+    raw = _collapse_repeated_words(clean_text(text or ""))
+    if not raw:
+        return ""
+    raw = re.sub(r"\([^)]*\)", " ", raw)
+    raw = _MARRIAGE_PLACE_PRINTED.sub(" ", raw)
+    raw = re.sub(r"\b20\s*[AB]\b", " ", raw, flags=re.I)
+    parsed = parse_date_from_string(raw)
+    if parsed:
+        raw = re.sub(re.escape(parsed), " ", raw, flags=re.I)
+    raw = re.sub(r"\s+", " ", raw).strip(" .,-/")
+    if not raw or _is_placeholder_text(raw) or parse_date_from_string(raw):
+        return ""
+    if _is_plausible_place(raw):
+        return raw
+    nt = norm_text(raw)
+    if any(hint in nt for hint in PLACE_HINTS) and alpha_count(nt) >= 5:
+        return raw
+    return ""
 
 
 def sanitize_place_of_birth(text: str) -> str:
@@ -1258,41 +1273,49 @@ def extract_place_of_birth(items, pob_label, type_birth_label, working_xmax):
     return place_text
 
 
-def extract_marriage_of_parents(items, marriage_label, working_xmax):
-    """Extract both date and place of marriage of parents - look to the RIGHT of label."""
-    if not marriage_label:
-        return "", ""
+def extract_marriage_of_parents(items, marriage_label, working_xmax, img_w, img_h):
+    """Form 102 items 20a DATE (left) and 20b PLACE (right), under Marriage of Parents."""
+    mid = img_w * 0.48
+    y0 = img_h * 0.48
+    y1 = img_h * 0.66
+    if marriage_label:
+        y0 = max(img_h * 0.42, marriage_label["y1"] - 6)
+        y1 = min(img_h * 0.72, max(marriage_label["y2"] + int(img_h * 0.12), y0 + 36))
 
-    # Look to the RIGHT of the label (like the guide shows)
-    marriage_region = tokens_in_region(
-        items,
-        marriage_label["x2"] + 5,  # Right side of label
-        working_xmax,
-        marriage_label["y1"] - 4,
-        marriage_label["y2"] + 28,
-        min_score=0.20
+    date_tokens = tokens_in_region(
+        items, img_w * 0.03, mid + 8, y0, y1, min_score=0.10
+    )
+    place_tokens = tokens_in_region(
+        items, mid - 8, working_xmax, y0, y1, min_score=0.10
     )
 
-    if not marriage_region:
-        return "", ""
+    def _drop_heading(toks):
+        kept = []
+        for it in toks:
+            nt = norm_text(it.get("text") or "")
+            if not nt:
+                continue
+            if any(
+                marker in nt
+                for marker in (
+                    "MARRIAGE OF PARENTS",
+                    "IF NOT MARRIED",
+                    "AFFIDAVIT",
+                    "PATERNITY",
+                    "ATTENDANT",
+                    "21A",
+                    "21B",
+                )
+            ):
+                continue
+            kept.append(it)
+        return kept
 
-    # Get the date from the region
-    date_text = normalize_date_text(marriage_region)
-
-    place_region = tokens_in_region(
-        items,
-        marriage_label["x1"],
-        working_xmax,
-        marriage_label["y1"] - 4,
-        marriage_label["y2"] + 72,
-        min_score=0.18,
-    )
-    place_text = normalize_simple_text(extract_bottom_row_text(place_region))
-    if date_text and place_text:
-        place_text = re.sub(re.escape(date_text), " ", place_text, flags=re.I)
-        place_text = normalize_simple_text(place_text)
-    if not _is_plausible_place(place_text):
-        place_text = ""
+    date_tokens = _drop_heading(date_tokens)
+    place_tokens = _drop_heading(place_tokens)
+    date_text = normalize_date_text(date_tokens)
+    place_blob = join_tokens(place_tokens) or extract_bottom_row_text(place_tokens)
+    place_text = sanitize_place_of_marriage_of_parents(place_blob)
     return date_text, place_text
 
 
@@ -1362,50 +1385,46 @@ def find_place_in_form(items, img_h, working_xmax):
 
 
 def find_marriage_in_form(items, img_h, img_w):
-    """Fallback: Search for marriage date/place in the lower portion of form."""
+    """Fallback: 20a/20b band — date on the left, place on the right."""
     dates = []
     places = []
+    y_min = img_h * 0.46
+    y_max = img_h * 0.68
+    mid = img_w * 0.48
 
     for it in items:
-        if it["score"] < 0.12:
+        if it["score"] < 0.10:
             continue
-        # Focus on middle-lower portion
-        if it["cy"] < img_h * 0.35 or it["cy"] > img_h * 0.75:
+        if it["cy"] < y_min or it["cy"] > y_max:
             continue
-
         txt = clean_text(it["text"])
         nt = norm_text(txt)
-
-        # Skip form labels
-        if any(kw in nt for kw in ["NAME", "FATHER", "MOTHER", "CITIZEN", "RELIGION", "CATHOLIC"]):
+        if any(
+            kw in nt
+            for kw in (
+                "FATHER", "MOTHER", "CITIZEN", "RELIGION", "CATHOLIC",
+                "ATTENDANT", "AFFIDAVIT", "MARRIAGE OF PARENTS",
+            )
+        ):
             continue
-
-        # Try to parse as date
         parsed = parse_date_from_string(txt)
-        if parsed:
+        if parsed and it["cx"] <= mid + img_w * 0.08:
             dates.append((it["cy"], parsed))
             continue
-
-        # Look for place-like text
-        if len(nt) > 5 and not re.search(r"\d{4}", nt):
-            if nt in NOT_A_PLACE or any(w in nt for w in NOT_A_PLACE):
-                continue
-            places.append((it["cy"], txt))
+        if it["cx"] < mid - img_w * 0.04:
+            continue
+        place = sanitize_place_of_marriage_of_parents(txt)
+        if place:
+            places.append((it["cy"], place, len(place)))
 
     date_result = ""
     place_result = ""
-
     if dates:
         dates.sort(key=lambda x: x[0])
         date_result = dates[0][1]
-
     if places:
-        places.sort(key=lambda x: x[0])
+        places.sort(key=lambda x: (-x[2], x[0]))
         place_result = places[0][1]
-
-    if place_result and not _is_plausible_place(place_result):
-        place_result = ""
-
     return date_result, place_result
 
 
@@ -1557,9 +1576,7 @@ def _sanitize_birth_fields(data: Dict[str, Any]) -> None:
         if place_key == "Place of Birth":
             val = sanitize_place_of_birth(val)
         else:
-            val = _collapse_repeated_words(val)
-            if not _is_plausible_place(val):
-                val = ""
+            val = sanitize_place_of_marriage_of_parents(val)
         if not val:
             # Maybe OCR put a citizenship word here — do not keep junk as place.
             cit = _normalize_citizenship(data.get(place_key) or "")
@@ -1671,15 +1688,10 @@ def _template_birth_map(result) -> Dict[str, str]:
 # MAIN: extract_birth_data
 # =========================================================
 def extract_birth_data(img_path: str) -> Dict[str, Any]:
-    temp_cropped = None
+    img = load_cropped_birth_image(img_path, CROP_LEFT, CROP_RIGHT)
+    img = enhance_birth_image(img)
+    result = run_ocr_on_image(img)
     try:
-        temp_cropped = create_temp_cropped_image(img_path, CROP_LEFT, CROP_RIGHT)
-
-        img = cv2.imread(temp_cropped)
-        if img is None:
-            raise FileNotFoundError(f"Could not read temp cropped image: {temp_cropped}")
-        img = enhance_birth_image(img)
-        result = run_ocr_on_image(img)
         box_map: Dict[str, str] = {}
         try:
             box_map = extract_field_boxes(img, "birth", pages=result)
@@ -1809,16 +1821,21 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
         marriage_label = find_best_label(
             items,
             patterns=[
-                "DATE AND PLACE OF MARRIAGE OF PARENTS",
                 "MARRIAGE OF PARENTS",
+                "DATE AND PLACE OF MARRIAGE OF PARENTS",
+                "20A DATE",
+                "20B PLACE",
+                "20a. DATE",
+                "20b. PLACE",
+                "IF NOT MARRIED",
                 "DATE AND PLACE OF MARRIAGE",
                 "PLACE OF MARRIAGE OF PARENTS",
             ],
             x_min=0,
-            x_max=img_w * 0.85,
-            y_min=img_h * 0.44,
-            y_max=img_h * 0.78,
-            min_match_score=6.0
+            x_max=img_w * 0.92,
+            y_min=img_h * 0.42,
+            y_max=img_h * 0.72,
+            min_match_score=4.8
         )
 
         remarks_label = find_remarks_label(items, img_w, img_h)
@@ -2043,11 +2060,12 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
                 y_down=50
             )
 
-        # Marriage of Parents
-        if marriage_label:
-            date_mar, place_mar = extract_marriage_of_parents(items, marriage_label, working_xmax)
-            data["Date of Marriage of Parents"] = date_mar
-            data["Place of Marriage of Parents"] = place_mar
+        # Marriage of Parents (Form 102 items 20a DATE / 20b PLACE)
+        date_mar, place_mar = extract_marriage_of_parents(
+            items, marriage_label, working_xmax, img_w, img_h
+        )
+        data["Date of Marriage of Parents"] = date_mar
+        data["Place of Marriage of Parents"] = place_mar
 
         # Fallback: search for marriage info
         if not data["Date of Marriage of Parents"] or not data["Place of Marriage of Parents"]:
@@ -2083,7 +2101,9 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
             elif key in {"Place of Birth", "Place of Marriage of Parents"}:
                 if key == "Place of Birth":
                     val = sanitize_place_of_birth(val)
-                if not val or not _is_plausible_place(val):
+                else:
+                    val = sanitize_place_of_marriage_of_parents(val)
+                if not val:
                     continue
             elif "Citizenship" in key:
                 cit = _normalize_citizenship(val)
@@ -2118,9 +2138,5 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
         out["__confidence__"] = confidence_map
         out["__source__"] = source_map
         return out
-    finally:
-        if temp_cropped and os.path.exists(temp_cropped):
-            try:
-                os.remove(temp_cropped)
-            except Exception:
-                pass
+    except Exception:
+        raise

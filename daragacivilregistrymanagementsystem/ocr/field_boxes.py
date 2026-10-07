@@ -10,7 +10,7 @@ import json
 import re
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -139,28 +139,82 @@ def _load_spec(doc_type: str) -> Optional[Dict[str, Any]]:
     if key not in _DOC_FILES:
         return None
     with _SPEC_LOCK:
-        if key in _SPECS:
-            return _SPECS[key]
         path = TEMPLATE_DIR / _DOC_FILES[key]
         if not path.exists():
             return None
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        cached = _SPECS.get(key)
+        if cached is not None and cached.get("_json_mtime") == mtime:
+            return cached
         spec = json.loads(path.read_text(encoding="utf-8"))
         image_path = TEMPLATE_DIR / spec["image"]
-        img = cv2.imread(str(image_path))
+        img = None
+        if cached is not None and cached.get("_path") == str(image_path):
+            img = cached.get("_image")
+            spec["_orb"] = cached.get("_orb")
+        if img is None:
+            img = cv2.imread(str(image_path))
         if img is None:
             return None
         spec["_image"] = img
         spec["_path"] = str(image_path)
+        spec["_json_mtime"] = mtime
         _SPECS[key] = spec
         return spec
 
 
-def _find_homography(scan, template) -> Optional[Any]:
-    t_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-    s_gray = cv2.cvtColor(scan, cv2.COLOR_BGR2GRAY)
+def _gray_max_side(gray: np.ndarray, max_side: int = 1100) -> Tuple[np.ndarray, float]:
+    h, w = gray.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return gray, 1.0
+    scale = max_side / float(longest)
+    small = cv2.resize(
+        gray,
+        (max(32, int(round(w * scale))), max(32, int(round(h * scale)))),
+        interpolation=cv2.INTER_AREA,
+    )
+    return small, scale
+
+
+def _scale_homography(h_small, scale_scan: float, scale_tpl: float):
+    if h_small is None:
+        return None
+    if scale_scan == 1.0 and scale_tpl == 1.0:
+        return h_small
+    ss = np.array(
+        [[scale_scan, 0.0, 0.0], [0.0, scale_scan, 0.0], [0.0, 0.0, 1.0]],
+        dtype=np.float64,
+    )
+    st_inv = np.array(
+        [[1.0 / scale_tpl, 0.0, 0.0], [0.0, 1.0 / scale_tpl, 0.0], [0.0, 0.0, 1.0]],
+        dtype=np.float64,
+    )
+    return st_inv @ h_small @ ss
+
+
+def _template_orb(spec: Dict[str, Any]):
+    packed = spec.get("_orb")
+    if packed is not None:
+        return packed
+    t_gray = cv2.cvtColor(spec["_image"], cv2.COLOR_BGR2GRAY)
+    t_small, scale_t = _gray_max_side(t_gray)
     detector = cv2.ORB_create(nfeatures=1800)
-    kp_t, des_t = detector.detectAndCompute(t_gray, None)
-    kp_s, des_s = detector.detectAndCompute(s_gray, None)
+    kp_t, des_t = detector.detectAndCompute(t_small, None)
+    packed = (kp_t, des_t, scale_t)
+    spec["_orb"] = packed
+    return packed
+
+
+def _find_homography(scan, spec: Dict[str, Any]) -> Optional[Any]:
+    kp_t, des_t, scale_t = _template_orb(spec)
+    detector = cv2.ORB_create(nfeatures=1800)
+    s_gray = cv2.cvtColor(scan, cv2.COLOR_BGR2GRAY)
+    s_small, scale_s = _gray_max_side(s_gray)
+    kp_s, des_s = detector.detectAndCompute(s_small, None)
     if des_t is None or des_s is None or len(kp_t) < 12 or len(kp_s) < 12:
         return None
     matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
@@ -185,7 +239,7 @@ def _find_homography(scan, template) -> Optional[Any]:
     inliers = int(mask.sum()) if mask is not None else 0
     if inliers < 10:
         return None
-    return homography
+    return _scale_homography(homography, scale_s, scale_t)
 
 
 def _items_from_pages(pages, img_w: int, img_h: int) -> List[Dict[str, Any]]:
@@ -634,7 +688,7 @@ def extract_field_boxes(
     template = spec["_image"]
     th, tw = template.shape[:2]
     sh, sw = img.shape[:2]
-    homography = _find_homography(img, template)
+    homography = _find_homography(img, spec)
 
     if items is None:
         if pages is not None:
@@ -651,3 +705,204 @@ def extract_field_boxes(
 
     items_template = _project_items_to_template(items, homography, sw, sh, tw, th)
     return _fill_boxes(spec, items_template)
+
+
+# Keys shown on OCR review metadata forms (not every printed box on the certificate).
+_FORM_METADATA_KEYS = {
+    "birth": [
+        "Registry Number",
+        "Date of Registration",
+        "Name of Child",
+        "Sex",
+        "Date of Birth",
+        "Place of Birth",
+        "Name of Mother",
+        "Citizenship of Mother",
+        "Name of Father",
+        "Citizenship of Father",
+        "Date of Marriage of Parents",
+        "Place of Marriage of Parents",
+        "Remarks",
+    ],
+    "marriage": [
+        "Registry Number",
+        "Date of Registration",
+        "Date of Marriage",
+        "Place of Marriage",
+        "Husband Name",
+        "Husband Age",
+        "Husband Citizenship",
+        "Husband Civil Status",
+        "Husband Father",
+        "Husband Mother",
+        "Wife Name",
+        "Wife Age",
+        "Wife Citizenship",
+        "Wife Civil Status",
+        "Wife Father",
+        "Wife Mother",
+    ],
+    "death": [
+        "Registry Number",
+        "Date of Registration",
+        "Name of Deceased",
+        "Sex",
+        "Age",
+        "Civil Status",
+        "Nationality",
+        "Date of Death",
+        "Place of Death",
+        "Cause of Death",
+    ],
+}
+
+_BOX_KEY_TO_FORM = {
+    "Husband First": "Husband Name",
+    "Husband Middle": "Husband Name",
+    "Husband Last": "Husband Name",
+    "Wife First": "Wife Name",
+    "Wife Middle": "Wife Name",
+    "Wife Last": "Wife Name",
+}
+
+
+def _union_box(a: List[float], b: List[float]) -> List[float]:
+    return [min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])]
+
+
+def _boxes_should_merge(a: List[float], b: List[float]) -> bool:
+    """Join stacked write-ins (cause a/b/c). Keep far-apart cells (two Date lines) separate."""
+    overlap_x = min(a[2], b[2]) - max(a[0], b[0])
+    overlap_y = min(a[3], b[3]) - max(a[1], b[1])
+    if overlap_x > 0 and overlap_y > 0:
+        return True
+    min_w = min(a[2] - a[0], b[2] - b[0])
+    if overlap_x < 0.45 * max(0.01, min_w):
+        return False
+    if a[3] <= b[1]:
+        gap = b[1] - a[3]
+    elif b[3] <= a[1]:
+        gap = a[1] - b[3]
+    else:
+        gap = 0.0
+    return gap <= 0.02
+
+
+def metadata_field_guides(doc_type: str) -> List[Dict[str, Any]]:
+    """Normalized write-in boxes for the metadata form of one certificate type."""
+    key = (doc_type or "").strip().lower()
+    wanted = _FORM_METADATA_KEYS.get(key)
+    filename = _DOC_FILES.get(key)
+    if not wanted or not filename:
+        return []
+    path = TEMPLATE_DIR / filename
+    if not path.exists():
+        return []
+    try:
+        spec = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    grouped: Dict[str, List[List[float]]] = {}
+    for field in spec.get("fields") or []:
+        raw_key = str(field.get("key") or "").strip()
+        form_key = _BOX_KEY_TO_FORM.get(raw_key, raw_key)
+        if form_key not in wanted:
+            continue
+        box = field.get("box") or []
+        if not isinstance(box, list) or len(box) != 4:
+            continue
+        try:
+            coords = [max(0.0, min(1.0, float(n))) for n in box]
+        except (TypeError, ValueError):
+            continue
+        if coords[2] <= coords[0] or coords[3] <= coords[1]:
+            continue
+        buckets = grouped.setdefault(form_key, [])
+        merged = False
+        for i, existing in enumerate(buckets):
+            if _boxes_should_merge(existing, coords):
+                buckets[i] = _union_box(existing, coords)
+                merged = True
+                break
+        if not merged:
+            buckets.append(coords)
+    guides = []
+    for form_key in wanted:
+        for box in grouped.get(form_key) or []:
+            x1, y1, x2, y2 = box
+            guides.append(
+                {
+                    "key": form_key,
+                    "left": round(x1, 4),
+                    "top": round(y1, 4),
+                    "width": round(x2 - x1, 4),
+                    "height": round(y2 - y1, 4),
+                }
+            )
+    return guides
+
+
+def all_metadata_field_guides() -> Dict[str, List[Dict[str, Any]]]:
+    return {name: metadata_field_guides(name) for name in _FORM_METADATA_KEYS}
+
+
+def _form_frame(bgr) -> Tuple[int, int, int, int]:
+    """Pixel rectangle of the printed certificate inside a scan (margins excluded)."""
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((11, 11), np.uint8))
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    img_area = float(max(1, w * h))
+    best = None
+    best_area = 0.0
+    for contour in contours:
+        x, y, cw, ch = cv2.boundingRect(contour)
+        area = float(cw * ch)
+        if area < 0.40 * img_area or area > 0.995 * img_area:
+            continue
+        if area > best_area:
+            best_area = area
+            best = (int(x), int(y), int(x + cw), int(y + ch))
+    if best is None:
+        return (0, 0, w, h)
+    return best
+
+
+def align_field_guides_to_image(doc_type: str, image_path: str) -> List[Dict[str, Any]]:
+    """Map template write-in boxes onto this scan, including photo margins."""
+    guides = metadata_field_guides(doc_type)
+    if not guides:
+        return []
+    img = cv2.imread(str(image_path))
+    if img is None:
+        return guides
+    height, width = img.shape[:2]
+    if width < 32 or height < 32:
+        return guides
+    x1, y1, x2, y2 = _form_frame(img)
+    frame_w = max(1, x2 - x1)
+    frame_h = max(1, y2 - y1)
+    if frame_w / float(width) >= 0.92 and frame_h / float(height) >= 0.92:
+        return guides
+    aligned: List[Dict[str, Any]] = []
+    for field in guides:
+        gx1 = x1 + float(field["left"]) * frame_w
+        gy1 = y1 + float(field["top"]) * frame_h
+        gx2 = x1 + (float(field["left"]) + float(field["width"])) * frame_w
+        gy2 = y1 + (float(field["top"]) + float(field["height"])) * frame_h
+        left = max(0.0, min(0.99, gx1 / float(width)))
+        top = max(0.0, min(0.99, gy1 / float(height)))
+        right = max(left + 0.01, min(1.0, gx2 / float(width)))
+        bottom = max(top + 0.008, min(1.0, gy2 / float(height)))
+        aligned.append(
+            {
+                "key": field["key"],
+                "left": round(left, 4),
+                "top": round(top, 4),
+                "width": round(right - left, 4),
+                "height": round(bottom - top, 4),
+            }
+        )
+    return aligned

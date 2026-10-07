@@ -12,10 +12,15 @@ build/
 
 # Local app data (do not publish scans or registry DB)
 uploads/
+storage_settings.json
 civil_registry.db
 *.db-journal
 database.json
 backups/
+uploads_backup_*/
+_restore_*/
+_restore_*
+log_retention.json
 
 # Environment & secrets
 .env

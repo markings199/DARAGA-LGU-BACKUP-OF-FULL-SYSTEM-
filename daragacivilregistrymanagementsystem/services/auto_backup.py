@@ -7,11 +7,20 @@ import os
 import csv
 import shutil
 import threading
+import time
 import zipfile
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Optional
+
+from services.lgu_office import (
+    LGU_LOCAL_BACKUP_DIR,
+    default_backup_path_for_this_computer,
+    is_lgu_office_server,
+    lgu_backup_unc,
+    this_computer_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,22 +29,23 @@ AUTO_BACKUP_SUBDIR = "auto"
 JOB_ID = "auto_full_backup"
 
 DEFAULT_SETTINGS: dict[str, Any] = {
-    "enabled": False,
+    "enabled": True,
     "daily_enabled": True,
     "monthly_enabled": True,
     "yearly_enabled": True,
     "full_enabled": True,
-    "daily_time": "20:00",
-    "monthly_time": "20:00",
-    "yearly_time": "20:00",
-    "full_time": "20:05",
+    "daily_time": "19:00",
+    "monthly_time": "19:00",
+    "yearly_time": "19:00",
+    "full_time": "19:05",
     "frequency": "daily",
-    "time": "20:00",
-    "weekday": 6,
+    "time": "19:00",
+    "weekday": 0,
     "day_of_month": 28,
     "month": 12,
     "retain_count": 10,
     "destination_path": "",
+    "keep_local_copy": False,
     "last_run_at": "",
     "last_run_status": "",
     "last_run_message": "",
@@ -43,7 +53,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 }
 
 VALID_FREQUENCIES = frozenset({"daily", "weekly", "monthly", "yearly"})
-PERIOD_KINDS = frozenset({"daily", "monthly", "yearly"})
+PERIOD_KINDS = frozenset({"daily", "weekly", "monthly", "yearly"})
 MONTH_NAMES = (
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
@@ -62,6 +72,44 @@ def daily_backup_stamp(when: Optional[datetime] = None) -> str:
 
 def daily_full_backup_filename(when: Optional[datetime] = None) -> str:
     return f"civil_registry_full_backup_{daily_backup_stamp(when)}.zip"
+
+
+WEEKDAY_LABELS = (
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+)
+
+
+def schedule_period_key(frequency: str, when: Optional[datetime] = None) -> str:
+    now = when or datetime.now()
+    freq = (frequency or "daily").strip().lower()
+    if freq == "weekly":
+        monday = now - timedelta(days=now.weekday())
+        return monday.strftime("%G-W%V")
+    if freq == "monthly":
+        return now.strftime("%Y-%m")
+    return daily_backup_stamp(now)
+
+
+def full_backup_filename(frequency: str, when: Optional[datetime] = None) -> str:
+    key = schedule_period_key(frequency, when).replace(":", "-")
+    return f"civil_registry_full_backup_{key}.zip"
+
+
+def schedule_summary(settings: dict[str, Any]) -> str:
+    if not settings.get("enabled"):
+        return "Automatic backup is off."
+    freq = str(settings.get("frequency") or "daily")
+    t = str(settings.get("time") or settings.get("full_time") or "20:00")
+    if freq == "weekly":
+        try:
+            day = WEEKDAY_LABELS[int(settings.get("weekday", 0))]
+        except (TypeError, ValueError, IndexError):
+            day = "Monday"
+        return f"Every {day} at {t}"
+    if freq == "monthly":
+        day = int(settings.get("day_of_month") or 1)
+        return f"Day {day} of each month at {t}"
+    return f"Every day at {t}"
 
 _scheduler = None
 _scheduler_lock = threading.Lock()
@@ -89,6 +137,11 @@ def clean_destination_path(raw: str) -> str:
     return dest
 
 
+def this_server_name() -> str:
+    """Windows computer name of the machine running python app.py (the backup server)."""
+    return this_computer_name()
+
+
 def env_backup_root() -> str:
     return clean_destination_path(
         os.environ.get("DARAGA_BACKUP_ROOT") or os.environ.get("BACKUP_ROOT") or ""
@@ -96,45 +149,70 @@ def env_backup_root() -> str:
 
 
 def local_backup_root(base_dir: Path) -> Path:
-    """Always-on copy on this system: backups/Year/Month/Day."""
+    """Backup folder on the computer that runs the application (the server), never on a browser PC."""
     path = base_dir / "backups"
-    path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def auto_backup_dir(base_dir: Path) -> Path:
-    """Local folder for optional full-system zip downloads."""
-    path = local_backup_root(base_dir) / "Full"
+    """Folder for full-system zip files on the configured backup volume."""
+    root, err = resolve_backup_root(base_dir)
+    if err:
+        raise OSError(err)
+    path = (root if root is not None else local_backup_root(base_dir)) / "Full"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _is_workstation_backup_path(raw: str, base_dir: Path) -> bool:
+    """True when the path is this laptop/project folder or the Windows Downloads folder."""
+    text = _norm_dest_text(raw)
+    if not text:
+        return True
+    if text.startswith("\\\\"):
+        return "\\downloads" in f"{text}\\"
+    if "daragacivilregistrymanagementsystem" in text:
+        return True
+    if text.endswith("\\downloads") or "\\downloads\\" in f"{text}\\":
+        return True
+    try:
+        resolved = Path(raw).resolve()
+        home_downloads = (Path.home() / "Downloads").resolve()
+        if resolved == home_downloads or home_downloads in resolved.parents:
+            return True
+        project = base_dir.resolve()
+        if resolved == project or project in resolved.parents or resolved == (project / "backups"):
+            return True
+    except OSError:
+        return True
+    return False
+
+
+def office_backup_destination(base_dir: Path, raw: str = "") -> str:
+    """Always the Daraga LGU backup folder, never a staff laptop or this project's backups folder."""
+    env = env_backup_root()
+    if env:
+        return env
+    cleaned = clean_destination_path(raw)
+    if cleaned and not _is_workstation_backup_path(cleaned, base_dir):
+        return cleaned
+    return default_backup_path_for_this_computer()
 
 
 def resolve_server_backup_root(
     base_dir: Path, settings: Optional[dict[str, Any]] = None
 ) -> tuple[Optional[Path], Optional[str]]:
-    """Optional second copy on the Daraga Civil Registry server. Empty path means 'not set yet'."""
+    """Daraga office folder: C:\\CivilRegistryBackups on the LGU server, or the office share from another PC."""
     settings = settings if settings is not None else load_settings(base_dir)
-    raw = env_backup_root() or clean_destination_path(str(settings.get("destination_path") or ""))
-    if not raw:
-        return None, None
+    raw = office_backup_destination(base_dir, str(settings.get("destination_path") or ""))
     if raw.startswith("//"):
         raw = "\\\\" + raw[2:].replace("/", "\\")
     path = Path(raw)
     if not (raw.startswith("\\\\") or path.is_absolute()):
         return None, (
-            "Enter a full office-server path, for example \\\\DARAGA-SERVER\\CivilRegistryBackups "
-            "or D:\\OfficeBackups."
+            "Enter the Daraga office backup folder, for example "
+            "C:\\CivilRegistryBackups or \\\\WIN-HIL0JNDFJIIN\\CivilRegistryBackups."
         )
-    app_root = base_dir.resolve()
-    try:
-        candidate = path if raw.startswith("\\\\") else path.resolve()
-        candidate.relative_to(app_root)
-        return None, (
-            "That folder is this laptop's program folder. Enter the office server share or another "
-            "drive so the municipal copy is stored separately."
-        )
-    except (ValueError, OSError):
-        pass
     return path, None
 
 
@@ -163,13 +241,75 @@ def relative_path_on_server(server_root: Path, relative: str) -> Path:
     return Path(*parts) if parts else Path(Path(str(relative).replace("\\", "/")).name)
 
 
+def require_system_backup_root(base_dir: Path) -> tuple[Optional[Path], Optional[str]]:
+    """Always-on archive the Admin Backup screen uses. Lives on the application host, not the browser PC."""
+    path = local_backup_root(base_dir)
+    write_err = ensure_backup_dir_writable(path)
+    if write_err:
+        return None, write_err
+    return path, None
+
+
+def probe_lgu_backup_root(
+    base_dir: Path, settings: Optional[dict[str, Any]] = None
+) -> tuple[Optional[Path], Optional[str]]:
+    """Daraga LGU folder when it can be written. None if the office server is not online yet."""
+    path, err = resolve_server_backup_root(base_dir, settings)
+    if err or path is None:
+        return None, err
+    if _is_workstation_backup_path(str(path), base_dir):
+        return None, None
+    write_err = ensure_backup_dir_writable(path)
+    if write_err:
+        return path, write_err
+    return path, None
+
+
+def require_lgu_backup_root(
+    base_dir: Path, settings: Optional[dict[str, Any]] = None
+) -> tuple[Optional[Path], Optional[str]]:
+    """Prefer Daraga when it is online; otherwise keep backups in the Admin system store."""
+    lgu, lgu_err = probe_lgu_backup_root(base_dir, settings)
+    if lgu is not None and not lgu_err:
+        return lgu, None
+    return require_system_backup_root(base_dir)
+
+
+def resolve_backup_root(
+    base_dir: Path, settings: Optional[dict[str, Any]] = None
+) -> tuple[Optional[Path], Optional[str]]:
+    """Office-server backup volume. Does not fall back to a client disk when the share fails."""
+    settings = settings if settings is not None else load_settings(base_dir)
+    path, err = resolve_server_backup_root(base_dir, settings)
+    if err:
+        return None, err
+    if path is not None:
+        return path, None
+    from services.vault_storage import resolve_data_root
+
+    data_root, data_err = resolve_data_root(base_dir)
+    if data_err:
+        return None, data_err
+    if data_root is not None:
+        return data_root / "backups", None
+    return local_backup_root(base_dir), None
+
+
 def backup_storage_dir(base_dir: Path, settings: Optional[dict[str, Any]] = None) -> Path:
-    """Primary automatic archive root on this system."""
-    return local_backup_root(base_dir)
+    """Primary automatic archive root on server storage. Never switches to a workstation folder when a server path is configured."""
+    path, err = resolve_backup_root(base_dir, settings)
+    if path is not None:
+        return path
+    return Path(default_backup_path_for_this_computer())
 
 
 def backup_storage_display(base_dir: Path, settings: Optional[dict[str, Any]] = None) -> str:
-    return str(local_backup_root(base_dir))
+    path, err = resolve_backup_root(base_dir, settings)
+    if err:
+        return err
+    if path is None:
+        return str(local_backup_root(base_dir))
+    return str(path)
 
 
 def server_backup_display(base_dir: Path, settings: Optional[dict[str, Any]] = None) -> str:
@@ -189,23 +329,114 @@ def ensure_backup_dir_writable(folder: Path) -> Optional[str]:
         probe.write_text("ok", encoding="utf-8")
         probe.unlink(missing_ok=True)
     except OSError as exc:
-        return (
-            f"Cannot save the office-server copy to {folder}. "
-            "Check that the server is on, the folder is shared, and this laptop can reach it. "
-            f"A copy will still be kept on this laptop. ({exc})"
-        )
+        from services.vault_storage import describe_storage_error
+
+        return describe_storage_error(exc, folder)
     return None
+
+
+def _safe_is_file(path: Path) -> bool:
+    """True if this is a regular file. Offline network shares do not crash the page."""
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
+def _safe_exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except OSError:
+        return False
+
+
+def _backup_search_roots(base_dir: Path) -> list[Path]:
+    """Local Admin Backup folder first. Daraga share only if it is actually reachable."""
+    roots: list[Path] = [local_backup_root(base_dir)]
+    lgu, lgu_err = probe_lgu_backup_root(base_dir)
+    if lgu is not None and not lgu_err and all(str(lgu) != str(r) for r in roots):
+        roots.append(lgu)
+    return roots
+
+
+def host_downloads_dir() -> Path:
+    return Path.home() / "Downloads"
+
+
+def unique_backup_path(path: Path) -> Path:
+    """Keep the original file and write the next run as a new name."""
+    if not _safe_exists(path):
+        return path
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    candidate = path.with_name(f"{path.stem}_{stamp}{path.suffix}")
+    n = 1
+    while _safe_exists(candidate):
+        candidate = path.with_name(f"{path.stem}_{stamp}_{n}{path.suffix}")
+        n += 1
+    return candidate
+
+
+def copy_backup_to_host_downloads(zip_path: Path) -> tuple[Optional[Path], Optional[str]]:
+    """Backups stay on the Daraga office server. Do not copy zips into a laptop Downloads folder."""
+    if zip_path is None or not _safe_is_file(zip_path):
+        return None, "Backup zip was not found on the Daraga office server."
+    return zip_path, None
+
+
+def _with_downloads_copy(msg: str, zip_path: Path) -> str:
+    return msg
 
 
 def describe_backup_copies(local_path: Path, server_status: str, server_detail: str) -> str:
     if server_status == "ok":
-        return "Priority copy on the office server. Safety copy kept on this computer."
-    if server_status == "failed":
-        return (
-            "Saved on this computer only. "
-            "Office-server priority copy FAILED - check the shared folder and network."
-        )
-    return "Saved on this computer. Set the office-server shared folder to enable the municipal priority copy."
+        if server_detail:
+            return f"Saved in Admin Backup and on the Daraga LGU server ({server_detail})."
+        return "Saved in Admin Backup and on the Daraga LGU server."
+    if server_detail:
+        return f"Saved in Admin Backup. Daraga LGU copy pending: {server_detail}"
+    return "Saved in Admin Backup. Daraga LGU copy pending."
+
+
+def drop_local_zip_if_server_only(source: Path, server_status: str, base_dir: Path) -> None:
+    """No-op: backups stay on server storage. Workstation disks are not used as a safety copy."""
+    return
+
+
+_SHARE_OFFLINE_MARKERS = (
+    "network path was not found",
+    "network name cannot be found",
+    "the network location cannot be reached",
+    "office server storage is unavailable",
+    "winerror 53",
+    "error 53",
+    "error 64",
+    "error 67",
+    "error 51",
+    "error 1231",
+)
+
+
+def _winerror_of(exc: BaseException) -> Optional[int]:
+    code = getattr(exc, "winerror", None)
+    try:
+        return int(code) if code is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_share_offline_error(exc: BaseException) -> bool:
+    from services.vault_storage import _WIN_NETWORK
+
+    code = _winerror_of(exc)
+    if code in _WIN_NETWORK:
+        return True
+    text = str(exc or "").lower()
+    return any(marker in text for marker in _SHARE_OFFLINE_MARKERS)
+
+
+def _is_share_offline_message(text: str) -> bool:
+    t = (text or "").lower()
+    return any(marker in t for marker in _SHARE_OFFLINE_MARKERS)
 
 
 def copy_zip_to_server(
@@ -221,37 +452,65 @@ def copy_zip_to_server(
     Publish a backup zip to the Daraga office server (priority archive).
 
     Returns (ok|skipped|failed, detail). Retries briefly when the share is flaky.
+    Does not retry when the office PC is simply not on this network.
     """
     server_root, server_err = resolve_server_backup_root(base_dir, settings)
     if server_err:
-        return "failed", f"Office server copy FAILED: {server_err}"
-    if server_root is None:
-        return "skipped", "Saved on this computer."
+        return "skipped", server_err
+    if server_root is None or _is_workstation_backup_path(str(server_root), base_dir):
+        return "skipped", "Daraga LGU folder is not configured yet."
+    probe = ensure_backup_dir_writable(server_root)
+    if probe and _is_share_offline_message(probe):
+        return "skipped", probe
 
-    last_error = ""
+    last_error = probe or ""
     attempts = max(1, int(retries or 1))
     for attempt in range(1, attempts + 1):
         try:
-            if not source.is_file():
+            if not _safe_is_file(source):
                 return "failed", f"Office server copy FAILED: source zip was missing ({source})."
             server_dest = server_root / relative_path_on_server(server_root, relative)
             dest_text = str(server_dest)
             if os.path.isdir(dest_text):
                 return "failed", f"Office server copy FAILED: a folder already exists at {dest_text}."
             os.makedirs(str(server_dest.parent), exist_ok=True)
+            try:
+                if source.resolve() == Path(dest_text).resolve():
+                    return "ok", dest_text
+            except OSError as exc:
+                if _is_share_offline_error(exc):
+                    from services.vault_storage import describe_storage_error
+
+                    return "skipped", describe_storage_error(exc, server_root)
+                if os.path.normcase(os.path.normpath(str(source))) == os.path.normcase(
+                    os.path.normpath(dest_text)
+                ):
+                    return "ok", dest_text
             shutil.copy2(str(source), dest_text)
             if not os.path.isfile(dest_text):
                 last_error = f"file was not found after copy at {dest_text}"
             else:
                 try:
-                    if os.path.getsize(dest_text) <= 0:
+                    src_size = os.path.getsize(str(source))
+                    dest_size = os.path.getsize(dest_text)
+                    if dest_size <= 0:
                         last_error = f"empty file after copy at {dest_text}"
+                    elif src_size and dest_size != src_size:
+                        last_error = f"size mismatch after copy at {dest_text}"
                     else:
-                        return "ok", f"Office server (priority): {dest_text}"
+                        return "ok", dest_text
                 except OSError as exc:
+                    if _is_share_offline_error(exc):
+                        from services.vault_storage import describe_storage_error
+
+                        return "skipped", describe_storage_error(exc, server_root)
                     last_error = str(exc)
         except OSError as exc:
             last_error = str(exc)
+            if _is_share_offline_error(exc):
+                from services.vault_storage import describe_storage_error
+
+                return "skipped", describe_storage_error(exc, server_root)
             logger.warning(
                 "Office server backup copy attempt %s/%s failed: %s",
                 attempt,
@@ -260,54 +519,88 @@ def copy_zip_to_server(
             )
         if attempt < attempts:
             try:
-                import time
-
                 time.sleep(1.2 * attempt)
             except Exception:
                 pass
     return "failed", f"Office server copy FAILED after {attempts} tries: {last_error}"
 
 
-def get_backup_readiness(base_dir: Path, settings: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    """Status for the Automatic Backup screen — ready for Daraga server connection."""
+def publish_backup_to_daraga(
+    source: Path,
+    relative: str,
+    base_dir: Path,
+    *,
+    settings: Optional[dict[str, Any]] = None,
+    retries: int = 2,
+) -> tuple[str, str]:
+    """Copy a backup zip onto the Daraga LGU folder whenever that disk or share is online."""
     settings = settings if settings is not None else load_settings(base_dir)
-    server_path, server_err = resolve_server_backup_root(base_dir, settings)
-    server_writable = False
-    server_message = "Not set - daily backups stay on this computer until the office share is configured."
-    if server_err:
-        server_message = server_err
-    elif server_path is not None:
-        write_err = ensure_backup_dir_writable(server_path)
-        if write_err:
-            server_message = write_err
-        else:
-            server_writable = True
-            server_message = f"Ready - priority copies will go to {server_path}"
+    status, detail = copy_zip_to_server(
+        source,
+        relative,
+        base_dir,
+        force=True,
+        settings=settings,
+        retries=retries,
+    )
+    if status == "ok":
+        return status, detail
+    if status == "skipped" or _is_share_offline_message(detail or ""):
+        return "skipped", detail or "Daraga LGU folder is not online yet."
+    lgu, lgu_err = probe_lgu_backup_root(base_dir, settings)
+    if lgu is None:
+        return status, detail or lgu_err or "Daraga LGU folder is not online yet."
+    if lgu_err:
+        return status, lgu_err
+    try:
+        server_dest = lgu / relative_path_on_server(lgu, relative)
+        os.makedirs(str(server_dest.parent), exist_ok=True)
+        shutil.copy2(str(source), str(server_dest))
+        if os.path.isfile(str(server_dest)) and os.path.getsize(str(server_dest)) > 0:
+            return "ok", str(server_dest)
+        return "failed", f"Daraga LGU copy did not finish at {server_dest}"
+    except OSError as exc:
+        logger.warning("Direct Daraga LGU copy failed: %s", exc)
+        return "failed", str(exc)
+
+
+def get_backup_readiness(base_dir: Path, settings: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """Status for the Automatic Backup screen — archive is on the Flask host."""
+    settings = settings if settings is not None else load_settings(base_dir)
+    system_path, system_err = require_system_backup_root(base_dir)
+    lgu_path, lgu_err = probe_lgu_backup_root(base_dir, settings)
+    host_name = this_server_name()
+    server_writable = lgu_path is not None and not lgu_err
+    intended, _intended_err = resolve_server_backup_root(base_dir, settings)
+    display_path = str((lgu_path if server_writable else None) or intended or default_backup_path_for_this_computer())
+    if server_writable:
+        archive, archive_err = lgu_path, None
+        server_message = "Daraga server connected. Backups save in Admin and on the office server."
+    else:
+        archive, archive_err = system_path, system_err
+        server_message = "Saved in Admin Backup. Daraga copy when the office server is online."
     return {
         "schedule_on": bool(settings.get("enabled")),
         "daily_on": bool(settings.get("daily_enabled", True)),
         "full_on": bool(settings.get("full_enabled", True)),
         "daily_time": str(settings.get("daily_time") or "20:00"),
         "full_time": str(settings.get("full_time") or "20:05"),
-        "server_configured": server_path is not None and not server_err,
+        "host_name": host_name,
+        "server_configured": True,
         "server_writable": server_writable,
-        "server_path": str(server_path) if server_path is not None else "",
+        "system_ready": system_path is not None and not system_err,
+        "server_path": display_path,
         "server_message": server_message,
-        "local_path": str(local_backup_root(base_dir)),
-        "deploy_ready": bool(settings.get("enabled"))
-        and bool(settings.get("daily_enabled", True))
-        and bool(settings.get("full_enabled", True))
-        and server_writable,
+        "local_path": display_path,
+        "deploy_ready": bool(settings.get("enabled")) and server_writable,
     }
 
 
 def sync_local_backups_to_server(base_dir: Path) -> tuple[int, int, Optional[str]]:
     """Copy existing local backup zips to the LGU server. Returns (copied, failed, error)."""
-    server_root, err = resolve_server_backup_root(base_dir)
-    if err:
-        return 0, 0, err
-    if server_root is None:
-        return 0, 0, None
+    lgu, lgu_err = probe_lgu_backup_root(base_dir)
+    if lgu is None or lgu_err:
+        return 0, 0, lgu_err or "Daraga LGU folder is not online yet."
     local = local_backup_root(base_dir)
     copied = 0
     failed = 0
@@ -353,8 +646,10 @@ def _normalize_settings(settings: dict[str, Any]) -> dict[str, Any]:
     out.update(settings or {})
     out["enabled"] = bool(out.get("enabled"))
     freq = str(out.get("frequency") or "daily").strip().lower()
-    out["frequency"] = freq if freq in VALID_FREQUENCIES else "daily"
-    out["time"] = _parse_time(str(out.get("time") or "02:00"))
+    if freq == "yearly":
+        freq = "monthly"
+    out["frequency"] = freq if freq in ("daily", "weekly", "monthly") else "daily"
+    out["time"] = _parse_time(str(out.get("time") or out.get("full_time") or out.get("daily_time") or "20:00"))
     try:
         out["weekday"] = max(0, min(6, int(out.get("weekday", 6))))
     except (TypeError, ValueError):
@@ -375,14 +670,15 @@ def _normalize_settings(settings: dict[str, Any]) -> dict[str, Any]:
     if "\x00" in dest:
         dest = ""
     out["destination_path"] = dest[:1024]
+    out["keep_local_copy"] = False
     out["daily_enabled"] = bool(out.get("daily_enabled", True))
     out["monthly_enabled"] = bool(out.get("monthly_enabled", True))
     out["yearly_enabled"] = bool(out.get("yearly_enabled", True))
     out["full_enabled"] = bool(out.get("full_enabled", True))
     out["daily_time"] = _parse_time(str(out.get("daily_time") or out.get("time") or "20:00"))
-    out["monthly_time"] = _parse_time(str(out.get("monthly_time") or "20:00"))
-    out["yearly_time"] = _parse_time(str(out.get("yearly_time") or "20:00"))
-    out["full_time"] = _parse_time(str(out.get("full_time") or "20:05"))
+    out["monthly_time"] = _parse_time(str(out.get("monthly_time") or out.get("time") or "20:00"))
+    out["yearly_time"] = _parse_time(str(out.get("yearly_time") or out.get("time") or "20:00"))
+    out["full_time"] = _parse_time(str(out.get("full_time") or out.get("time") or "20:00"))
     for key in ("last_run_at", "last_run_status", "last_run_message", "last_run_file"):
         out[key] = str(out.get(key) or "").strip()
     return out
@@ -433,6 +729,10 @@ def period_bounds(kind: str, when: Optional[datetime] = None) -> tuple[datetime,
         start_local = start_local.replace(month=1, day=1)
         end_local = start_local.replace(year=start_local.year + 1)
         period_key = start_local.strftime("%Y")
+    elif kind == "weekly":
+        start_local = start_local - timedelta(days=start_local.weekday())
+        end_local = start_local + timedelta(days=7)
+        period_key = start_local.strftime("%G-W%V")
     else:
         end_local = start_local + timedelta(days=1)
         period_key = start_local.strftime("%Y-%m-%d")
@@ -446,6 +746,9 @@ def period_folder(root: Path, kind: str, when: datetime) -> Path:
         return root / year / "Monthly" / month_name
     if kind == "yearly":
         return root / year / "Yearly"
+    if kind == "weekly":
+        monday = when - timedelta(days=when.weekday())
+        return root / year / "Weekly" / monday.strftime("%G-W%V")
     return root / year / month_name / f"{month_name}-{when.strftime('%d')}"
 
 
@@ -467,39 +770,48 @@ def _record_to_manifest(record) -> dict[str, Any]:
 
 
 def write_period_documents_zip(dest_path: Path, records: list[Any], resolve_upload: Callable[[str], Optional[Path]]) -> int:
-    """Copy scanned files for the given records into a zip. Does not change originals."""
+    """Copy that period's records and their scans into a zip. Does not change originals."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
+    dump_tmp = dest_path.parent / f"{dest_path.stem}_database.json"
     copied = 0
-    with zipfile.ZipFile(dest_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        manifest_rows = []
-        seen = set()
-        for record in records:
-            manifest_rows.append(_record_to_manifest(record))
-            for attr in ("image_path", "image_front_path"):
-                rel = (getattr(record, attr, None) or "").strip()
-                if not rel:
-                    continue
-                full = resolve_upload(rel)
-                if full is None or not full.is_file():
-                    continue
-                arcname = f"documents/{record.id}_{full.name}"
-                if arcname in seen:
-                    arcname = f"documents/{record.id}_{attr}_{full.name}"
-                seen.add(arcname)
-                zf.write(full, arcname)
-                copied += 1
-        buf = StringIO()
-        writer = csv.DictWriter(
-            buf,
-            fieldnames=["id", "document_type", "registry_number", "full_name", "event_date", "created_at", "image_path"],
-        )
-        writer.writeheader()
-        writer.writerows(manifest_rows)
-        zf.writestr("manifest.csv", buf.getvalue())
-        zf.writestr(
-            "README.txt",
-            "Date-based document backup. Original records in the system were not changed.\n",
-        )
+    try:
+        from services.postgres_backup import dump_period_records_json
+
+        dump_period_records_json(dump_tmp, records)
+        with zipfile.ZipFile(dest_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(dump_tmp, "database.json")
+            manifest_rows = []
+            seen = set()
+            for record in records:
+                manifest_rows.append(_record_to_manifest(record))
+                for attr in ("image_path", "image_front_path"):
+                    rel = (getattr(record, attr, None) or "").strip().replace("\\", "/")
+                    if not rel:
+                        continue
+                    full = resolve_upload(rel)
+                    if full is None or not full.is_file():
+                        continue
+                    arcname = f"uploads/{rel.lstrip('/')}"
+                    if arcname in seen:
+                        continue
+                    seen.add(arcname)
+                    zf.write(full, arcname)
+                    copied += 1
+            buf = StringIO()
+            writer = csv.DictWriter(
+                buf,
+                fieldnames=["id", "document_type", "registry_number", "full_name", "event_date", "created_at", "image_path"],
+            )
+            writer.writeheader()
+            writer.writerows(manifest_rows)
+            zf.writestr("manifest.csv", buf.getvalue())
+            zf.writestr(
+                "README.txt",
+                "Period backup: only certificates scanned in this day, week, or month. "
+                "Other days in the live system were not changed.\n",
+            )
+    finally:
+        dump_tmp.unlink(missing_ok=True)
     return copied
 
 
@@ -552,17 +864,13 @@ def delete_backup_run(base_dir: Path, run_id: int) -> tuple[bool, str]:
     period = row.period_key or ""
     file_errors: list[str] = []
     if rel and ".." not in rel.split("/") and rel.lower().endswith(".zip"):
-        roots = [local_backup_root(base_dir)]
-        server_root, _ = resolve_server_backup_root(base_dir)
-        if server_root is not None:
-            roots.append(server_root)
-        for root in roots:
+        for root in _backup_search_roots(base_dir):
             full = root / Path(rel)
             try:
                 full.relative_to(root)
             except ValueError:
                 continue
-            if not full.is_file():
+            if not _safe_is_file(full):
                 continue
             try:
                 full.unlink()
@@ -585,19 +893,15 @@ def resolve_period_backup_path(base_dir: Path, file_rel: str) -> tuple[Optional[
     rel = (file_rel or "").replace("\\", "/").strip().lstrip("/")
     if not rel or ".." in rel.split("/") or not rel.lower().endswith(".zip"):
         return None, "Invalid backup file."
-    roots = [local_backup_root(base_dir)]
-    server_root, _ = resolve_server_backup_root(base_dir)
-    if server_root is not None:
-        roots.append(server_root)
-    for root in roots:
+    for root in _backup_search_roots(base_dir):
         full = root / Path(rel)
         try:
             full.relative_to(root)
         except ValueError:
             continue
-        if full.is_file():
+        if _safe_is_file(full):
             return full, None
-    return None, "Backup file not found on this system or the LGU server folder."
+    return None, "Backup file not found."
 
 
 def run_period_backup(
@@ -615,19 +919,23 @@ def run_period_backup(
         kind = "daily"
     now = when or datetime.now()
     start_utc, end_utc, period_key = period_bounds(kind, now)
-    local_root = local_backup_root(base_dir)
+    backup_root, root_err = require_system_backup_root(base_dir)
+    if root_err:
+        return False, root_err, ""
     filename = period_filename(kind, period_key)
-    folder = period_folder(local_root, kind, now)
+    folder = period_folder(backup_root, kind, now)
     dest = folder / filename
+    if _safe_exists(dest) and force:
+        dest = unique_backup_path(dest)
     try:
-        rel = str(dest.relative_to(local_root)).replace("\\", "/")
+        rel = str(dest.relative_to(backup_root)).replace("\\", "/")
     except ValueError:
-        rel = filename
+        rel = dest.name
 
     try:
-        if dest.exists() and not force:
-            server_status, extra = copy_zip_to_server(dest, rel, base_dir, force=True)
-            msg = f"{kind.title()} backup already exists. {describe_backup_copies(dest, server_status, extra)}"
+        if _safe_exists(dest) and not force:
+            server_status, extra = "ok", str(dest)
+            msg = f"This {kind} backup already exists. {describe_backup_copies(dest, server_status, extra)}"
             from models import BackupRun
             last = (
                 BackupRun.query.filter_by(kind=kind, period_key=period_key)
@@ -649,16 +957,20 @@ def run_period_backup(
         if not callable(resolve_upload):
             raise RuntimeError("Backup file resolver is not ready. Restart the application.")
 
-        write_period_documents_zip(dest, records, resolve_upload)
-        server_status, extra = copy_zip_to_server(dest, rel, base_dir, force=True, retries=3)
+        try:
+            write_period_documents_zip(dest, records, resolve_upload)
+        except OSError as exc:
+            from services.vault_storage import describe_storage_error
+
+            raise RuntimeError(describe_storage_error(exc, dest)) from exc
+        server_status, extra = copy_zip_to_server(dest, rel, base_dir, force=True)
+        copies = describe_backup_copies(dest, server_status, extra)
         if not records:
-            msg = (
-                f"{kind.title()} backup ready (no new records in this period). "
-                f"{describe_backup_copies(dest, server_status, extra)}"
-            )
+            msg = f"{kind.title()} backup complete. No new scans. {copies}"
         else:
-            msg = f"{kind.title()} backup ready ({len(records)} record(s)). {describe_backup_copies(dest, server_status, extra)}"
-        run_status = "partial" if server_status == "failed" else "success"
+            scan_word = "scan" if len(records) == 1 else "scans"
+            msg = f"{kind.title()} backup complete ({len(records)} {scan_word}). {copies}"
+        run_status = "success"
         _save_backup_run(
             kind=kind,
             period_key=period_key,
@@ -711,23 +1023,45 @@ def write_full_backup_zip(
 
             dump_database_json(dump_tmp)
             zf.write(dump_tmp, "database.json")
+            extra_files = (
+                base_dir / "backups" / SETTINGS_FILENAME,
+                base_dir / "storage_settings.json",
+                base_dir / "log_retention.json",
+            )
+            for extra in extra_files:
+                if extra.is_file():
+                    try:
+                        zf.write(extra, extra.name)
+                    except OSError:
+                        logger.warning("Could not add %s to full backup", extra)
             if upload_dir.exists():
-                nested_uploads = (upload_dir / "uploads").resolve()
+                upload_root = Path(upload_dir)
+                try:
+                    nested_uploads = (upload_root / "uploads").resolve()
+                except OSError:
+                    nested_uploads = upload_root / "uploads"
                 for root, dirs, files in os.walk(upload_dir):
-                    root_path = Path(root).resolve()
-                    dirs[:] = [d for d in dirs if (root_path / d).resolve() != nested_uploads]
-                    if root_path == nested_uploads:
+                    root_path = Path(root)
+                    try:
+                        root_resolved = root_path.resolve()
+                    except OSError:
+                        root_resolved = root_path
+                    try:
+                        dirs[:] = [d for d in dirs if (root_resolved / d) != nested_uploads]
+                    except OSError:
+                        pass
+                    if root_resolved == nested_uploads:
                         continue
                     for fname in files:
                         full = Path(root) / fname
                         try:
-                            arcname = full.relative_to(base_dir)
+                            rel = full.relative_to(upload_root)
                         except ValueError:
                             continue
-                        parts = Path(str(arcname)).parts
-                        if len(parts) >= 2 and parts[0] == "uploads" and parts[1] == "uploads":
+                        arc = "uploads/" + str(rel).replace("\\", "/")
+                        if "/uploads/uploads/" in f"/{arc}/":
                             continue
-                        zf.write(full, str(arcname).replace("\\", "/"))
+                        zf.write(full, arc)
     finally:
         dump_tmp.unlink(missing_ok=True)
 
@@ -740,21 +1074,31 @@ def run_full_backup(
     when: Optional[datetime] = None,
     audit_callback: Optional[Callable[[str, str], None]] = None,
 ) -> tuple[bool, str, str]:
-    """Save a full system zip (database + scans) on this computer and copy it to the LGU server."""
+    """Save a full system zip (database + scans) on office-server storage only."""
     now = when or datetime.now()
-    period_key = daily_backup_stamp(now)
-    local_root = local_backup_root(base_dir)
-    dest = auto_backup_dir(base_dir) / daily_full_backup_filename(now)
+    settings_now = load_settings(base_dir)
+    period_key = schedule_period_key(str(settings_now.get("frequency") or "daily"), now)
+    backup_root, root_err = require_system_backup_root(base_dir)
+    if root_err:
+        return False, root_err, ""
+    dest = (backup_root / "Full") / full_backup_filename(
+        str(settings_now.get("frequency") or "daily"), now
+    )
+    if _safe_exists(dest) and force:
+        dest = unique_backup_path(dest)
     try:
-        rel = str(dest.relative_to(local_root)).replace("\\", "/")
+        rel = str(dest.relative_to(backup_root)).replace("\\", "/")
     except ValueError:
         rel = f"Full/{dest.name}"
     upload_dir = _runtime.get("upload_dir") or (base_dir / "uploads")
 
     try:
-        if dest.exists() and not force:
-            server_status, extra = copy_zip_to_server(dest, rel, base_dir, force=True)
-            msg = f"Full backup already exists. {describe_backup_copies(dest, server_status, extra)}"
+        if _safe_exists(dest) and not force:
+            server_status, extra = publish_backup_to_daraga(
+                dest, rel, base_dir, settings=settings_now
+            )
+            copies = describe_backup_copies(dest, server_status, extra)
+            msg = f"This full backup already exists. {copies}"
             from models import BackupRun
             last = (
                 BackupRun.query.filter_by(kind="full", period_key=period_key)
@@ -767,15 +1111,32 @@ def run_full_backup(
 
         from models import Record
 
-        write_full_backup_zip(
-            dest,
-            base_dir=base_dir,
-            upload_dir=Path(upload_dir),
+        try:
+            write_full_backup_zip(
+                dest,
+                base_dir=base_dir,
+                upload_dir=Path(upload_dir),
+            )
+        except OSError as exc:
+            from services.vault_storage import describe_storage_error
+
+            raise RuntimeError(describe_storage_error(exc, dest)) from exc
+        lgu_path, lgu_err = probe_lgu_backup_root(base_dir, settings_now)
+        daraga_connected = lgu_path is not None and not lgu_err
+        server_status, extra = publish_backup_to_daraga(
+            dest, rel, base_dir, settings=settings_now
         )
-        server_status, extra = copy_zip_to_server(dest, rel, base_dir, force=True, retries=3)
+        copies = describe_backup_copies(dest, server_status, extra)
         count = Record.query.count()
-        msg = f"Full backup ready. {describe_backup_copies(dest, server_status, extra)}"
-        run_status = "partial" if server_status == "failed" else "success"
+        if daraga_connected and server_status != "ok":
+            run_status = "partial"
+            msg = (
+                "Full backup saved in Admin Backup, but it could not be copied to the "
+                f"Daraga LGU server. {extra}"
+            )
+        else:
+            run_status = "success"
+            msg = f"Full backup complete. {copies}"
         _save_backup_run(
             kind="full",
             period_key=period_key,
@@ -847,10 +1208,25 @@ def delete_auto_backup(base_dir: Path, filename: str) -> tuple[bool, str]:
 
 
 def list_auto_backups(base_dir: Path, limit: int = 15) -> list[dict[str, Any]]:
-    folder = auto_backup_dir(base_dir)
+    try:
+        folder = auto_backup_dir(base_dir)
+    except OSError:
+        return []
     items: list[dict[str, Any]] = []
-    for path in sorted(folder.glob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True):
-        stat = path.stat()
+    try:
+        paths = list(folder.glob("*.zip"))
+    except OSError:
+        return []
+    def _mtime(p: Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return 0.0
+    for path in sorted(paths, key=_mtime, reverse=True):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
         items.append(
             {
                 "filename": path.name,
@@ -864,7 +1240,10 @@ def list_auto_backups(base_dir: Path, limit: int = 15) -> list[dict[str, Any]]:
 
 
 def _cleanup_old_backups(base_dir: Path, retain_count: int) -> None:
-    folder = auto_backup_dir(base_dir)
+    try:
+        folder = auto_backup_dir(base_dir)
+    except OSError:
+        return
     backups = sorted(folder.glob("civil_registry_full_backup_*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
     for old in backups[retain_count:]:
         try:
@@ -899,8 +1278,45 @@ def run_auto_backup(
     )
 
 
+def scheduled_backup_kind(settings: Optional[dict[str, Any]] = None) -> str:
+    freq = str((settings or {}).get("frequency") or "daily").strip().lower()
+    if freq in PERIOD_KINDS:
+        return freq
+    return "daily"
+
+
+def prepare_lgu_office_backup(base_dir: Path) -> None:
+    """Point Auto at the Daraga LGU server folder and turn it on. Never use this laptop's Downloads or project folder."""
+    settings = load_settings(base_dir)
+    dest = clean_destination_path(str(settings.get("destination_path") or ""))
+    office = office_backup_destination(base_dir, dest)
+    changed = False
+    if dest != office:
+        settings["destination_path"] = office
+        changed = True
+    if not settings.get("enabled"):
+        settings["enabled"] = True
+        settings["frequency"] = "daily"
+        settings["time"] = str(settings.get("time") or "19:00")
+        changed = True
+    if str(settings.get("frequency") or "").strip().lower() not in ("daily", "weekly", "monthly"):
+        settings["frequency"] = "daily"
+        changed = True
+    if changed:
+        save_settings(base_dir, settings)
+    err = ensure_backup_dir_writable(Path(office))
+    if err:
+        if _is_share_offline_message(err):
+            logger.info(
+                "Daraga LGU server is not on this network yet. Backups stay in Admin Backup until %s can be reached.",
+                lgu_backup_unc(),
+            )
+        else:
+            logger.warning("Daraga LGU backup folder not writable: %s", err)
+
+
 def apply_schedule(app) -> None:
-    """Reload daily, monthly, and yearly jobs from saved settings."""
+    """Schedule a period backup (that day's / week's / month's scans) on the LGU server."""
     global _scheduler
     if _scheduler is None:
         return
@@ -918,69 +1334,44 @@ def apply_schedule(app) -> None:
         logger.info("Automatic backup is disabled.")
         return
 
-    def _make_job(kind: str):
-        def _job():
-            with app.app_context():
-                run_auto_backup(
-                    base_dir=_runtime["base_dir"],
-                    upload_dir=_runtime["upload_dir"],
-                    audit_callback=_runtime.get("audit_callback"),
-                    trigger="schedule",
-                    kind=kind,
-                )
-        return _job
+    kind = scheduled_backup_kind(settings)
+
+    def _job():
+        with app.app_context():
+            run_auto_backup(
+                base_dir=_runtime["base_dir"],
+                upload_dir=_runtime["upload_dir"],
+                audit_callback=_runtime.get("audit_callback"),
+                trigger="schedule",
+                kind=kind,
+            )
 
     job_defaults = {
         "misfire_grace_time": MISFIRE_GRACE_SECONDS,
         "coalesce": True,
         "max_instances": 1,
     }
+    hour, minute = _time_parts_value(str(settings.get("time") or settings.get("full_time") or "20:00"))
+    freq = str(settings.get("frequency") or "daily")
+    if freq == "weekly":
+        trigger = CronTrigger(day_of_week=int(settings.get("weekday") or 0), hour=hour, minute=minute)
+    elif freq == "monthly":
+        trigger = CronTrigger(day=int(settings.get("day_of_month") or 1), hour=hour, minute=minute)
+    else:
+        trigger = CronTrigger(hour=hour, minute=minute)
 
-    if settings.get("daily_enabled", True):
-        hour, minute = _time_parts_value(str(settings.get("daily_time") or "20:00"))
-        _scheduler.add_job(
-            _make_job("daily"),
-            CronTrigger(hour=hour, minute=minute),
-            id=JOB_DAILY,
-            replace_existing=True,
-            **job_defaults,
-        )
-    if settings.get("monthly_enabled", True):
-        hour, minute = _time_parts_value(str(settings.get("monthly_time") or "20:00"))
-        day = int(settings.get("day_of_month") or 28)
-        _scheduler.add_job(
-            _make_job("monthly"),
-            CronTrigger(day=day, hour=hour, minute=minute),
-            id=JOB_MONTHLY,
-            replace_existing=True,
-            **job_defaults,
-        )
-    if settings.get("yearly_enabled", True):
-        hour, minute = _time_parts_value(str(settings.get("yearly_time") or "20:00"))
-        month = int(settings.get("month") or 12)
-        day = int(settings.get("day_of_month") or 28)
-        _scheduler.add_job(
-            _make_job("yearly"),
-            CronTrigger(month=month, day=day, hour=hour, minute=minute),
-            id=JOB_YEARLY,
-            replace_existing=True,
-            **job_defaults,
-        )
-    if settings.get("full_enabled", True):
-        hour, minute = _time_parts_value(str(settings.get("full_time") or "20:05"))
-        _scheduler.add_job(
-            _make_job("full"),
-            CronTrigger(hour=hour, minute=minute),
-            id=JOB_ID,
-            replace_existing=True,
-            **job_defaults,
-        )
+    _scheduler.add_job(
+        _job,
+        trigger,
+        id=JOB_ID,
+        replace_existing=True,
+        **job_defaults,
+    )
     logger.info(
-        "Automatic backup scheduled: daily=%s monthly=%s yearly=%s full=%s (misfire_grace=%ss)",
-        settings.get("daily_enabled"),
-        settings.get("monthly_enabled"),
-        settings.get("yearly_enabled"),
-        settings.get("full_enabled"),
+        "Automatic period backup scheduled: kind=%s time=%s:%02d (misfire_grace=%ss)",
+        kind,
+        hour,
+        minute,
         MISFIRE_GRACE_SECONDS,
     )
 
@@ -1002,19 +1393,27 @@ def _backup_period_already_done(kind: str, period_key: str, base_dir: Path) -> b
         if (last.status or "") == "skipped":
             return True
 
-    local_root = local_backup_root(base_dir)
+    local_root = backup_storage_dir(base_dir)
     if kind == "full":
-        candidate = auto_backup_dir(base_dir) / daily_full_backup_filename(
-            datetime.strptime(period_key, "%Y-%m-%d") if period_key else datetime.now()
+        settings = load_settings(base_dir)
+        candidate = auto_backup_dir(base_dir) / full_backup_filename(
+            str(settings.get("frequency") or "daily")
         )
-        return candidate.is_file()
+        return _safe_is_file(candidate)
 
     try:
-        when = datetime.strptime(period_key, "%Y-%m-%d" if kind == "daily" else ("%Y-%m" if kind == "monthly" else "%Y"))
+        if kind == "daily":
+            when = datetime.strptime(period_key, "%Y-%m-%d")
+        elif kind == "weekly":
+            when = datetime.strptime(period_key + "-1", "%G-W%V-%u")
+        elif kind == "monthly":
+            when = datetime.strptime(period_key, "%Y-%m")
+        else:
+            when = datetime.strptime(period_key, "%Y")
     except ValueError:
         when = datetime.now()
     folder = period_folder(local_root, kind, when)
-    return (folder / period_filename(kind, period_key)).is_file()
+    return _safe_is_file(folder / period_filename(kind, period_key))
 
 
 def _scheduled_time_passed_today(time_hhmm: str, now: Optional[datetime] = None) -> bool:
@@ -1024,11 +1423,28 @@ def _scheduled_time_passed_today(time_hhmm: str, now: Optional[datetime] = None)
     return now >= due
 
 
+_catchup_started = False
+
+
+def schedule_catch_up_missed_backups(app) -> None:
+    """Run missed daily backup after Flask is listening so startup is not blocked."""
+    global _catchup_started
+    if _catchup_started:
+        return
+    _catchup_started = True
+
+    def _run():
+        time.sleep(12)
+        try:
+            catch_up_missed_backups(app)
+        except Exception:
+            logger.exception("Backup catch-up failed")
+
+    threading.Thread(target=_run, name="daraga-backup-catchup", daemon=True).start()
+
+
 def catch_up_missed_backups(app) -> None:
-    """
-    If the app starts after today's scheduled daily/full time and that backup
-    is missing, run it once. Prevents silent misses after sleep or late start.
-    """
+    """If the app starts after the scheduled time and that backup is missing, run it once."""
     base_dir = _runtime.get("base_dir")
     upload_dir = _runtime.get("upload_dir")
     if base_dir is None or upload_dir is None:
@@ -1036,23 +1452,38 @@ def catch_up_missed_backups(app) -> None:
     settings = load_settings(base_dir)
     if not settings.get("enabled"):
         return
+    _sys, sys_err = require_system_backup_root(base_dir)
+    if sys_err:
+        logger.warning("Catch-up skipped: %s", sys_err)
+        return
+    try:
+        copied, failed, sync_err = sync_local_backups_to_server(base_dir)
+        if copied:
+            logger.info("Copied %s in-system backup(s) to the Daraga LGU server", copied)
+        if sync_err:
+            logger.info("Daraga copy not available yet: %s", sync_err)
+        elif failed:
+            logger.warning("Could not copy %s in-system backup(s) to Daraga", failed)
+    except Exception:
+        logger.exception("Could not sync in-system backups to Daraga")
 
     now = datetime.now()
     audit = _runtime.get("audit_callback")
-
-    def _maybe_run(kind: str, time_key: str, enabled_key: str) -> None:
-        if not settings.get(enabled_key, True):
-            return
-        if not _scheduled_time_passed_today(str(settings.get(time_key) or "20:00"), now):
-            return
-        if kind == "full":
-            period_key = daily_backup_stamp(now)
-        else:
-            _s, _e, period_key = period_bounds(kind, now)
-        if _backup_period_already_done(kind, period_key, base_dir):
-            return
-        logger.info("Catch-up: running missed %s backup for %s", kind, period_key)
-        try:
+    freq = str(settings.get("frequency") or "daily")
+    run_time = str(settings.get("time") or settings.get("full_time") or "20:00")
+    if not _scheduled_time_passed_today(run_time, now):
+        return
+    if freq == "weekly" and now.weekday() != int(settings.get("weekday") or 0):
+        return
+    if freq == "monthly" and now.day != int(settings.get("day_of_month") or 1):
+        return
+    kind = scheduled_backup_kind(settings)
+    _start, _end, period_key = period_bounds(kind, now)
+    try:
+        with app.app_context():
+            if _backup_period_already_done(kind, period_key, base_dir):
+                return
+            logger.info("Catch-up: running missed %s backup for %s", kind, period_key)
             run_auto_backup(
                 base_dir=base_dir,
                 upload_dir=upload_dir,
@@ -1061,12 +1492,8 @@ def catch_up_missed_backups(app) -> None:
                 kind=kind,
                 force=False,
             )
-        except Exception:
-            logger.exception("Catch-up %s backup failed", kind)
-
-    with app.app_context():
-        _maybe_run("daily", "daily_time", "daily_enabled")
-        _maybe_run("full", "full_time", "full_enabled")
+    except Exception:
+        logger.exception("Catch-up period backup failed")
 
 
 def init_auto_backup_scheduler(
@@ -1085,13 +1512,26 @@ def init_auto_backup_scheduler(
         _runtime["audit_callback"] = audit_callback
         if resolve_upload is not None:
             _runtime["resolve_upload"] = resolve_upload
+        try:
+            prepare_lgu_office_backup(base_dir)
+        except Exception:
+            logger.exception("Could not apply Daraga office backup defaults")
 
         if _scheduler is not None:
             apply_schedule(app)
             try:
-                catch_up_missed_backups(app)
+                from services.log_retention import schedule_retention_job
+
+                schedule_retention_job(
+                    _scheduler,
+                    app,
+                    base_dir,
+                    audit_callback=audit_callback,
+                    run_now=False,
+                )
             except Exception:
-                logger.exception("Backup catch-up failed")
+                logger.exception("Office log retention scheduler failed")
+            schedule_catch_up_missed_backups(app)
             return
 
         try:
@@ -1111,34 +1551,47 @@ def init_auto_backup_scheduler(
         _scheduler.start()
         apply_schedule(app)
         try:
-            catch_up_missed_backups(app)
+            from services.log_retention import schedule_retention_job
+
+            schedule_retention_job(
+                _scheduler,
+                app,
+                base_dir,
+                audit_callback=audit_callback,
+                run_now=True,
+            )
         except Exception:
-            logger.exception("Backup catch-up failed")
+            logger.exception("Office log retention scheduler failed")
+        schedule_catch_up_missed_backups(app)
 
 
 def settings_from_form(form, base_dir: Path) -> dict[str, Any]:
     """Build settings dict from an HTML form."""
     current = load_settings(base_dir)
     current["enabled"] = (form.get("auto_backup_enabled") or "").strip().lower() in ("1", "true", "on", "yes")
-    current["daily_enabled"] = (form.get("auto_backup_daily_enabled") or "").strip().lower() in ("1", "true", "on", "yes")
-    current["monthly_enabled"] = (form.get("auto_backup_monthly_enabled") or "").strip().lower() in ("1", "true", "on", "yes")
-    current["yearly_enabled"] = (form.get("auto_backup_yearly_enabled") or "").strip().lower() in ("1", "true", "on", "yes")
-    current["full_enabled"] = (form.get("auto_backup_full_enabled") or "").strip().lower() in ("1", "true", "on", "yes")
-    current["daily_time"] = _parse_time(form.get("auto_backup_daily_time") or form.get("auto_backup_time") or "20:00")
-    current["monthly_time"] = _parse_time(form.get("auto_backup_monthly_time") or "20:00")
-    current["yearly_time"] = _parse_time(form.get("auto_backup_yearly_time") or "20:00")
-    current["full_time"] = _parse_time(form.get("auto_backup_full_time") or "20:05")
-    current["time"] = current["daily_time"]
-    current["frequency"] = "daily"
+    freq = str(form.get("auto_backup_frequency") or current.get("frequency") or "daily").strip().lower()
+    current["frequency"] = freq if freq in ("daily", "weekly", "monthly") else "daily"
+    current["time"] = _parse_time(form.get("auto_backup_time") or current.get("time") or "20:00")
+    current["daily_time"] = current["time"]
+    current["monthly_time"] = current["time"]
+    current["yearly_time"] = current["time"]
+    current["full_time"] = current["time"]
+    current["full_enabled"] = True
+    current["daily_enabled"] = current["frequency"] == "daily"
+    current["monthly_enabled"] = current["frequency"] == "monthly"
+    current["yearly_enabled"] = False
     try:
-        current["day_of_month"] = int(form.get("auto_backup_day") or 28)
+        current["weekday"] = int(form.get("auto_backup_weekday") or current.get("weekday") or 0)
     except ValueError:
-        current["day_of_month"] = 28
+        current["weekday"] = 0
     try:
-        current["month"] = int(form.get("auto_backup_month") or 12)
+        current["day_of_month"] = int(form.get("auto_backup_day") or 1)
     except ValueError:
-        current["month"] = 12
-    current["destination_path"] = clean_destination_path(form.get("auto_backup_destination") or "")
+        current["day_of_month"] = 1
+    current["destination_path"] = office_backup_destination(
+        base_dir, form.get("auto_backup_destination") or ""
+    )
+    current["keep_local_copy"] = False
     return _normalize_settings(current)
 
 

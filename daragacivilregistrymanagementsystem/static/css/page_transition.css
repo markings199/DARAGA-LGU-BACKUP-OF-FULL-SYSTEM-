@@ -1,0 +1,75 @@
+/* Inner page body only. Sidebar, top bar, tabs, and page headers stay still. */
+
+@keyframes cr-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cr-page-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+main.main > .admin-shell > *:not(.page-header):not(.admin-tabs),
+main.main > .search-page > *:not(.search-page-header),
+main.main > .page-header ~ *:not(.reg-toolbar):not(.admin-tabs),
+main.main > .scanflow-hero-wrap ~ *,
+main.main > .archiving-hero ~ *,
+main.main > .form-review-hero ~ *,
+main.main > .account-page,
+.login-card-inner {
+  animation: cr-page-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+html.pt-leaving main.main > .admin-shell > *:not(.page-header):not(.admin-tabs),
+html.pt-leaving main.main > .search-page > *:not(.search-page-header),
+html.pt-leaving main.main > .page-header ~ *:not(.reg-toolbar):not(.admin-tabs),
+html.pt-leaving main.main > .scanflow-hero-wrap ~ *,
+html.pt-leaving main.main > .archiving-hero ~ *,
+html.pt-leaving main.main > .form-review-hero ~ *,
+html.pt-leaving main.main > .account-page,
+html.pt-leaving .login-card-inner {
+  animation: cr-page-out 0.16s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  main.main > .admin-shell > *:not(.page-header):not(.admin-tabs),
+  main.main > .search-page > *:not(.search-page-header),
+  main.main > .page-header ~ *:not(.reg-toolbar):not(.admin-tabs),
+  main.main > .scanflow-hero-wrap ~ *,
+  main.main > .archiving-hero ~ *,
+  main.main > .form-review-hero ~ *,
+  main.main > .account-page,
+  .login-card-inner,
+  html.pt-leaving main.main > .admin-shell > *:not(.page-header):not(.admin-tabs),
+  html.pt-leaving main.main > .search-page > *:not(.search-page-header),
+  html.pt-leaving main.main > .page-header ~ *:not(.reg-toolbar):not(.admin-tabs),
+  html.pt-leaving main.main > .scanflow-hero-wrap ~ *,
+  html.pt-leaving main.main > .archiving-hero ~ *,
+  html.pt-leaving main.main > .form-review-hero ~ *,
+  html.pt-leaving main.main > .account-page,
+  html.pt-leaving .login-card-inner {
+    animation: none;
+  }
+}
+
+@media print {
+  main.main > *,
+  .login-card-inner {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

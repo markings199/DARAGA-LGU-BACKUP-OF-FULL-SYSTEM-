@@ -54,13 +54,25 @@
     </div>
   {% endif %}
   <div id="ocr-loading" class="ocr-loading is-on" aria-live="polite" aria-busy="true">
-    <div class="ocr-loading-head">
-      <span class="ocr-loading-pulse" aria-hidden="true"></span>
-      <p class="ocr-loading-title">OCR is processing…</p>
-      <span id="ocr-progress-text" class="ocr-loading-percent">{{ wait_ocr.progress if wait_ocr else 1 }}%</span>
-    </div>
-    <div class="ocr-loading-track">
-      <div id="ocr-progress-fill" class="ocr-loading-fill" style="width: {{ wait_ocr.progress if wait_ocr else 1 }}%"></div>
+    <div class="ocr-loading-row">
+      <span class="ocr-loading-mark" aria-hidden="true">
+        <span class="ocr-loading-page">
+          <span class="ocr-loading-lines"></span>
+          <span class="ocr-loading-beam"></span>
+        </span>
+      </span>
+      <div class="ocr-loading-copy">
+        <div class="ocr-loading-head">
+          <span class="ocr-loading-pulse" aria-hidden="true"></span>
+          <p class="ocr-loading-title">OCR is processing<span class="ocr-loading-dots" aria-hidden="true"></span></p>
+          <span id="ocr-progress-text" class="ocr-loading-percent">{{ wait_ocr.progress if wait_ocr else 1 }}%</span>
+        </div>
+        <div class="ocr-loading-track">
+          <div id="ocr-progress-fill" class="ocr-loading-fill" style="width: {{ wait_ocr.progress if wait_ocr else 1 }}%">
+            <span class="ocr-loading-sheen" aria-hidden="true"></span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

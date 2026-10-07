@@ -1,4 +1,4 @@
-{% from 'print/_cert_macros.html' import cert_line_row %}
+{% from 'print/_cert_macros.html' import cert_line_row, cert_issued_sentence %}
 {% set meta = form_meta %}
 {% include 'print/_cert_header.html' %}
 
@@ -23,44 +23,44 @@
     <tr>
       <td class="cert-hw-label">Name</td>
       <td class="cert-hw-colon">:</td>
-      <td class="cert-hw-value" data-cert-field="Husband Name">{{ cert_field(data, 'Husband Name') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Husband Name">{{ cert_field(data, 'Husband Name') or '\xa0' }}</span></td>
       <td class="cert-hw-gap"></td>
-      <td class="cert-hw-value" data-cert-field="Wife Name">{{ cert_field(data, 'Wife Name') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Wife Name">{{ cert_field(data, 'Wife Name') or '\xa0' }}</span></td>
     </tr>
     <tr>
       <td class="cert-hw-label">Age</td>
       <td class="cert-hw-colon">:</td>
-      <td class="cert-hw-value" data-cert-field="Husband Age">{{ cert_field(data, 'Husband Age') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Husband Age">{{ cert_field(data, 'Husband Age') or '\xa0' }}</span></td>
       <td class="cert-hw-gap"></td>
-      <td class="cert-hw-value" data-cert-field="Wife Age">{{ cert_field(data, 'Wife Age') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Wife Age">{{ cert_field(data, 'Wife Age') or '\xa0' }}</span></td>
     </tr>
     <tr>
       <td class="cert-hw-label">Citizenship</td>
       <td class="cert-hw-colon">:</td>
-      <td class="cert-hw-value" data-cert-field="Husband Citizenship">{{ cert_field(data, 'Husband Citizenship') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Husband Citizenship">{{ cert_field(data, 'Husband Citizenship') or '\xa0' }}</span></td>
       <td class="cert-hw-gap"></td>
-      <td class="cert-hw-value" data-cert-field="Wife Citizenship">{{ cert_field(data, 'Wife Citizenship') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Wife Citizenship">{{ cert_field(data, 'Wife Citizenship') or '\xa0' }}</span></td>
     </tr>
     <tr>
       <td class="cert-hw-label">Civil Status</td>
       <td class="cert-hw-colon">:</td>
-      <td class="cert-hw-value" data-cert-field="Husband Civil Status">{{ cert_field(data, 'Husband Civil Status') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Husband Civil Status">{{ cert_field(data, 'Husband Civil Status') or '\xa0' }}</span></td>
       <td class="cert-hw-gap"></td>
-      <td class="cert-hw-value" data-cert-field="Wife Civil Status">{{ cert_field(data, 'Wife Civil Status') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Wife Civil Status">{{ cert_field(data, 'Wife Civil Status') or '\xa0' }}</span></td>
     </tr>
     <tr>
       <td class="cert-hw-label">Father</td>
       <td class="cert-hw-colon">:</td>
-      <td class="cert-hw-value" data-cert-field="Husband Father">{{ cert_field(data, 'Husband Father') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Husband Father">{{ cert_field(data, 'Husband Father') or '\xa0' }}</span></td>
       <td class="cert-hw-gap"></td>
-      <td class="cert-hw-value" data-cert-field="Wife Father">{{ cert_field(data, 'Wife Father') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Wife Father">{{ cert_field(data, 'Wife Father') or '\xa0' }}</span></td>
     </tr>
     <tr>
       <td class="cert-hw-label">Mother</td>
       <td class="cert-hw-colon">:</td>
-      <td class="cert-hw-value" data-cert-field="Husband Mother">{{ cert_field(data, 'Husband Mother') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Husband Mother">{{ cert_field(data, 'Husband Mother') or '\xa0' }}</span></td>
       <td class="cert-hw-gap"></td>
-      <td class="cert-hw-value" data-cert-field="Wife Mother">{{ cert_field(data, 'Wife Mother') or '\xa0' }}</td>
+      <td class="cert-hw-value"><span class="cert-line-rule" data-cert-field="Wife Mother">{{ cert_field(data, 'Wife Mother') or '\xa0' }}</span></td>
     </tr>
   </tbody>
 </table>
@@ -75,9 +75,6 @@
   {{ cert_line_row('Date of Registration', cert_field(data, 'Date of Registration'), 'Date of Registration', true, 'cert-fill--short') }}
   {{ cert_line_row('Date of Marriage', cert_field(data, 'Date of Marriage'), 'Date of Marriage', true, 'cert-fill--short') }}
   {{ cert_line_row('Place of Marriage', cert_field(data, 'Place of Marriage'), 'Place of Marriage', true, 'cert-fill--long') }}
-  {{ cert_line_row('This certification is issued to', '', 'Issued To', false, 'cert-fill--long') }}
-  <tr>
-    <td class="cert-issued-upon" colspan="3">upon his/her request.</td>
-  </tr>
 </table>
+{{ cert_issued_sentence() }}
 {% include 'print/_cert_footer.html' %}

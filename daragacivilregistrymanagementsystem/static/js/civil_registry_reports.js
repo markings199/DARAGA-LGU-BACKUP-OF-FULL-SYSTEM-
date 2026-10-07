@@ -43,7 +43,6 @@
   var stage = document.querySelector(".reg-zoom-stage");
   if (scroller) {
     scroller.setAttribute("tabindex", "0");
-    scroller.setAttribute("title", "Scroll right to see more columns");
     scroller.addEventListener(
       "wheel",
       function (event) {
@@ -70,12 +69,40 @@
   }
 
   var label = document.getElementById("reg-zoom-pct");
+  var fitBtn = document.getElementById("reg-zoom-fit");
+  var full = document.getElementById("reg-zoom-100");
   var useZoom = typeof CSS !== "undefined" && CSS.supports && CSS.supports("zoom", "0.5");
   var pct = 100;
-  var mode = "manual";
+  var mode = "fit";
+
+  function paintButtons() {
+    if (fitBtn) {
+      fitBtn.classList.toggle("is-zoom-on", mode === "fit");
+    }
+    if (full) {
+      full.classList.toggle("is-zoom-on", mode === "manual" && pct === 100);
+    }
+    document.body.classList.toggle("reg-is-fitted", mode === "fit");
+    if (scroller) {
+      if (mode === "fit") {
+        scroller.removeAttribute("title");
+      } else {
+        scroller.setAttribute("title", "Scroll right to see more columns");
+      }
+    }
+  }
+
+  function clearScale() {
+    form.style.zoom = "";
+    form.style.transform = "";
+    if (stage) {
+      stage.style.width = "";
+      stage.style.height = "";
+    }
+  }
 
   function apply(next) {
-    pct = Math.max(45, Math.min(160, Math.round(next)));
+    pct = Math.max(32, Math.min(160, Math.round(next)));
     var scale = pct / 100;
     if (useZoom) {
       form.style.zoom = String(scale);
@@ -86,7 +113,6 @@
       }
     } else {
       form.style.zoom = "";
-      form.style.transform = "none";
       var width = form.scrollWidth;
       var height = form.offsetHeight;
       form.style.transformOrigin = "top left";
@@ -97,25 +123,21 @@
       }
     }
     if (label) {
-      label.textContent = pct + "%";
+      label.textContent = mode === "fit" ? "Fit" : pct + "%";
     }
+    paintButtons();
+    scroller.scrollLeft = 0;
   }
 
   function fitWidth() {
-    if (useZoom) {
-      form.style.zoom = "1";
-    } else {
-      form.style.transform = "none";
-      if (stage) {
-        stage.style.width = "";
-        stage.style.height = "";
-      }
+    mode = "fit";
+    pct = 100;
+    clearScale();
+    if (label) {
+      label.textContent = "Fit";
     }
-    var need = Math.max(form.scrollWidth, form.offsetWidth, 1);
-    var avail = Math.max(240, scroller.clientWidth - 12);
-    mode = "fit";
-    apply(Math.min(100, (avail / need) * 100));
-    mode = "fit";
+    paintButtons();
+    scroller.scrollLeft = 0;
   }
 
   function bump(delta) {
@@ -125,8 +147,6 @@
 
   var out = document.getElementById("reg-zoom-out");
   var inn = document.getElementById("reg-zoom-in");
-  var fitBtn = document.getElementById("reg-zoom-fit");
-  var full = document.getElementById("reg-zoom-100");
   if (out) {
     out.addEventListener("click", function () {
       bump(-10);
@@ -173,5 +193,7 @@
     }
   });
 
-  apply(100);
+  window.requestAnimationFrame(function () {
+    window.requestAnimationFrame(fitWidth);
+  });
 })();

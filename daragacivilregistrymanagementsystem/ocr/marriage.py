@@ -30,16 +30,7 @@ DEBUG_TEMPLATE_MATCH = False
 # PREPROCESS
 # =========================================================
 def preprocess_image(img):
-    """Makes pre-cropped inputs more OCR-friendly."""
-    h, w = img.shape[:2]
-
-    target_w = 1700
-    if w < target_w:
-        scale = target_w / float(w)
-        new_w = int(w * scale)
-        new_h = int(h * scale)
-        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
-
+    """Makes pre-cropped inputs more OCR-friendly without fake upscaling."""
     h, w = img.shape[:2]
     pad_x = max(30, int(w * 0.03))
     pad_y = max(30, int(h * 0.03))
