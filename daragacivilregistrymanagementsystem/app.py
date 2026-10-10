@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sys
+import time
 
 # Quiet Paddle / oneDNN before those libraries load.
 os.environ.setdefault("GLOG_minloglevel", "3")
@@ -89,7 +90,7 @@ from sqlalchemy import or_
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import db, User, Record, EditRequest, AuditLog, PrintLog, PrintRequest, BackupRun
+from models import db, User, Record, EditRequest, AuditLog, PrintLog, PrintRequest, BackupRun, NotificationRead
 from services.vault_storage import (
     apply_vault,
     vault_status,
@@ -262,25 +263,89 @@ def _normalize_upload_relpath(rel: str) -> str:
     return "/".join(parts)
 
 
+_REGISTRY_IN_NAME = re.compile(r"(20\d{2}-\d{6})", re.I)
+
+
+def _upload_candidate_roots() -> list[Path]:
+    """Folders that may hold certificate scans for this office copy."""
+    roots: list[Path] = []
+    seen: set[str] = set()
+
+    def add(path: Path) -> None:
+        key = str(path).replace("/", "\\").rstrip("\\").lower()
+        if not key or key in seen:
+            return
+        seen.add(key)
+        roots.append(path)
+
+    add(UPLOAD_DIR)
+    add(local_upload_dir(BASE_DIR))
+    try:
+        for extra in BASE_DIR.glob("_restore_uploads_*"):
+            if extra.is_dir():
+                add(extra)
+    except OSError:
+        pass
+    return roots
+
+
+def _existing_file_for_rel(norm: str) -> Path | None:
+    for root in _upload_candidate_roots():
+        candidate = _safe_path_under(root, norm)
+        if candidate is not None and candidate.is_file():
+            return candidate
+    return None
+
+
+def _file_matching_registry(norm: str) -> Path | None:
+    """If the stored filename was renamed, find the scan by registry number in the same folder."""
+    parts = [p for p in norm.replace("\\", "/").split("/") if p]
+    if len(parts) < 2:
+        return None
+    folder = parts[0].lower()
+    name = parts[-1]
+    if folder not in ALLOWED_UPLOAD_TOP:
+        return None
+    match = _REGISTRY_IN_NAME.search(name)
+    if not match:
+        return None
+    needle = match.group(1)
+    hits: list[Path] = []
+    for root in _upload_candidate_roots():
+        folder_path = root / folder
+        try:
+            names = list(folder_path.iterdir())
+        except OSError:
+            continue
+        for item in names:
+            try:
+                if item.is_file() and needle in item.name and item.suffix.lower() in ALLOWED_IMAGE_EXTS:
+                    hits.append(item)
+            except OSError:
+                continue
+    if not hits:
+        return None
+    exact = [item for item in hits if item.name == name]
+    if exact:
+        return exact[0]
+    hits.sort(key=lambda item: item.stat().st_mtime if item.exists() else 0, reverse=True)
+    return hits[0]
+
+
 def _upload_file_path(rel: str, *, for_write: bool = False) -> Path | None:
-    """Resolve a stored image path under server uploads. Legacy app-folder files are read-only."""
+    """Resolve a stored image path under server uploads. Legacy and restore folders are read-only."""
     norm = _normalize_upload_relpath(rel)
     if not norm:
         return None
     primary = _safe_path_under(UPLOAD_DIR, norm)
     if for_write:
         return primary
-    if primary is not None and primary.is_file():
-        return primary
-    legacy = local_upload_dir(BASE_DIR)
-    try:
-        same = primary is not None and legacy.resolve() == UPLOAD_DIR.resolve()
-    except OSError:
-        same = str(legacy).rstrip("\\/").lower() == str(UPLOAD_DIR).rstrip("\\/").lower()
-    if not same:
-        candidate = _safe_path_under(legacy, norm)
-        if candidate is not None and candidate.is_file():
-            return candidate
+    found = _existing_file_for_rel(norm)
+    if found is not None:
+        return found
+    matched = _file_matching_registry(norm)
+    if matched is not None:
+        return matched
     return primary
 
 
@@ -430,6 +495,14 @@ def _is_admin_user(user) -> bool:
     return bool(user and (user.role or "").upper() == "ADMIN")
 
 
+def _new_approval_code() -> str:
+    return "".join(random.choices("0123456789", k=5))
+
+
+def _parsed_approval_code() -> str:
+    return "".join(ch for ch in (request.form.get("approval_code") or "") if ch.isdigit())
+
+
 def _staff_active_print_approval(user_id: int, record_id: int):
     """Return an approved, unused print request for this staff member and record."""
     return (
@@ -444,6 +517,27 @@ def _staff_active_print_approval(user_id: int, record_id: int):
     )
 
 
+def _staff_print_code_unlocked(user, record_id: int) -> bool:
+    if not user or (user.role or "").upper() != "STAFF":
+        return False
+    try:
+        allowed_request_id = int(session.get("allowed_print_request_id"))
+        allowed_record_id = int(session.get("allowed_print_record_id"))
+    except (TypeError, ValueError):
+        return False
+    if allowed_record_id != record_id:
+        return False
+    approval = db.session.get(PrintRequest, allowed_request_id)
+    return bool(
+        approval
+        and approval.record_id == record_id
+        and approval.requested_by_id == user.id
+        and (approval.status or "").upper() == "APPROVED"
+        and approval.used_at is None
+        and (approval.approval_code or "").strip()
+    )
+
+
 def user_can_print_record(user, record_id: int) -> bool:
     if not user:
         return False
@@ -451,7 +545,7 @@ def user_can_print_record(user, record_id: int) -> bool:
         return True
     if (user.role or "").upper() != "STAFF":
         return False
-    return _staff_active_print_approval(user.id, record_id) is not None
+    return _staff_print_code_unlocked(user, record_id)
 
 
 def user_can_print_during_review(user) -> bool:
@@ -678,6 +772,27 @@ def _parse_requested_doc_type():
     return None
 
 
+def _straighten_saved_scan(save_path) -> None:
+    """Level a crooked scan/upload so Document preview and OCR see a straight certificate."""
+    if save_path is None:
+        return
+    try:
+        from ocr.deskew import straighten_document_file
+
+        straighten_document_file(save_path)
+    except Exception:
+        app.logger.exception("Could not straighten scan %s", save_path)
+
+
+def _upload_preview_url(rel: str) -> str:
+    rel = _normalize_upload_relpath(rel or "")
+    url = url_for("serve_upload", path=rel)
+    path = _upload_file_path(rel)
+    if path is not None and path.is_file():
+        return f"{url}?v={int(path.stat().st_mtime)}"
+    return url
+
+
 def _save_ocr_image_from_request():
     file = request.files.get("image")
     image_filename_form = (request.form.get("image_filename") or "").strip()
@@ -714,6 +829,7 @@ def _save_ocr_image_from_request():
             except OSError:
                 pass
             return None, None, "The file is too large to store on the server. It was not saved."
+        _straighten_saved_scan(save_path)
         image_filename = f"temp/{save_path.name}"
         return save_path, image_filename, None
     if image_filename_form:
@@ -724,6 +840,7 @@ def _save_ocr_image_from_request():
         save_path = _upload_file_path(image_filename)
         if save_path is None or not save_path.exists():
             return None, None, "Scanned image no longer found. Please scan again."
+        _straighten_saved_scan(save_path)
         return save_path, image_filename, None
     return None, None, "Please scan from printer or choose an image file first."
 
@@ -787,7 +904,7 @@ def _get_staged_scan() -> dict | None:
         return None
     return {
         "image_filename": rel,
-        "image_url": url_for("serve_upload", path=rel),
+        "image_url": _upload_preview_url(rel),
         "doc_type": (staged.get("doc_type") or "").strip(),
         "original_name": (staged.get("original_name") or Path(rel).name).strip(),
     }
@@ -820,7 +937,7 @@ def _get_active_ocr_for_page() -> dict | None:
             "image_filename": image_filename,
         }
         if image_filename:
-            payload["image_url"] = url_for("serve_upload", path=image_filename)
+            payload["image_url"] = _upload_preview_url(image_filename)
         return payload
 
 
@@ -1374,7 +1491,9 @@ def api_scan():
     storage_err = _require_server_storage()
     if storage_err:
         return {"ok": False, "error": storage_err}, 507
-    device_index = request.form.get("device_index", type=int) or 1
+    device_index = request.form.get("device_index", type=int)
+    if not device_index:
+        return {"ok": False, "error": "Detect a scanner first, then choose a device."}, 400
     temp_dir = UPLOAD_DIR / "temp"
     try:
         ok, path_or_error = scan_to_file(device_index=device_index, output_dir=temp_dir, save_as_png=True)
@@ -1387,9 +1506,9 @@ def api_scan():
     if rel.startswith("..") or os.path.isabs(rel):
         return {"ok": False, "error": "Invalid scan path"}, 500
     rel = _normalize_upload_relpath(rel.replace("\\", "/"))
+    _straighten_saved_scan(Path(path_or_error))
     _set_staged_scan(rel, original_name=Path(rel).name)
-    image_url = url_for("serve_upload", path=rel)
-    return {"ok": True, "image_url": image_url, "image_filename": rel}
+    return {"ok": True, "image_url": _upload_preview_url(rel), "image_filename": rel}
 
 
 @app.route("/api/scan/stage", methods=["POST"])
@@ -1408,7 +1527,7 @@ def api_scan_stage():
     return {
         "ok": True,
         "image_filename": image_filename,
-        "image_url": url_for("serve_upload", path=image_filename),
+        "image_url": _upload_preview_url(image_filename),
         "original_name": original_name,
         "doc_type": doc_type,
     }
@@ -1429,7 +1548,7 @@ def api_detect_document_type():
     return {
         "ok": True,
         "image_filename": image_filename,
-        "image_url": url_for("serve_upload", path=image_filename),
+        "image_url": _upload_preview_url(image_filename),
         "doc_type": detected.get("doc_type"),
         "label": detected.get("label") or "",
         "confidence": detected.get("confidence") or "none",
@@ -1556,7 +1675,7 @@ def api_ocr_active():
             "image_filename": job.get("image_filename") or "",
         }
         if job.get("image_filename"):
-            payload["image_url"] = url_for("serve_upload", path=job["image_filename"])
+            payload["image_url"] = _upload_preview_url(job["image_filename"])
         return payload
 
 
@@ -1603,6 +1722,87 @@ def _notice_iso(dt) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _parse_notice_iso(raw: str):
+    text = (raw or "").strip().replace("Z", "").replace("T", " ")[:19]
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def _admin_seen_since(key: str):
+    """Items newer than last visit to this tab. First visit uses the last 24 hours."""
+    floor = datetime.utcnow() - timedelta(hours=24)
+    seen = _parse_notice_iso(session.get(f"admin_seen_{key}") or "")
+    if seen is None:
+        return floor
+    return seen
+
+
+def _mark_admin_tab_seen(tab: str) -> None:
+    key = {
+        "print_logs": "print_logs",
+        "audit": "audit",
+        "office_logs": "office_logs",
+        "automatic_backup": "backup",
+        "users": "users",
+    }.get(tab)
+    if not key:
+        return
+    session[f"admin_seen_{key}"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    session.modified = True
+
+
+def _admin_attention_badges() -> dict:
+    """Counts Admin must check: pending staff requests, new logs, backup errors."""
+    pending_edit = EditRequest.query.filter_by(status="PENDING").count()
+    pending_print = PrintRequest.query.filter_by(status="PENDING").count()
+    since_print = _admin_seen_since("print_logs")
+    since_audit = _admin_seen_since("audit")
+    since_office = _admin_seen_since("office_logs")
+    since_users = _admin_seen_since("users")
+    print_logs_new = PrintLog.query.filter(PrintLog.printed_at > since_print).count()
+    staff_ids = [row[0] for row in db.session.query(User.id).filter(db.func.upper(User.role) == "STAFF").all()]
+    audit_q = AuditLog.query.filter(AuditLog.created_at > since_audit)
+    if staff_ids:
+        audit_q = audit_q.filter(AuditLog.user_id.in_(staff_ids))
+    audit_new = audit_q.count()
+    office_q = AuditLog.query.filter(AuditLog.created_at > since_office)
+    if staff_ids:
+        office_q = office_q.filter(AuditLog.user_id.in_(staff_ids))
+    office_logs_new = office_q.count() + PrintLog.query.filter(PrintLog.printed_at > since_office).count()
+    users_new = User.query.filter(User.created_at > since_users).count()
+    backup_alert = 0
+    try:
+        from services.auto_backup import load_settings as load_backup_settings
+
+        backup_settings = load_backup_settings(BASE_DIR)
+        if str(backup_settings.get("last_run_status") or "").lower() == "error":
+            last_dt = _parse_notice_iso(str(backup_settings.get("last_run_at") or ""))
+            seen_dt = _parse_notice_iso(session.get("admin_seen_backup") or "")
+            if seen_dt is None or last_dt is None or last_dt > seen_dt:
+                backup_alert = 1
+    except Exception:
+        backup_alert = 0
+    dashboard = pending_edit + pending_print
+    return {
+        "dashboard": dashboard,
+        "edit_requests": pending_edit,
+        "print_requests": pending_print,
+        "print_logs": print_logs_new,
+        "audit": audit_new,
+        "users": users_new,
+        "reports": 0,
+        "backup": backup_alert,
+        "office_logs": office_logs_new,
+        "admin_pending_edit_requests": pending_edit,
+        "admin_pending_print_requests": pending_print,
+        "total": dashboard + print_logs_new + audit_new + backup_alert,
+    }
+
+
 def _collect_notifications(user) -> dict:
     role = (user.role or "").upper()
     items = []
@@ -1643,11 +1843,60 @@ def _collect_notifications(user) -> dict:
                 "url": url_for("administration", tab="print_requests"),
                 "at": _notice_iso(req.requested_at),
             })
-        badges = {
-            "admin_pending_edit_requests": EditRequest.query.filter_by(status="PENDING").count(),
-            "admin_pending_print_requests": PrintRequest.query.filter_by(status="PENDING").count(),
-        }
-        badges["total"] = badges["admin_pending_edit_requests"] + badges["admin_pending_print_requests"]
+        badges = _admin_attention_badges()
+        try:
+            recent_prints = (
+                PrintLog.query.order_by(PrintLog.printed_at.desc()).limit(6).all()
+            )
+            for log in recent_prints:
+                if log.printed_at and log.printed_at <= _admin_seen_since("print_logs"):
+                    continue
+                who = log.user.username if log.user else "Staff"
+                items.append({
+                    "id": f"plog-{log.id}",
+                    "kind": "print-log",
+                    "title": "Staff printed a record",
+                    "body": f"{who} printed {_record_notice_label(log.record)}",
+                    "url": url_for("administration", tab="print_logs"),
+                    "at": _notice_iso(log.printed_at),
+                })
+        except Exception:
+            pass
+        try:
+            staff_ids = [row[0] for row in db.session.query(User.id).filter(db.func.upper(User.role) == "STAFF").all()]
+            audit_rows = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(12).all()
+            since_audit = _admin_seen_since("audit")
+            for row in audit_rows:
+                if staff_ids and row.user_id not in staff_ids:
+                    continue
+                if row.created_at and row.created_at <= since_audit:
+                    continue
+                actor = "Staff"
+                try:
+                    actor = db.session.get(User, row.user_id).username if row.user_id else "Staff"
+                except Exception:
+                    pass
+                items.append({
+                    "id": f"audit-{row.id}",
+                    "kind": "audit",
+                    "title": "Staff activity",
+                    "body": f"{actor}: {row.action}",
+                    "detail": (row.details or "").strip(),
+                    "url": url_for("administration", tab="audit"),
+                    "at": _notice_iso(row.created_at),
+                })
+        except Exception:
+            pass
+        if int(badges.get("backup") or 0):
+            items.append({
+                "id": "backup-error",
+                "kind": "backup",
+                "title": "Backup needs attention",
+                "body": "The last backup did not finish. Open Backup to check.",
+                "url": url_for("administration", tab="automatic_backup"),
+                "at": _notice_iso(datetime.utcnow()),
+            })
+        badges["total"] = int(badges.get("total") or 0)
 
     elif role == "STAFF":
         pending_edits = (
@@ -1694,7 +1943,7 @@ def _collect_notifications(user) -> dict:
                 "kind": "edit-ready",
                 "title": "Edit approved",
                 "body": f"Use your 5-digit code on {_record_notice_label(req.record)}",
-                "url": url_for("record_detail", record_id=req.record_id),
+                "url": url_for("record_detail", record_id=req.record_id) + "#staff-edit-code",
                 "at": _notice_iso(req.reviewed_at or req.requested_at),
             })
         for req in ready_prints:
@@ -1702,8 +1951,8 @@ def _collect_notifications(user) -> dict:
                 "id": f"print-ready-{req.id}",
                 "kind": "print-ready",
                 "title": "Print approved",
-                "body": f"Ready to print {_record_notice_label(req.record)}",
-                "url": url_for("record_detail", record_id=req.record_id),
+                "body": f"Type the 5-digit print code for {_record_notice_label(req.record)}",
+                "url": url_for("record_detail", record_id=req.record_id) + "#staff-print-code",
                 "at": _notice_iso(req.reviewed_at or req.requested_at),
             })
         for req in pending_edits:
@@ -1766,16 +2015,36 @@ def _collect_notifications(user) -> dict:
         )
 
     items.sort(key=lambda row: row.get("at") or "", reverse=True)
-    return {"items": items[:20], "badges": badges, "count": int(badges.get("total") or 0)}
+    items = items[:20]
+    try:
+        read_map = {
+            row.notice_id: bool(row.is_read)
+            for row in NotificationRead.query.filter_by(user_id=user.id).all()
+        }
+    except Exception:
+        db.session.rollback()
+        read_map = {}
+    for item in items:
+        item["read"] = bool(read_map.get(item.get("id") or "", False))
+    unread = sum(1 for item in items if not item.get("read"))
+    return {"items": items, "badges": badges, "count": unread}
 
 
-@app.route("/api/notifications", methods=["GET"])
-@login_required
-def api_notifications():
-    """Polled by the header bell (offline-safe, no websockets)."""
-    user = get_current_user()
-    if not user:
-        return {"ok": False}, 401
+def _notice_id_ok(notice_id: str) -> bool:
+    return bool(notice_id) and bool(re.match(r"^[A-Za-z0-9._:-]{1,128}$", notice_id))
+
+
+def _set_notice_read(user_id: int, notice_id: str, is_read: bool) -> None:
+    row = NotificationRead.query.filter_by(user_id=user_id, notice_id=notice_id).first()
+    if row is None:
+        row = NotificationRead(user_id=user_id, notice_id=notice_id, is_read=is_read)
+        db.session.add(row)
+    else:
+        row.is_read = is_read
+    row.updated_at = datetime.utcnow()
+
+
+def _notifications_payload(user):
     role = (user.role or "").upper()
     data = _collect_notifications(user)
     return {
@@ -1785,6 +2054,48 @@ def api_notifications():
         "items": data["items"],
         "badges": data["badges"],
     }
+
+
+@app.route("/api/notifications", methods=["GET"])
+@login_required
+def api_notifications():
+    """Polled by the header bell (offline-safe, no websockets)."""
+    user = get_current_user()
+    if not user:
+        return {"ok": False}, 401
+    return _notifications_payload(user)
+
+
+@app.route("/api/notifications/read", methods=["POST"])
+@login_required
+def api_notification_read():
+    """Mark one header notification as read or unread."""
+    user = get_current_user()
+    if not user:
+        return {"ok": False}, 401
+    payload = request.get_json(silent=True) or {}
+    notice_id = str(payload.get("id") or "").strip()
+    if not _notice_id_ok(notice_id):
+        return {"ok": False}, 400
+    _set_notice_read(user.id, notice_id, bool(payload.get("read", True)))
+    db.session.commit()
+    return _notifications_payload(user)
+
+
+@app.route("/api/notifications/read-all", methods=["POST"])
+@login_required
+def api_notifications_read_all():
+    """Mark every currently listed notification as read."""
+    user = get_current_user()
+    if not user:
+        return {"ok": False}, 401
+    data = _collect_notifications(user)
+    for item in data.get("items") or []:
+        notice_id = str(item.get("id") or "").strip()
+        if _notice_id_ok(notice_id):
+            _set_notice_read(user.id, notice_id, True)
+    db.session.commit()
+    return _notifications_payload(user)
 
 
 @app.route("/workflow/autofilled-form")
@@ -2219,6 +2530,7 @@ def record_detail(record_id):
     role = (user.role or "").upper() if user else ""
     # Staff: unused approved edit codes (full request history is on My Edit Requests)
     my_requests = []
+    print_unlock_req = None
     can_print = False
     if role == "STAFF":
         my_requests = (
@@ -2229,6 +2541,7 @@ def record_detail(record_id):
             .order_by(EditRequest.requested_at.desc())
             .all()
         )
+        print_unlock_req = _staff_active_print_approval(user.id, record_id)
         can_print = user_can_print_record(user, record_id)
     elif role == "ADMIN":
         can_print = True
@@ -2245,6 +2558,7 @@ def record_detail(record_id):
         current_user=user,
         nav_active="search",
         my_requests=my_requests,
+        print_unlock_req=print_unlock_req,
         document_types=DOCUMENT_TYPES,
         can_print=can_print,
         cert_date=cert_issue_date(),
@@ -2318,6 +2632,8 @@ def record_log_print(record_id):
             approval = _staff_active_print_approval(user.id, record_id)
             if approval:
                 approval.used_at = datetime.utcnow()
+                session.pop("allowed_print_request_id", None)
+                session.pop("allowed_print_record_id", None)
         db.session.commit()
         _log_audit(
             user.id,
@@ -2341,9 +2657,9 @@ def request_print(record_id):
     if not user or (user.role or "").upper() != "STAFF":
         flash("Only staff can submit print requests.")
         return redirect(url_for("record_detail", record_id=record_id))
-    if user_can_print_record(user, record_id):
-        flash("You already have approval to print this record.")
-        return redirect(url_for("record_detail", record_id=record_id))
+    if _staff_active_print_approval(user.id, record_id):
+        flash("This print request is already approved. Type the 5-digit code to print.")
+        return redirect(url_for("my_print_requests"))
     pending = PrintRequest.query.filter_by(
         record_id=record_id, requested_by_id=user.id, status="PENDING"
     ).first()
@@ -2422,6 +2738,53 @@ def request_edit(record_id):
     )
 
 
+def _records_scanned_by_year() -> dict:
+    """Documents saved into the system, grouped by Philippine calendar year."""
+    year_col = db.func.extract("year", Record.created_at + db.text("interval '8 hours'"))
+    rows = (
+        db.session.query(year_col, Record.document_type, db.func.count(Record.id))
+        .group_by(year_col, Record.document_type)
+        .all()
+    )
+    years: dict[str, dict[str, int]] = {}
+    all_counts = {"birth": 0, "marriage": 0, "death": 0}
+    for year_val, doc_type, count in rows:
+        if year_val is None:
+            continue
+        year_key = str(int(year_val))
+        kind = (doc_type or "").strip().lower()
+        if kind not in all_counts:
+            continue
+        n = int(count or 0)
+        bucket = years.setdefault(year_key, {"birth": 0, "marriage": 0, "death": 0})
+        bucket[kind] += n
+        all_counts[kind] += n
+    now_year_n = (datetime.utcnow() + timedelta(hours=8)).year
+    now_year = str(now_year_n)
+    empty = {"birth": 0, "marriage": 0, "death": 0}
+    end_year = now_year_n + 15
+    future = [str(y) for y in range(now_year_n, end_year + 1)]
+    for key in future:
+        years.setdefault(key, dict(empty))
+    past_with_scans = sorted(
+        (
+            key
+            for key, counts in years.items()
+            if key.isdigit()
+            and int(key) < now_year_n
+            and (counts.get("birth", 0) + counts.get("marriage", 0) + counts.get("death", 0)) > 0
+        ),
+        key=int,
+    )
+    year_list = past_with_scans + future
+    return {
+        "years": years,
+        "year_list": year_list,
+        "all": all_counts,
+        "default_year": now_year,
+    }
+
+
 @app.route("/administration")
 @admin_required
 def administration():
@@ -2430,6 +2793,7 @@ def administration():
         return redirect(url_for("administration", tab="automatic_backup"))
     if tab not in ("dashboard", "audit", "edit_requests", "print_requests", "users", "print_logs", "automatic_backup", "office_logs"):
         tab = "dashboard"
+    _mark_admin_tab_seen(tab)
     request_doc_type = _parse_doc_type_filter_arg(request.args.get("doc_type"))
     edit_requests_list = []
     if tab == "edit_requests":
@@ -2494,6 +2858,16 @@ def administration():
             backup_readiness = get_backup_readiness(BASE_DIR, auto_backup_settings)
         except Exception:
             backup_readiness = None
+    try:
+        scan_year_stats = _records_scanned_by_year()
+    except Exception:
+        now_year_n = (datetime.utcnow() + timedelta(hours=8)).year
+        scan_year_stats = {
+            "years": {str(now_year_n): {"birth": 0, "marriage": 0, "death": 0}},
+            "year_list": [str(y) for y in range(now_year_n, now_year_n + 16)],
+            "all": {"birth": 0, "marriage": 0, "death": 0},
+            "default_year": str(now_year_n),
+        }
     return render_template(
         "administration.html",
         current_user=get_current_user(),
@@ -2505,6 +2879,7 @@ def administration():
         users_list=users_list,
         pending_count=pending_count,
         pending_print_count=pending_print_count,
+        admin_tab_badges=_admin_attention_badges(),
         birth_count=birth_count,
         marriage_count=marriage_count,
         death_count=death_count,
@@ -2526,6 +2901,7 @@ def administration():
         backup_schedule_hint=schedule_summary(auto_backup_settings) if backup_tabs and auto_backup_settings else "",
         log_retention=load_log_retention_settings(BASE_DIR),
         log_retention_hint=retention_hint(load_log_retention_settings(BASE_DIR)),
+        scan_year_stats=scan_year_stats,
         office_log_stats=office_log_counts() if tab in ("office_logs", "dashboard") else None,
         today_backup_stamp=daily_backup_stamp(),
         revealed_password=session.pop("admin_password_reveal", None) if tab == "users" else None,
@@ -2939,7 +3315,7 @@ def administration_auto_backup_settings():
 
 
 def _persist_server_path_from_form() -> Optional[str]:
-    """Remember the Daraga folder. Backup still runs in Admin if that folder is not online yet."""
+    """Remember the Daraga LGU server folder as the official backup location."""
     settings = load_auto_backup_settings(BASE_DIR)
     raw = office_backup_destination(BASE_DIR, request.form.get("auto_backup_destination") or "")
     trial = dict(settings)
@@ -2992,16 +3368,21 @@ def administration_auto_backup_run_now():
 @app.route("/administration/auto-backup/get-now", methods=["POST"])
 @admin_required
 def administration_auto_backup_get_now():
-    """Create a backup immediately on the Daraga LGU server (not this laptop)."""
+    """Send waiting backup zips to the Daraga LGU server (official archive)."""
     dest_err = _persist_server_path_from_form()
     if dest_err:
         flash(dest_err, "error")
-    (ok, message, rel_file), kind = _run_requested_backup(request.form.get("backup_kind"), "get_now")
-    if not ok:
-        flash(f"Backup failed: {message}", "error")
         return redirect(url_for("administration", tab="automatic_backup"))
-    _flash_backup_result(True, message)
-    _log_audit(session.get("user_id"), "AUTO_BACKUP_GET", f"kind={kind} file={rel_file}")
+    copied, failed, err = sync_local_backups_to_server(BASE_DIR)
+    if copied:
+        flash(f"Sent {copied} backup(s) to the Daraga LGU server.", "success")
+        _log_audit(session.get("user_id"), "AUTO_BACKUP_GET", f"copied={copied} failed={failed}")
+    if failed:
+        flash(f"{failed} backup(s) could not be copied to the Daraga LGU server.", "error")
+    if err and not copied:
+        flash(err, "error")
+    if not copied and not failed and not err:
+        flash("The Daraga LGU server already has the current backups, or there is nothing waiting to send.", "success")
     return redirect(url_for("administration", tab="automatic_backup"))
 
 
@@ -3486,14 +3867,16 @@ def print_request_approve(request_id):
     if not req or req.status != "PENDING":
         flash("Request not found or already processed.")
         return _admin_print_requests_redirect()
+    code = _new_approval_code()
     req.status = "APPROVED"
     req.reviewed_at = datetime.utcnow()
     req.reviewed_by_id = session.get("user_id")
     req.rejection_reason = ""
     req.used_at = None
+    req.approval_code = code
     db.session.commit()
-    _log_audit(session["user_id"], "PRINT_REQUEST_APPROVE", f"request_id={request_id} record_id={req.record_id}")
-    flash("Print request approved. Staff can now print this document.", "success")
+    _log_audit(session["user_id"], "PRINT_REQUEST_APPROVE", f"request_id={request_id} record_id={req.record_id} code={code}")
+    flash(f"Print approved. Give this 5-digit code to staff: {code}", "success")
     return _admin_print_requests_redirect()
 
 
@@ -3521,7 +3904,7 @@ def edit_request_approve(request_id):
     if not req or req.status != "PENDING":
         flash("Request not found or already processed.")
         return _admin_edit_requests_redirect()
-    code = "".join(random.choices("0123456789", k=5))
+    code = _new_approval_code()
     req.status = "APPROVED"
     req.reviewed_at = datetime.utcnow()
     req.reviewed_by_id = session.get("user_id")
@@ -3563,9 +3946,9 @@ def record_verify_code(record_id):
     if not user or (user.role or "").upper() != "STAFF":
         flash("Only staff can use approval codes.")
         return redirect(url_for("record_detail", record_id=record_id))
-    code = (request.form.get("approval_code") or "").strip()
-    if not code:
-        flash("Please enter the 5-digit code from admin.")
+    code = _parsed_approval_code()
+    if len(code) != 5:
+        flash("Please type the 5-digit code from admin.")
         next_url = request.form.get("next") or url_for("record_detail", record_id=record_id)
         return redirect(next_url)
     req = EditRequest.query.filter_by(
@@ -3582,6 +3965,37 @@ def record_verify_code(record_id):
     session["allowed_edit_record_id"] = record_id
     flash("Code accepted. You can now edit the record.", "success")
     return redirect(url_for("record_edit", record_id=record_id))
+
+
+@app.route("/record/<int:record_id>/verify-print-code", methods=["POST"])
+@login_required
+def record_verify_print_code(record_id):
+    record = db.session.get(Record, record_id)
+    if not record:
+        flash("Record not found.")
+        return redirect(url_for("search_records"))
+    user = get_current_user()
+    if not user or (user.role or "").upper() != "STAFF":
+        flash("Only staff can use print codes.")
+        return redirect(url_for("record_detail", record_id=record_id))
+    code = _parsed_approval_code()
+    next_url = request.form.get("next") or url_for("record_detail", record_id=record_id)
+    if len(code) != 5:
+        flash("Please type the 5-digit print code from admin.")
+        return redirect(next_url)
+    req = PrintRequest.query.filter_by(
+        record_id=record_id,
+        requested_by_id=user.id,
+        status="APPROVED",
+        approval_code=code,
+    ).filter(PrintRequest.used_at.is_(None)).first()
+    if not req:
+        flash("Invalid or already-used print code for this record.")
+        return redirect(next_url)
+    session["allowed_print_request_id"] = req.id
+    session["allowed_print_record_id"] = record_id
+    flash("Code accepted. You can now print this document.", "success")
+    return redirect(url_for("record_detail", record_id=record_id))
 
 
 @app.route("/record/<int:record_id>/edit", methods=["GET", "POST"])
@@ -3739,9 +4153,16 @@ def archiving():
     marriage_filter = archive_registry_q if archive_doc_type == "marriage" else ""
     death_filter = archive_registry_q if archive_doc_type == "death" else ""
 
-    birth_records = _archiving_records_query("birth", birth_filter).all()
-    marriage_records = _archiving_records_query("marriage", marriage_filter).all()
-    death_records = _archiving_records_query("death", death_filter).all()
+    archive_list_limit = 1000
+    birth_q = _archiving_records_query("birth", birth_filter)
+    marriage_q = _archiving_records_query("marriage", marriage_filter)
+    death_q = _archiving_records_query("death", death_filter)
+    birth_shown = birth_q.count()
+    marriage_shown = marriage_q.count()
+    death_shown = death_q.count()
+    birth_records = birth_q.limit(archive_list_limit).all()
+    marriage_records = marriage_q.limit(archive_list_limit).all()
+    death_records = death_q.limit(archive_list_limit).all()
     return render_template(
         "archiving.html",
         birth_records=birth_records,
@@ -3750,9 +4171,9 @@ def archiving():
         birth_total=birth_total,
         marriage_total=marriage_total,
         death_total=death_total,
-        birth_shown=len(birth_records),
-        marriage_shown=len(marriage_records),
-        death_shown=len(death_records),
+        birth_shown=birth_shown,
+        marriage_shown=marriage_shown,
+        death_shown=death_shown,
         document_types=DOCUMENT_TYPES,
         archive_doc_type=archive_doc_type,
         archive_registry_q=archive_registry_q,
@@ -4184,11 +4605,27 @@ def _migrate_print_requests():
         ("rejection_reason", "TEXT DEFAULT ''"),
         ("used_at", "TIMESTAMP"),
         ("print_format", "VARCHAR(32) DEFAULT 'original'"),
+        ("approval_code", "VARCHAR(10) DEFAULT ''"),
     ]
     for col, typ in adds:
         if col not in existing:
             db.session.execute(db.text(f"ALTER TABLE print_requests ADD COLUMN {col} {_ddl_column_type(typ)}"))
             db.session.commit()
+    try:
+        pending = (
+            PrintRequest.query.filter_by(status="APPROVED")
+            .filter(PrintRequest.used_at.is_(None))
+            .all()
+        )
+        changed = False
+        for req in pending:
+            if not (req.approval_code or "").strip():
+                req.approval_code = _new_approval_code()
+                changed = True
+        if changed:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def _migrate_users():
@@ -4225,23 +4662,42 @@ def _migrate_users():
 
 
 def _ensure_database_ready() -> None:
-    """Fail fast with setup steps when PostgreSQL is not reachable."""
+    """Wait while PostgreSQL is starting, then fail with setup steps if it never comes up."""
     uri = app.config.get("SQLALCHEMY_DATABASE_URI") or ""
-    try:
-        with app.app_context():
-            db.session.execute(db.text("SELECT 1"))
-    except Exception as exc:
-        print("=" * 62, flush=True)
-        print("  Cannot connect to PostgreSQL.", flush=True)
-        print(f"  Tried    {_safe_database_display(uri)}", flush=True)
-        print("-" * 62, flush=True)
-        print("  1. Install and start PostgreSQL for Windows.", flush=True)
-        print("  2. Copy .env.example to .env and set DATABASE_URL.", flush=True)
-        print("  3. From daragacivilregistrymanagementsystem/ run:", flush=True)
-        print("       python scripts/setup_postgres.py", flush=True)
-        print(f"  Error: {exc}", flush=True)
-        print("=" * 62, flush=True)
-        raise SystemExit(1) from exc
+    last_exc = None
+    for attempt in range(1, 31):
+        try:
+            with app.app_context():
+                db.session.execute(db.text("SELECT 1"))
+                db.session.commit()
+            if attempt > 1:
+                print("  PostgreSQL is ready.", flush=True)
+            return
+        except Exception as exc:
+            last_exc = exc
+            text = str(exc).lower()
+            starting = "starting up" in text or "the database system is starting" in text
+            refused = "connection refused" in text or "could not connect" in text
+            if attempt == 1:
+                if starting:
+                    print("  PostgreSQL is still starting. Waiting…", flush=True)
+                elif refused:
+                    print("  Waiting for PostgreSQL on 127.0.0.1:5432…", flush=True)
+            if starting or refused:
+                time.sleep(2)
+                continue
+            break
+    print("=" * 62, flush=True)
+    print("  Cannot connect to PostgreSQL.", flush=True)
+    print(f"  Tried    {_safe_database_display(uri)}", flush=True)
+    print("-" * 62, flush=True)
+    print("  1. Install and start PostgreSQL for Windows.", flush=True)
+    print("  2. Copy .env.example to .env and set DATABASE_URL.", flush=True)
+    print("  3. From daragacivilregistrymanagementsystem/ run:", flush=True)
+    print("       python scripts/setup_postgres.py", flush=True)
+    print(f"  Error: {last_exc}", flush=True)
+    print("=" * 62, flush=True)
+    raise SystemExit(1) from last_exc
 
 
 def _bootstrap_users():

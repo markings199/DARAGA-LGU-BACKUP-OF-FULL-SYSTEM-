@@ -33,22 +33,31 @@
 
 .notif-count {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
+  top: -5px;
+  right: -5px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
   border-radius: 999px;
-  background: #ef4444;
-  color: #fff;
-  font-size: 0.6rem;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 11px;
   font-weight: 800;
-  line-height: 16px;
+  letter-spacing: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  border: 2px solid #061633;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   box-sizing: border-box;
   pointer-events: none;
-  z-index: 1;
+  z-index: 4;
+  overflow: visible;
+}
+.notif-count[hidden] {
+  display: none !important;
 }
 
 .notif-panel {
@@ -83,6 +92,26 @@
   font-size: 1rem;
   font-weight: 800;
   color: #0f2b5c;
+}
+
+.notif-mark-all {
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #002080;
+  white-space: nowrap;
+}
+
+.notif-mark-all:hover {
+  text-decoration: underline;
+}
+
+.notif-mark-all[hidden] {
+  display: none !important;
 }
 
 .notif-list {
@@ -179,6 +208,63 @@
   color: #334155;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.notif-item-actions {
+  display: flex;
+  justify-content: flex-start;
+  padding: 0 16px 10px 36px;
+}
+
+.notif-read-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #002080;
+}
+
+.notif-read-btn:hover {
+  text-decoration: underline;
+}
+
+.notif-item.is-read {
+  background: #f8fafc;
+}
+
+.notif-item.is-read .notif-item-title {
+  font-weight: 600;
+  color: #334155;
+}
+
+.notif-item.is-read .notif-item-dot {
+  background: transparent;
+  border: 2px solid #94a3b8;
+  box-sizing: border-box;
+}
+
+.notif-item.is-read .notif-item-time {
+  color: #64748b;
+}
+
+html[data-theme="dark"] .notif-mark-all,
+html[data-theme="dark"] .notif-read-btn {
+  color: #93c5fd;
+}
+
+html[data-theme="dark"] .notif-item.is-read {
+  background: rgba(148, 163, 184, 0.08);
+}
+
+html[data-theme="dark"] .notif-item.is-read .notif-item-title {
+  color: #cbd5e1;
+}
+
+html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
+  border-color: #64748b;
 }
 
 .sex-radios {
@@ -305,6 +391,7 @@
 }
 
 .note-fold {
+  position: relative;
   display: block;
   max-width: 100%;
 }
@@ -369,14 +456,22 @@
 }
 
 .note-fold-panel {
-  margin-top: 8px;
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 50;
+  width: min(22rem, 72vw);
+  min-width: 12rem;
+  margin-top: 0;
   padding: 8px 10px 10px;
   border-radius: 10px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-left: 3px solid #002080;
-  max-height: 9.5rem;
+  max-height: 12rem;
   overflow: auto;
+  box-sizing: border-box;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
 }
 
 .note-fold--rejection .note-fold-panel {
@@ -563,7 +658,7 @@
   margin-left: auto;
   padding: 0 5px;
   border-radius: 999px;
-  background: #ef4444;
+  background: #dc2626;
   color: #fff;
   font-size: 0.68rem;
   font-weight: 800;

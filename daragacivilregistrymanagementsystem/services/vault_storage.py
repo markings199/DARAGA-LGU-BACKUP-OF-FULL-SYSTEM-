@@ -310,12 +310,20 @@ def vault_status(base_dir: Path, upload_dir: Path) -> dict[str, Any]:
     if err:
         message = err
     elif using_dedicated:
-        write_err = ensure_dir_writable(root) if root is not None else "Missing path"
-        if write_err:
-            message = write_err
+        root_text = str(root or "").replace("/", "\\")
+        if root_text.startswith("\\\\"):
+            writable = False
+            message = (
+                "Office data share is checked when files are saved. "
+                "The Backup page does not wait for that share to load."
+            )
         else:
-            writable = True
-            message = f"Live files use the office server ({upload_dir})."
+            write_err = ensure_dir_writable(root) if root is not None else "Missing path"
+            if write_err:
+                message = write_err
+            else:
+                writable = True
+                message = f"Live files use the office server ({upload_dir})."
     else:
         write_err = ensure_dir_writable(upload_dir)
         if write_err:

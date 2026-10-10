@@ -7,14 +7,14 @@
   <header class="bh-hero">
     <div class="bh-hero-copy">
       <h2 class="section-title">Backup and restore</h2>
-      <p class="bh-lead">{{ backup_schedule_hint or "Automatic backup on the application server" }}</p>
+      <p class="bh-lead">Official copies are stored on the <strong>Daraga LGU server</strong>, not in an administrator Windows account. {{ backup_schedule_hint or "" }}</p>
     </div>
     <div class="bh-hero-aside">
       {% if abs.last_run_at %}
         <span class="bh-chip {% if abs.last_run_status == 'error' %}is-warn{% else %}is-ok{% endif %}">Last {{ abs.last_run_at }}</span>
       {% endif %}
-      <span class="bh-chip {% if br.server_writable %}is-ok{% elif br.system_ready %}is-ok{% else %}is-warn{% endif %}">
-        {% if br.server_writable %}Daraga ready{% elif br.system_ready %}System ready{% else %}Backup not ready{% endif %}
+      <span class="bh-chip {% if br.server_writable %}is-ok{% else %}is-warn{% endif %}" title="{{ br.server_message or '' }}">
+        {% if br.server_writable %}Daraga server ready{% else %}Daraga server not connected{% endif %}
       </span>
       <label class="auto-backup-switch ab-master-switch bh-switch" for="auto_backup_enabled">
         <span class="ab-master-copy">
@@ -72,19 +72,27 @@
       </section>
 
       <section class="bh-card" aria-labelledby="bh-where-title">
-        <h3 id="bh-where-title">Save location</h3>
+        <h3 id="bh-where-title">Daraga LGU server</h3>
         <label class="bh-field bh-field-wide">
-          <span>Daraga LGU server folder</span>
+          <span>Official backup folder on the office server</span>
           <input
             type="text"
             name="auto_backup_destination"
             id="auto_backup_destination"
             value="{{ abs.destination_path or br.server_path or '' }}"
-            placeholder="C:\CivilRegistryBackups"
+            placeholder="\\WIN-HIL0JNDFJIIN\CivilRegistryBackups"
             autocomplete="off"
             spellcheck="false"
           />
-          <small class="bh-field-hint">Kept in Admin Backup. Copied to the Daraga server when it is online.</small>
+          <small class="bh-field-hint">
+            On the Daraga server use <strong>C:\CivilRegistryBackups</strong>.
+            From another office PC use the shared folder
+            <strong>\\WIN-HIL0JNDFJIIN\CivilRegistryBackups</strong>.
+            Backups are not stored in the admin login or this laptop’s user account.
+          </small>
+          {% if br.server_message %}
+            <small class="bh-field-hint {% if br.server_writable %}bh-hint-ok{% else %}bh-hint-warn{% endif %}">{{ br.server_message }}</small>
+          {% endif %}
         </label>
       </section>
 
@@ -92,12 +100,12 @@
       <section class="bh-card bh-actions-card">
         <div class="bh-btn-row">
           <button type="submit" class="btn btn-primary" name="backup_kind" value="{{ freq }}" formaction="{{ url_for('administration_auto_backup_run_now') }}" formmethod="post" data-backup-run="period">Backup now</button>
-          <button type="submit" class="btn btn-secondary" name="backup_kind" value="{{ freq }}" formaction="{{ url_for('administration_auto_backup_get_now') }}" formmethod="post" data-backup-run="copy" title="Save another copy in Admin Backup. Copied to the Daraga server when it is online.">Save copy now</button>
+          <button type="submit" class="btn btn-secondary" formaction="{{ url_for('administration_auto_backup_get_now') }}" formmethod="post" data-backup-run="copy" title="Send any waiting copies to the Daraga LGU server folder.">Send to Daraga server</button>
           <button type="submit" class="btn btn-primary" formaction="{{ url_for('administration_auto_backup_settings') }}">Save schedule</button>
         </div>
         <div class="bh-full-backup">
           <p class="bh-full-backup-title">Full system backup</p>
-          <p class="bh-full-backup-hint">One zip with the whole system: all certificates and scans, users, logs, and database records. It is kept in Admin Backup. When the Daraga LGU folder is connected, the same zip is also saved there. Restore it later with <strong>Full rebuild</strong>.</p>
+          <p class="bh-full-backup-hint">One zip with the whole system: certificates, scans, users, logs, and database records. It is saved on the <strong>Daraga LGU server</strong>. Restore later with <strong>Full rebuild</strong>.</p>
           <button
             type="submit"
             class="btn btn-primary bh-full-backup-btn"
@@ -107,7 +115,7 @@
             formmethod="post"
             data-app-confirm
             data-confirm-title="Full system backup"
-            data-confirm-message="Create a full backup of this system now? It includes all certificates, scans, users, and logs. When the Daraga LGU server is connected, a copy is also saved there."
+            data-confirm-message="Create a full backup now and save it on the Daraga LGU server? This is the office archive, not an administrator account folder."
             data-backup-run="full"
             data-confirm-ok="Create full backup"
             data-confirm-cancel="Go back"
@@ -289,7 +297,7 @@
         <span class="restore-progress-fill"></span>
       </div>
       <p id="backup-progress-time" class="restore-progress-time">Elapsed 00:00</p>
-      <p class="restore-progress-hint">Keep this window open. The zip is saved in Admin Backup and on the Daraga LGU server when it is connected.</p>
+      <p class="restore-progress-hint">Keep this window open. The zip is saved on the Daraga LGU server.</p>
     </div>
   </div>
   <div

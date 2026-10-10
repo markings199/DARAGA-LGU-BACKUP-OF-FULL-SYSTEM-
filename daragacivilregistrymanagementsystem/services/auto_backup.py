@@ -242,37 +242,151 @@ def relative_path_on_server(server_root: Path, relative: str) -> Path:
 
 
 def require_system_backup_root(base_dir: Path) -> tuple[Optional[Path], Optional[str]]:
-    """Always-on archive the Admin Backup screen uses. Lives on the application host, not the browser PC."""
-    path = local_backup_root(base_dir)
+    """Hold folder only when the Daraga LGU server is offline. Not the official archive."""
+    path = pending_lgu_root(base_dir)
     write_err = ensure_backup_dir_writable(path)
     if write_err:
         return None, write_err
     return path, None
 
 
-def probe_lgu_backup_root(
-    base_dir: Path, settings: Optional[dict[str, Any]] = None
+def daraga_setup_message() -> str:
+    return (
+        "Connect the Daraga LGU backup folder. Official backups are stored on the Daraga LGU "
+        f"server ({default_backup_path_for_this_computer()}), not in an administrator Windows account."
+    )
+
+
+def pending_lgu_root(base_dir: Path) -> Path:
+    """Temporary hold copies waiting to be sent to the Daraga LGU server."""
+    path = local_backup_root(base_dir) / "_pending_lgu"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def probe_daraga_official(
+    base_dir: Path,
+    settings: Optional[dict[str, Any]] = None,
+    *,
+    wait: float = 4.0,
 ) -> tuple[Optional[Path], Optional[str]]:
-    """Daraga LGU folder when it can be written. None if the office server is not online yet."""
+    """Official archive: the configured Daraga LGU folder, never this project or a user account."""
+    path, err = resolve_server_backup_root(base_dir, settings)
+    if err or path is None:
+        return None, err or daraga_setup_message()
+    if _is_workstation_backup_path(str(path), base_dir):
+        return None, daraga_setup_message()
+    lgu, lgu_err = probe_lgu_backup_root(base_dir, settings, wait=wait)
+    if lgu is not None and not lgu_err:
+        return lgu, None
+    return None, lgu_err or daraga_setup_message()
+
+
+def _is_manual_backup_trigger(trigger: str) -> bool:
+    return (trigger or "").strip().lower() in ("manual", "get_now")
+
+
+def _finish_official_backup(
+    staging: Path,
+    rel: str,
+    base_dir: Path,
+    settings: Optional[dict[str, Any]] = None,
+) -> tuple[str, str]:
+    """Copy the zip onto the Daraga LGU server, then drop the local hold file."""
+    status, extra = publish_backup_to_daraga(
+        staging, rel, base_dir, settings=settings, retries=3
+    )
+    if status == "ok":
+        try:
+            staging.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return status, extra
+
+
+_lgu_probe_lock = threading.Lock()
+_lgu_probe_cache: dict[str, Any] = {
+    "ok": False,
+    "path": None,
+    "err": "Daraga LGU folder is not online yet.",
+    "at": 0.0,
+    "busy": False,
+}
+_LGU_PROBE_TTL = 90.0
+
+
+def _looks_like_unc(path: Path) -> bool:
+    text = str(path or "").replace("/", "\\")
+    return text.startswith("\\\\")
+
+
+def probe_lgu_backup_root(
+    base_dir: Path,
+    settings: Optional[dict[str, Any]] = None,
+    *,
+    wait: float = 0.35,
+) -> tuple[Optional[Path], Optional[str]]:
+    """Daraga LGU folder when it can be written. Page loads must not wait on a dead share."""
     path, err = resolve_server_backup_root(base_dir, settings)
     if err or path is None:
         return None, err
     if _is_workstation_backup_path(str(path), base_dir):
         return None, None
-    write_err = ensure_backup_dir_writable(path)
-    if write_err:
-        return path, write_err
-    return path, None
+    if not _looks_like_unc(path):
+        write_err = ensure_backup_dir_writable(path)
+        if write_err:
+            return path, write_err
+        return path, None
+
+    now = time.monotonic()
+    with _lgu_probe_lock:
+        age = now - float(_lgu_probe_cache.get("at") or 0)
+        if _lgu_probe_cache["at"] and age < _LGU_PROBE_TTL and not _lgu_probe_cache["busy"]:
+            if _lgu_probe_cache["ok"]:
+                return _lgu_probe_cache["path"], None
+            return _lgu_probe_cache["path"], _lgu_probe_cache["err"]
+        already_busy = bool(_lgu_probe_cache["busy"])
+        if not already_busy:
+            _lgu_probe_cache["busy"] = True
+
+    if not already_busy:
+        def _work() -> None:
+            try:
+                write_err = ensure_backup_dir_writable(path)
+                with _lgu_probe_lock:
+                    _lgu_probe_cache["ok"] = write_err is None
+                    _lgu_probe_cache["path"] = path
+                    _lgu_probe_cache["err"] = write_err or "Daraga LGU folder is not online yet."
+                    _lgu_probe_cache["at"] = time.monotonic()
+                    _lgu_probe_cache["busy"] = False
+            except Exception as exc:
+                with _lgu_probe_lock:
+                    _lgu_probe_cache["ok"] = False
+                    _lgu_probe_cache["path"] = path
+                    _lgu_probe_cache["err"] = str(exc)
+                    _lgu_probe_cache["at"] = time.monotonic()
+                    _lgu_probe_cache["busy"] = False
+
+        threading.Thread(target=_work, name="daraga-lgu-probe", daemon=True).start()
+
+    if wait and wait > 0:
+        deadline = time.monotonic() + wait
+        while time.monotonic() < deadline:
+            with _lgu_probe_lock:
+                if not _lgu_probe_cache["busy"] and _lgu_probe_cache["at"]:
+                    if _lgu_probe_cache["ok"]:
+                        return _lgu_probe_cache["path"], None
+                    return _lgu_probe_cache["path"], _lgu_probe_cache["err"]
+            time.sleep(0.05)
+
+    return None, "Daraga LGU folder is not online yet."
 
 
 def require_lgu_backup_root(
     base_dir: Path, settings: Optional[dict[str, Any]] = None
 ) -> tuple[Optional[Path], Optional[str]]:
-    """Prefer Daraga when it is online; otherwise keep backups in the Admin system store."""
-    lgu, lgu_err = probe_lgu_backup_root(base_dir, settings)
-    if lgu is not None and not lgu_err:
-        return lgu, None
-    return require_system_backup_root(base_dir)
+    """Official Daraga LGU folder when it can be written."""
+    return probe_daraga_official(base_dir, settings, wait=3.0)
 
 
 def resolve_backup_root(
@@ -351,11 +465,17 @@ def _safe_exists(path: Path) -> bool:
 
 
 def _backup_search_roots(base_dir: Path) -> list[Path]:
-    """Local Admin Backup folder first. Daraga share only if it is actually reachable."""
-    roots: list[Path] = [local_backup_root(base_dir)]
-    lgu, lgu_err = probe_lgu_backup_root(base_dir)
-    if lgu is not None and not lgu_err and all(str(lgu) != str(r) for r in roots):
+    """Daraga LGU server first, then any hold copies waiting to be sent."""
+    roots: list[Path] = []
+    lgu, lgu_err = probe_lgu_backup_root(base_dir, wait=0.2)
+    if lgu is not None and not lgu_err:
         roots.append(lgu)
+    pending = pending_lgu_root(base_dir)
+    if all(str(pending) != str(r) for r in roots):
+        roots.append(pending)
+    local = local_backup_root(base_dir)
+    if all(str(local) != str(r) for r in roots):
+        roots.append(local)
     return roots
 
 
@@ -390,11 +510,11 @@ def _with_downloads_copy(msg: str, zip_path: Path) -> str:
 def describe_backup_copies(local_path: Path, server_status: str, server_detail: str) -> str:
     if server_status == "ok":
         if server_detail:
-            return f"Saved in Admin Backup and on the Daraga LGU server ({server_detail})."
-        return "Saved in Admin Backup and on the Daraga LGU server."
+            return f"Saved on the Daraga LGU server ({server_detail})."
+        return "Saved on the Daraga LGU server."
     if server_detail:
-        return f"Saved in Admin Backup. Daraga LGU copy pending: {server_detail}"
-    return "Saved in Admin Backup. Daraga LGU copy pending."
+        return f"Not on the Daraga LGU server yet: {server_detail}"
+    return "Not on the Daraga LGU server yet. Connect the office backup folder."
 
 
 def drop_local_zip_if_server_only(source: Path, server_status: str, base_dir: Path) -> None:
@@ -547,7 +667,7 @@ def publish_backup_to_daraga(
         return status, detail
     if status == "skipped" or _is_share_offline_message(detail or ""):
         return "skipped", detail or "Daraga LGU folder is not online yet."
-    lgu, lgu_err = probe_lgu_backup_root(base_dir, settings)
+    lgu, lgu_err = probe_lgu_backup_root(base_dir, settings, wait=8.0)
     if lgu is None:
         return status, detail or lgu_err or "Daraga LGU folder is not online yet."
     if lgu_err:
@@ -565,20 +685,19 @@ def publish_backup_to_daraga(
 
 
 def get_backup_readiness(base_dir: Path, settings: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    """Status for the Automatic Backup screen — archive is on the Flask host."""
+    """Status for Backup: official archive is the Daraga LGU server folder."""
     settings = settings if settings is not None else load_settings(base_dir)
-    system_path, system_err = require_system_backup_root(base_dir)
-    lgu_path, lgu_err = probe_lgu_backup_root(base_dir, settings)
+    lgu_path, lgu_err = probe_daraga_official(base_dir, settings, wait=0.35)
     host_name = this_server_name()
     server_writable = lgu_path is not None and not lgu_err
     intended, _intended_err = resolve_server_backup_root(base_dir, settings)
-    display_path = str((lgu_path if server_writable else None) or intended or default_backup_path_for_this_computer())
+    display_path = str(
+        (lgu_path if server_writable else None) or intended or default_backup_path_for_this_computer()
+    )
     if server_writable:
-        archive, archive_err = lgu_path, None
-        server_message = "Daraga server connected. Backups save in Admin and on the office server."
+        server_message = "Daraga LGU server connected. Official backups save on that server, not in an admin account."
     else:
-        archive, archive_err = system_path, system_err
-        server_message = "Saved in Admin Backup. Daraga copy when the office server is online."
+        server_message = lgu_err or daraga_setup_message()
     return {
         "schedule_on": bool(settings.get("enabled")),
         "daily_on": bool(settings.get("daily_enabled", True)),
@@ -586,9 +705,9 @@ def get_backup_readiness(base_dir: Path, settings: Optional[dict[str, Any]] = No
         "daily_time": str(settings.get("daily_time") or "20:00"),
         "full_time": str(settings.get("full_time") or "20:05"),
         "host_name": host_name,
-        "server_configured": True,
+        "server_configured": bool(intended),
         "server_writable": server_writable,
-        "system_ready": system_path is not None and not system_err,
+        "system_ready": server_writable,
         "server_path": display_path,
         "server_message": server_message,
         "local_path": display_path,
@@ -598,7 +717,7 @@ def get_backup_readiness(base_dir: Path, settings: Optional[dict[str, Any]] = No
 
 def sync_local_backups_to_server(base_dir: Path) -> tuple[int, int, Optional[str]]:
     """Copy existing local backup zips to the LGU server. Returns (copied, failed, error)."""
-    lgu, lgu_err = probe_lgu_backup_root(base_dir)
+    lgu, lgu_err = probe_lgu_backup_root(base_dir, wait=2.0)
     if lgu is None or lgu_err:
         return 0, 0, lgu_err or "Daraga LGU folder is not online yet."
     local = local_backup_root(base_dir)
@@ -610,6 +729,10 @@ def sync_local_backups_to_server(base_dir: Path) -> tuple[int, int, Optional[str
         try:
             rel = str(path.relative_to(local)).replace("\\", "/")
         except ValueError:
+            continue
+        if rel.lower().startswith("_pending_lgu/"):
+            rel = rel.split("/", 1)[-1]
+        if not rel or rel.endswith("/"):
             continue
         status, extra = copy_zip_to_server(path, rel, base_dir, force=True)
         if status == "ok":
@@ -919,22 +1042,39 @@ def run_period_backup(
         kind = "daily"
     now = when or datetime.now()
     start_utc, end_utc, period_key = period_bounds(kind, now)
-    backup_root, root_err = require_system_backup_root(base_dir)
-    if root_err:
-        return False, root_err, ""
+    settings_now = load_settings(base_dir)
+    wait = 5.0 if _is_manual_backup_trigger(trigger) else 2.0
+    lgu, lgu_err = probe_daraga_official(base_dir, settings_now, wait=wait)
+    if lgu_err and _is_manual_backup_trigger(trigger):
+        return False, lgu_err, ""
     filename = period_filename(kind, period_key)
-    folder = period_folder(backup_root, kind, now)
-    dest = folder / filename
+    rel = str((period_folder(Path("_root"), kind, now) / filename).relative_to(Path("_root"))).replace("\\", "/")
+    hold_root = pending_lgu_root(base_dir)
+    dest = hold_root / Path(rel)
+    dest.parent.mkdir(parents=True, exist_ok=True)
     if _safe_exists(dest) and force:
         dest = unique_backup_path(dest)
-    try:
-        rel = str(dest.relative_to(backup_root)).replace("\\", "/")
-    except ValueError:
-        rel = dest.name
+        try:
+            rel = str(dest.relative_to(hold_root)).replace("\\", "/")
+        except ValueError:
+            rel = dest.name
 
     try:
+        if lgu is not None and not lgu_err:
+            official = lgu / relative_path_on_server(lgu, rel)
+            if _safe_exists(official) and not force:
+                msg = f"This {kind} backup already exists. {describe_backup_copies(official, 'ok', str(official))}"
+                from models import BackupRun
+                last = (
+                    BackupRun.query.filter_by(kind=kind, period_key=period_key)
+                    .order_by(BackupRun.created_at.desc())
+                    .first()
+                )
+                if last is None or last.status == "error":
+                    _save_backup_run(kind=kind, period_key=period_key, status="skipped", file_rel=rel, record_count=0, message=msg)
+                return True, msg, rel
         if _safe_exists(dest) and not force:
-            server_status, extra = "ok", str(dest)
+            server_status, extra = _finish_official_backup(dest, rel, base_dir, settings_now)
             msg = f"This {kind} backup already exists. {describe_backup_copies(dest, server_status, extra)}"
             from models import BackupRun
             last = (
@@ -963,14 +1103,16 @@ def run_period_backup(
             from services.vault_storage import describe_storage_error
 
             raise RuntimeError(describe_storage_error(exc, dest)) from exc
-        server_status, extra = copy_zip_to_server(dest, rel, base_dir, force=True)
+        server_status, extra = _finish_official_backup(dest, rel, base_dir, settings_now)
         copies = describe_backup_copies(dest, server_status, extra)
+        if server_status != "ok" and _is_manual_backup_trigger(trigger):
+            raise RuntimeError(copies)
         if not records:
             msg = f"{kind.title()} backup complete. No new scans. {copies}"
         else:
             scan_word = "scan" if len(records) == 1 else "scans"
             msg = f"{kind.title()} backup complete ({len(records)} {scan_word}). {copies}"
-        run_status = "success"
+        run_status = "success" if server_status == "ok" else "partial"
         _save_backup_run(
             kind=kind,
             period_key=period_key,
@@ -1078,25 +1220,36 @@ def run_full_backup(
     now = when or datetime.now()
     settings_now = load_settings(base_dir)
     period_key = schedule_period_key(str(settings_now.get("frequency") or "daily"), now)
-    backup_root, root_err = require_system_backup_root(base_dir)
-    if root_err:
-        return False, root_err, ""
-    dest = (backup_root / "Full") / full_backup_filename(
-        str(settings_now.get("frequency") or "daily"), now
-    )
+    wait = 5.0 if _is_manual_backup_trigger(trigger) else 2.0
+    lgu, lgu_err = probe_daraga_official(base_dir, settings_now, wait=wait)
+    if lgu_err and _is_manual_backup_trigger(trigger):
+        return False, lgu_err, ""
+    filename = full_backup_filename(str(settings_now.get("frequency") or "daily"), now)
+    rel = f"Full/{filename}"
+    hold_root = pending_lgu_root(base_dir)
+    dest = hold_root / "Full" / filename
+    dest.parent.mkdir(parents=True, exist_ok=True)
     if _safe_exists(dest) and force:
         dest = unique_backup_path(dest)
-    try:
-        rel = str(dest.relative_to(backup_root)).replace("\\", "/")
-    except ValueError:
         rel = f"Full/{dest.name}"
     upload_dir = _runtime.get("upload_dir") or (base_dir / "uploads")
 
     try:
+        if lgu is not None and not lgu_err:
+            official = lgu / relative_path_on_server(lgu, rel)
+            if _safe_exists(official) and not force:
+                msg = f"This full backup already exists. {describe_backup_copies(official, 'ok', str(official))}"
+                from models import BackupRun
+                last = (
+                    BackupRun.query.filter_by(kind="full", period_key=period_key)
+                    .order_by(BackupRun.created_at.desc())
+                    .first()
+                )
+                if last is None or last.status == "error":
+                    _save_backup_run(kind="full", period_key=period_key, status="skipped", file_rel=rel, record_count=0, message=msg)
+                return True, msg, rel
         if _safe_exists(dest) and not force:
-            server_status, extra = publish_backup_to_daraga(
-                dest, rel, base_dir, settings=settings_now
-            )
+            server_status, extra = _finish_official_backup(dest, rel, base_dir, settings_now)
             copies = describe_backup_copies(dest, server_status, extra)
             msg = f"This full backup already exists. {copies}"
             from models import BackupRun
@@ -1121,18 +1274,16 @@ def run_full_backup(
             from services.vault_storage import describe_storage_error
 
             raise RuntimeError(describe_storage_error(exc, dest)) from exc
-        lgu_path, lgu_err = probe_lgu_backup_root(base_dir, settings_now)
-        daraga_connected = lgu_path is not None and not lgu_err
-        server_status, extra = publish_backup_to_daraga(
-            dest, rel, base_dir, settings=settings_now
-        )
+        server_status, extra = _finish_official_backup(dest, rel, base_dir, settings_now)
         copies = describe_backup_copies(dest, server_status, extra)
         count = Record.query.count()
-        if daraga_connected and server_status != "ok":
+        if server_status != "ok":
+            if _is_manual_backup_trigger(trigger):
+                raise RuntimeError(copies)
             run_status = "partial"
             msg = (
-                "Full backup saved in Admin Backup, but it could not be copied to the "
-                f"Daraga LGU server. {extra}"
+                "Full backup is waiting to be sent to the Daraga LGU server. "
+                f"{extra}"
             )
         else:
             run_status = "success"
@@ -1308,7 +1459,7 @@ def prepare_lgu_office_backup(base_dir: Path) -> None:
     if err:
         if _is_share_offline_message(err):
             logger.info(
-                "Daraga LGU server is not on this network yet. Backups stay in Admin Backup until %s can be reached.",
+                "Daraga LGU server is not on this network yet. Official backups wait until %s can be reached.",
                 lgu_backup_unc(),
             )
         else:
@@ -1558,7 +1709,7 @@ def init_auto_backup_scheduler(
                 app,
                 base_dir,
                 audit_callback=audit_callback,
-                run_now=True,
+                run_now=False,
             )
         except Exception:
             logger.exception("Office log retention scheduler failed")

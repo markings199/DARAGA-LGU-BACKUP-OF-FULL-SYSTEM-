@@ -31,12 +31,153 @@
     if (cert) cert.classList.toggle("print-surface-active", showCert);
   }
 
+  var CERT_BLANK_KEYS = {
+    "Page Number": true,
+    "Book Number": true,
+    "Amount Paid": true,
+    "OR Number": true,
+    "Date Paid": true,
+    "Issued To": true,
+  };
+  var CERT_BLANK_LABELS = {
+    "Page Number": "Register page",
+    "Book Number": "Book number",
+    "Amount Paid": "Amount paid",
+    "OR Number": "OR number",
+    "Date Paid": "Date paid",
+    "Issued To": "Issued to",
+  };
+
+  function certPrintNeedsBlanks() {
+    var mode = selectedPrintMode();
+    return mode === "certification" || mode === "both";
+  }
+
+  function certBlankValue(input) {
+    var key = input.getAttribute("data-cert-blank-input");
+    var value = String(input.value || "").trim();
+    if (key === "Amount Paid") {
+      value = value.replace(/^[₱P]\s*/i, "").trim();
+    }
+    return value;
+  }
+
+  function markCertBlankState(input, incomplete) {
+    input.classList.toggle("is-incomplete", incomplete);
+    input.setAttribute("aria-invalid", incomplete ? "true" : "false");
+    var field = input.closest(".print-setup-field");
+    if (field) field.classList.toggle("is-incomplete", incomplete);
+  }
+
+  function missingCertBlanks() {
+    var missing = [];
+    document.querySelectorAll("[data-cert-blank-input]").forEach(function (input) {
+      var key = input.getAttribute("data-cert-blank-input");
+      var empty = !certBlankValue(input);
+      markCertBlankState(input, empty);
+      if (empty) {
+        missing.push({
+          input: input,
+          label: CERT_BLANK_LABELS[key] || key || "Required field",
+        });
+      }
+    });
+    return missing;
+  }
+
+  function notifyCertBlanksRequired(missing) {
+    var names = missing
+      .map(function (row) {
+        return row.label;
+      })
+      .join(", ");
+    var message =
+      "Fill in " +
+      names +
+      " before printing. Admin already approved this request — complete the register and payment details first.";
+    if (window.DaragaToast && window.DaragaToast.show) {
+      window.DaragaToast.show({
+        tone: "warning",
+        title: "Complete these fields first",
+        message: message,
+      });
+    } else {
+      window.alert(message);
+    }
+    var first = missing[0] && missing[0].input;
+    if (first) {
+      if (typeof first.scrollIntoView === "function") {
+        first.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      try {
+        first.focus();
+      } catch (e) {}
+    }
+  }
+
+  function certBlankStorageKey() {
+    var panel = document.querySelector(".print-panel");
+    var rid = panel && panel.getAttribute("data-record-id");
+    return "dcr-cert-blanks:" + (rid || "draft");
+  }
+
+  function readStoredCertBlanks() {
+    try {
+      var raw = sessionStorage.getItem(certBlankStorageKey());
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function storeCertBlanks() {
+    var out = {};
+    document.querySelectorAll("[data-cert-blank-input]").forEach(function (input) {
+      var key = input.getAttribute("data-cert-blank-input");
+      if (key) out[key] = String(input.value || "").trim();
+    });
+    try {
+      sessionStorage.setItem(certBlankStorageKey(), JSON.stringify(out));
+    } catch (e) {}
+  }
+
+  function setCertBlankText(key, value) {
+    var text = String(value || "").trim() || "\u00a0";
+    document.querySelectorAll('[data-cert-blank="' + key + '"]').forEach(function (el) {
+      el.textContent = text;
+    });
+  }
+
+  function syncCertBlanksFromPanel() {
+    document.querySelectorAll("[data-cert-blank-input]").forEach(function (input) {
+      var key = input.getAttribute("data-cert-blank-input");
+      if (!key) return;
+      var value = String(input.value || "").trim();
+      if (key === "Amount Paid") {
+        value = value.replace(/^[₱P]\s*/i, "");
+      }
+      setCertBlankText(key, value);
+    });
+  }
+
+  function restoreCertBlanks() {
+    var stored = readStoredCertBlanks();
+    document.querySelectorAll("[data-cert-blank-input]").forEach(function (input) {
+      var key = input.getAttribute("data-cert-blank-input");
+      if (!key) return;
+      if (Object.prototype.hasOwnProperty.call(stored, key) && stored[key]) {
+        input.value = stored[key];
+      }
+    });
+    syncCertBlanksFromPanel();
+  }
+
   function syncCertificationFromForm() {
     var form = document.querySelector("form[method='post']");
     if (!form) return;
     document.querySelectorAll("[data-cert-field]").forEach(function (el) {
       var key = el.getAttribute("data-cert-field");
-      if (!key || key === "Issued To") return;
+      if (!key || key === "Issued To" || CERT_BLANK_KEYS[key]) return;
       var input = form.elements[key];
       if (!input) return;
       var v = String(input.value || "").trim();
@@ -126,6 +267,7 @@
     if (btn.getAttribute("data-sync-form") === "1") {
       syncCertificationFromForm();
     }
+    syncCertBlanksFromPanel();
     applyPrintLayout();
     setActivePrintSurface(mode);
 
@@ -195,6 +337,14 @@
     if (fontSel) fontSel.addEventListener("change", applyPrintLayout);
     var paperSel = document.getElementById("print-paper-size");
     if (paperSel) paperSel.addEventListener("change", applyPrintLayout);
+    restoreCertBlanks();
+    document.querySelectorAll("[data-cert-blank-input]").forEach(function (input) {
+      input.addEventListener("input", function () {
+        storeCertBlanks();
+        syncCertBlanksFromPanel();
+        if (certBlankValue(input)) markCertBlankState(input, false);
+      });
+    });
 
     var locked = lockedPrintFormat();
     document.querySelectorAll('input[name="print_mode"]').forEach(function (radio) {
@@ -222,6 +372,13 @@
           });
         }
         return;
+      }
+      if (certPrintNeedsBlanks()) {
+        var missing = missingCertBlanks();
+        if (missing.length) {
+          notifyCertBlanksRequired(missing);
+          return;
+        }
       }
       runPrint(btn);
     });

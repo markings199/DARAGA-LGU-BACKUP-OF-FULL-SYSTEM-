@@ -71,6 +71,7 @@ class PrintRequest(db.Model):
     reviewed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     rejection_reason = db.Column(db.Text, default="")
     used_at = db.Column(db.DateTime)  # set when staff completes a permitted print
+    approval_code = db.Column(db.String(10), nullable=False, default="")  # 5-digit code when approved
     # original = scanned certificate; certification = CR Form 1A / 2A / 3A
     print_format = db.Column(db.String(32), nullable=False, default="original")
 
@@ -112,3 +113,16 @@ class BackupRun(db.Model):
     record_count = db.Column(db.Integer, nullable=False, default=0)
     message = db.Column(db.Text, nullable=False, default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class NotificationRead(db.Model):
+    """Per-user read/unread state for header notification items."""
+    __tablename__ = "notification_reads"
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "notice_id", name="uq_notification_reads_user_notice"),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    notice_id = db.Column(db.String(128), nullable=False)
+    is_read = db.Column(db.Boolean, nullable=False, default=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

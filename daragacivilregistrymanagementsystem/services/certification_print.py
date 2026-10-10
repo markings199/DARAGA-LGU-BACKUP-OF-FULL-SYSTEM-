@@ -47,7 +47,15 @@ def cert_field(data: dict[str, Any] | None, key: str, default: str = "") -> str:
     if val is None:
         return default
     s = str(val).strip()
-    return s if s else default
+    if not s:
+        return default
+    if "date" in key.lower() and len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        try:
+            dt = datetime.strptime(s[:10], "%Y-%m-%d")
+            return f"{dt.strftime('%B')} {dt.day}, {dt.year}"
+        except ValueError:
+            return s
+    return s
 
 
 def form_meta(document_type: str) -> dict[str, str]:

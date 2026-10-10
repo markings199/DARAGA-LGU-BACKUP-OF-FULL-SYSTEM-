@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
+from ocr.person_name import WIDE_FML_NAME_KEYS
 from ocr.shared import run_ocr_on_image
 from ocr.sex import sex_from_ocr_text
 
@@ -166,7 +167,7 @@ def _load_spec(doc_type: str) -> Optional[Dict[str, Any]]:
         return spec
 
 
-def _gray_max_side(gray: np.ndarray, max_side: int = 1100) -> Tuple[np.ndarray, float]:
+def _gray_max_side(gray: np.ndarray, max_side: int = 800) -> Tuple[np.ndarray, float]:
     h, w = gray.shape[:2]
     longest = max(h, w)
     if longest <= max_side:
@@ -202,7 +203,7 @@ def _template_orb(spec: Dict[str, Any]):
         return packed
     t_gray = cv2.cvtColor(spec["_image"], cv2.COLOR_BGR2GRAY)
     t_small, scale_t = _gray_max_side(t_gray)
-    detector = cv2.ORB_create(nfeatures=1800)
+    detector = cv2.ORB_create(nfeatures=900, fastThreshold=12)
     kp_t, des_t = detector.detectAndCompute(t_small, None)
     packed = (kp_t, des_t, scale_t)
     spec["_orb"] = packed
@@ -211,7 +212,7 @@ def _template_orb(spec: Dict[str, Any]):
 
 def _find_homography(scan, spec: Dict[str, Any]) -> Optional[Any]:
     kp_t, des_t, scale_t = _template_orb(spec)
-    detector = cv2.ORB_create(nfeatures=1800)
+    detector = cv2.ORB_create(nfeatures=900, fastThreshold=12)
     s_gray = cv2.cvtColor(scan, cv2.COLOR_BGR2GRAY)
     s_small, scale_s = _gray_max_side(s_gray)
     kp_s, des_s = detector.detectAndCompute(s_small, None)
@@ -312,7 +313,14 @@ def _project_items_to_template(
     return out
 
 
-def _text_in_box(items: List[Dict[str, Any]], box: List[float], img_w: int, img_h: int) -> str:
+def _text_in_box(
+    items: List[Dict[str, Any]],
+    box: List[float],
+    img_w: int,
+    img_h: int,
+    *,
+    left_to_right: bool = False,
+) -> str:
     x1, y1, x2, y2 = box
     left = x1 * img_w
     right = x2 * img_w
@@ -329,8 +337,38 @@ def _text_in_box(items: List[Dict[str, Any]], box: List[float], img_w: int, img_
         for it in items
         if left <= it["cx"] <= right and top <= it["cy"] <= bottom and it.get("score", 1.0) >= 0.2
     ]
-    hits.sort(key=lambda it: (it["cy"], it["x1"]))
+    if left_to_right:
+        hits.sort(key=lambda it: (it["x1"], it["cy"]))
+    else:
+        hits.sort(key=lambda it: (it["cy"], it["x1"]))
     return " ".join(it["text"] for it in hits).strip()
+
+
+def _name_from_fml_slots(
+    items: List[Dict[str, Any]],
+    box: List[float],
+    img_w: int,
+    img_h: int,
+    printed: str = "",
+) -> str:
+    """Form 102/103 names are First | Middle | Last left-to-right."""
+    x1, y1, x2, y2 = box
+    span = max((x2 - x1), 0.05)
+    printed_all = f"{printed or ''} Name First Middle Last"
+    parts: List[str] = []
+    for i in range(3):
+        sub = [x1 + span * i / 3.0, y1, x1 + span * (i + 1) / 3.0, y2]
+        raw = _text_in_box(items, sub, img_w, img_h, left_to_right=True)
+        raw = _subtract_printed(raw, printed_all)
+        raw = _clean_value("name", raw)
+        if raw:
+            parts.append(raw)
+    joined = _join_name_parts(parts)
+    if joined:
+        return joined
+    raw = _text_in_box(items, box, img_w, img_h, left_to_right=True)
+    raw = _subtract_printed(raw, printed_all)
+    return _clean_value("name", raw)
 
 
 def _subtract_printed(scan_text: str, printed_text: str) -> str:
@@ -567,10 +605,19 @@ def _fill_boxes(spec: Dict[str, Any], items_template: List[Dict[str, Any]]) -> D
     for field in spec.get("fields") or []:
         key = field["key"]
         kind = field.get("kind") or "text"
-        raw = _text_in_box(items_template, field["box"], tw, th)
-        if kind == "sex":
+        if kind == "name" and key in WIDE_FML_NAME_KEYS:
+            value = _name_from_fml_slots(
+                items_template, field["box"], tw, th, field.get("printed") or ""
+            )
+        elif kind == "name":
+            raw = _text_in_box(items_template, field["box"], tw, th, left_to_right=True)
+            value = _subtract_printed(raw, field.get("printed") or "")
+            value = _clean_value(kind, value)
+        elif kind == "sex":
+            raw = _text_in_box(items_template, field["box"], tw, th)
             value = sex_from_ocr_text(raw)
         else:
+            raw = _text_in_box(items_template, field["box"], tw, th)
             value = _subtract_printed(raw, field.get("printed") or "")
             value = _clean_value(kind, value)
         if value and key not in out:

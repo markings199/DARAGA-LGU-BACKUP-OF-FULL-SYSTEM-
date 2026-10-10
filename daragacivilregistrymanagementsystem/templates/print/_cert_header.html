@@ -29,15 +29,15 @@
   {% if meta.intro_style == 'page_book' %}
   <p class="cert-intro">
     We certify that, among others, the following facts of marriage appear in the Register of Marriages on Page
-    {{ cert_inline_blank(page_no, 'Page Number') }}
+    {{ cert_inline_blank(page_no, 'Page Number', 'cert-inline-u--page') }}
     Book
-    {{ cert_inline_blank(book_no, 'Book Number') }}.
+    {{ cert_inline_blank(book_no, 'Book Number', 'cert-inline-u--book') }}.
   </p>
   {% else %}
   <p class="cert-intro">
     We certify that among others, the following facts of {{ meta.facts_of }} appear in the Register of {{ meta.register }} on page
-    {{ cert_inline_blank(page_no, 'Page Number') }}
+    {{ cert_inline_blank(page_no, 'Page Number', 'cert-inline-u--page') }}
     of book number
-    {{ cert_inline_blank(book_no, 'Book Number') }}.
+    {{ cert_inline_blank(book_no, 'Book Number', 'cert-inline-u--book') }}.
   </p>
   {% endif %}

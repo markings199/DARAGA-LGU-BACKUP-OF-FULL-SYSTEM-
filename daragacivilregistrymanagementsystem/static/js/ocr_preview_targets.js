@@ -44,20 +44,10 @@
   }
 
   function ensureLayer() {
-    var wrap = host();
-    if (!wrap) return null;
-    if (!layer || layer.parentNode !== wrap) {
-      layer = document.getElementById("ocr-doc-targets");
-      if (!layer) {
-        layer = document.createElement("div");
-        layer.id = "ocr-doc-targets";
-        layer.className = "ocr-doc-targets";
-        layer.setAttribute("aria-hidden", "true");
-      }
-      wrap.appendChild(layer);
-    }
-    layoutLayer();
-    return layer;
+    var existing = document.getElementById("ocr-doc-targets");
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    layer = null;
+    return null;
   }
 
   function layoutLayer() {
@@ -153,34 +143,9 @@
   }
 
   function render(type) {
-    var node = ensureLayer();
-    if (!node) return;
-    var fields = fieldsFor(type);
-    node.replaceChildren();
-    var beam = document.createElement("span");
-    beam.className = "ocr-doc-target-beam";
-    node.appendChild(beam);
-    fields.forEach(function (field, i) {
-      var box = document.createElement("span");
-      box.className = "ocr-doc-target";
-      box.dataset.index = String(i);
-      box.style.left = (field.left * 100).toFixed(2) + "%";
-      box.style.top = (field.top * 100).toFixed(2) + "%";
-      box.style.width = (field.width * 100).toFixed(2) + "%";
-      box.style.height = (field.height * 100).toFixed(2) + "%";
-      box.style.animationDelay = Math.min(i * 0.045, 0.7) + "s";
-      var sweep = document.createElement("span");
-      sweep.className = "ocr-doc-target-sweep";
-      var tag = document.createElement("span");
-      tag.className = "ocr-doc-target-tag";
-      tag.textContent = field.key;
-      box.appendChild(sweep);
-      box.appendChild(tag);
-      node.appendChild(box);
-    });
-    lastType = type;
+    ensureLayer();
+    lastType = type || "";
     lastIndex = -1;
-    layoutLayer();
   }
 
   function paint(pct) {
@@ -188,36 +153,21 @@
       stop();
       return;
     }
+    ensureLayer();
     var type = currentDocType();
-    var node = ensureLayer();
-    if (!node) return;
     if (!type) {
-      node.hidden = true;
       setLabel("Identifying document");
       return;
     }
     requestAligned(type);
-    if (type !== lastType || !node.querySelector(".ocr-doc-target")) render(type);
-    else layoutLayer();
     var fields = fieldsFor(type);
     if (!fields.length) {
-      node.hidden = true;
       setLabel("Reading document");
       return;
     }
-    node.hidden = false;
     var idx = activeIndex(fields, pct);
     var countText = idx >= 0 ? idx + 1 + " / " + fields.length : "";
-    if (idx !== lastIndex) {
-      lastIndex = idx;
-      Array.prototype.forEach.call(node.children, function (box) {
-        if (!box.classList.contains("ocr-doc-target")) return;
-        var fieldIndex = parseInt(box.dataset.index || "-1", 10);
-        box.classList.toggle("is-done", fieldIndex < idx);
-        box.classList.toggle("is-active", fieldIndex === idx);
-        box.classList.toggle("is-upcoming", fieldIndex > idx);
-      });
-    }
+    lastIndex = idx;
     var current = fields[idx];
     setLabel(current ? "Reading " + current.key : "Reading document", countText);
   }

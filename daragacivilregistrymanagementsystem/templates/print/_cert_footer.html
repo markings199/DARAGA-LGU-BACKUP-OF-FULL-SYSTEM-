@@ -21,9 +21,9 @@
       <col class="cert-pay-colon-col" />
       <col class="cert-pay-blank-col" />
     </colgroup>
-    {{ cert_pay_row('Amount Paid', '', true) }}
-    {{ cert_pay_row('OR Number') }}
-    {{ cert_pay_row('Date Paid') }}
+    {{ cert_pay_row('Amount Paid', cert_field(data, 'Amount Paid'), true, 'Amount Paid') }}
+    {{ cert_pay_row('OR Number', cert_field(data, 'OR Number'), false, 'OR Number') }}
+    {{ cert_pay_row('Date Paid', cert_field(data, 'Date Paid'), false, 'Date Paid') }}
   </table>
 </div>
 

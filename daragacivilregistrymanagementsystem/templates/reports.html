@@ -104,8 +104,8 @@
         <a class="btn btn-primary reg-btn-lead" href="{{ url_for('civil_registry_reports', **enter_focus_args) }}">Focus form</a>
       {% endif %}
       <button type="button" class="btn btn-secondary" onclick="window.print()">Print</button>
-      <a class="btn btn-secondary" href="{{ url_for('civil_registry_reports_pdf', **excel_args) }}">Download PDF</a>
-      <a class="btn btn-secondary" href="{{ url_for('civil_registry_reports_excel', **excel_args) }}">Excel</a>
+      <a class="btn btn-secondary" href="{{ url_for('civil_registry_reports_pdf', **excel_args) }}" download data-no-page-transition="1">Download PDF</a>
+      <a class="btn btn-secondary" href="{{ url_for('civil_registry_reports_excel', **excel_args) }}" download data-no-page-transition="1">Excel</a>
     </div>
     </div>
   </form>

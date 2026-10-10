@@ -11,7 +11,14 @@
 {% set _picker = _show_original and _show_cert and not _locked %}
 
 {% if _can %}
-<div class="print-panel no-print{% if compact_print_panel|default(false) %} print-panel--compact{% endif %}">
+{% set _data = data if data is defined else {} %}
+{% set _page_no = cert_field(_data, 'Page Number') or cert_field(_data, 'Page') %}
+{% set _book_no = cert_field(_data, 'Book Number') or cert_field(_data, 'Book') %}
+{% set _amount_paid = cert_field(_data, 'Amount Paid') %}
+{% set _or_number = cert_field(_data, 'OR Number') %}
+{% set _date_paid = cert_field(_data, 'Date Paid') %}
+{% set _issued_to = cert_field(_data, 'Issued To') %}
+<div class="print-panel no-print{% if compact_print_panel|default(false) %} print-panel--compact{% endif %}"{% if record is defined and record %} data-record-id="{{ record.id }}"{% endif %}>
   {% if _picker %}
   <div class="print-panel-head">
     <div class="print-panel-head-text">
@@ -75,7 +82,8 @@
   </div>
   {% endif %}
   <div class="print-panel-actions">
-    <div class="print-setup">
+    <div class="print-setup print-setup--layout">
+      <p class="print-setup-heading">Print setup</p>
       <label class="print-setup-field">
         Paper size
         <select id="print-paper-size" aria-label="Print paper size">
@@ -94,8 +102,43 @@
         </select>
       </label>
     </div>
+    {% if _show_cert %}
+    <div class="print-setup print-setup--blanks">
+      <div class="print-setup-head">
+        <p class="print-setup-heading">Certification entries</p>
+        <p class="print-setup-note" id="print-cert-blanks-note">Required</p>
+      </div>
+      <label class="print-setup-field">
+        Register page <span class="print-req" aria-hidden="true">*</span>
+        <input id="print-cert-page" type="text" inputmode="numeric" autocomplete="off" placeholder="Page" value="{{ _page_no }}" required aria-required="true" data-cert-blank-input="Page Number" />
+      </label>
+      <label class="print-setup-field">
+        Book number <span class="print-req" aria-hidden="true">*</span>
+        <input id="print-cert-book" type="text" inputmode="numeric" autocomplete="off" placeholder="Book" value="{{ _book_no }}" required aria-required="true" data-cert-blank-input="Book Number" />
+      </label>
+      <label class="print-setup-field print-setup-field--amount">
+        Amount paid <span class="print-req" aria-hidden="true">*</span>
+        <span class="print-amount-wrap">
+          <span class="print-peso" aria-hidden="true">₱</span>
+          <input id="print-cert-amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" value="{{ _amount_paid }}" required aria-required="true" data-cert-blank-input="Amount Paid" />
+        </span>
+      </label>
+      <label class="print-setup-field">
+        OR number <span class="print-req" aria-hidden="true">*</span>
+        <input id="print-cert-or" type="text" autocomplete="off" placeholder="Official receipt" value="{{ _or_number }}" required aria-required="true" data-cert-blank-input="OR Number" />
+      </label>
+      <label class="print-setup-field print-setup-field--date">
+        Date paid <span class="print-req" aria-hidden="true">*</span>
+        <input id="print-cert-date-paid" type="text" autocomplete="off" placeholder="e.g. 10 October 2026" value="{{ _date_paid }}" required aria-required="true" data-cert-blank-input="Date Paid" />
+      </label>
+      <label class="print-setup-field print-setup-field--issued">
+        Issued to <span class="print-req" aria-hidden="true">*</span>
+        <input id="print-cert-issued-to" type="text" autocomplete="off" placeholder="Full name of requester" value="{{ _issued_to }}" required aria-required="true" data-cert-blank-input="Issued To" />
+      </label>
+    </div>
+    {% endif %}
     <div class="print-setup print-setup--signers">
-      <p class="print-setup-heading">Signatories on the form</p>
+      <p class="print-setup-heading">Signatories</p>
       <label class="print-setup-field">
         Verified by
         <input id="print-signer-verifier" type="text" value="ANGELY M. CEDRO" autocomplete="off" />
@@ -113,19 +156,21 @@
         <input id="print-signer-registrar-title" type="text" value="MGDH I / Municipal Civil Registrar I" autocomplete="off" />
       </label>
     </div>
-    <button
-      type="button"
-      class="btn btn-primary btn-print-document"
-      id="btn-print-document"
-      data-print-log-url="{{ print_log_url or '' }}"
-      data-can-print="1"
-      data-sync-form="{{ '1' if sync_from_form|default(false) else '0' }}"
-      data-locked-print-format="{{ _locked }}"
-      data-default-print-mode="{{ _default_mode }}"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
-      Print
-    </button>
+    <div class="print-panel-foot">
+      <button
+        type="button"
+        class="btn btn-primary btn-print-document"
+        id="btn-print-document"
+        data-print-log-url="{{ print_log_url or '' }}"
+        data-can-print="1"
+        data-sync-form="{{ '1' if sync_from_form|default(false) else '0' }}"
+        data-locked-print-format="{{ _locked }}"
+        data-default-print-mode="{{ _default_mode }}"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+        Print
+      </button>
+    </div>
   </div>
 </div>
 {% endif %}

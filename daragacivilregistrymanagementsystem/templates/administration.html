@@ -1,4 +1,7 @@
 {% extends "base.html" %}
+{% set _scan_years = scan_year_stats or {} %}
+{% set _scan_default = _scan_years.get('default_year') %}
+{% set _scan_year_counts = (_scan_years.get('years') or {}).get(_scan_default, _scan_years.get('all') or {}) %}
 
 {% block title %}Administration{% endblock %}
 {% block body_class %}page-administration{% if tab == 'dashboard' %} page-admin-dashboard{% endif %}{% if tab == 'automatic_backup' %} page-admin-backup{% endif %}{% if tab == 'office_logs' %} page-admin-office-logs{% endif %}{% endblock %}
@@ -29,16 +32,17 @@
     </div>
   </div>
 
-  <nav class="admin-tabs">
-    <a href="{{ url_for('administration', tab='dashboard') }}" class="admin-tab {% if tab == 'dashboard' %}active{% endif %}">Dashboard</a>
-    <a href="{% if request_doc_type %}{{ url_for('administration', tab='edit_requests', doc_type=request_doc_type) }}{% else %}{{ url_for('administration', tab='edit_requests') }}{% endif %}" class="admin-tab {% if tab == 'edit_requests' %}active{% endif %}">Edit requests</a>
-    <a href="{% if request_doc_type %}{{ url_for('administration', tab='print_requests', doc_type=request_doc_type) }}{% else %}{{ url_for('administration', tab='print_requests') }}{% endif %}" class="admin-tab {% if tab == 'print_requests' %}active{% endif %}">Print requests{% if pending_print_count %} ({{ pending_print_count }}){% endif %}</a>
-    <a href="{{ url_for('administration', tab='print_logs') }}" class="admin-tab {% if tab == 'print_logs' %}active{% endif %}">Print logs</a>
-    <a href="{{ url_for('administration', tab='audit') }}" class="admin-tab {% if tab == 'audit' %}active{% endif %}">Audit log</a>
-    <a href="{{ url_for('administration', tab='users') }}" class="admin-tab {% if tab == 'users' %}active{% endif %}">Users</a>
+  {% set _ab = admin_tab_badges or {} %}
+  <nav class="admin-tabs" aria-label="Administration sections">
+    <a href="{{ url_for('administration', tab='dashboard') }}" class="admin-tab {% if tab == 'dashboard' %}active{% endif %}">Dashboard{% if _ab.get('dashboard') %}<span class="admin-tab-badge" data-admin-badge="dashboard" title="Pending staff requests">{{ _ab.get('dashboard') }}</span>{% else %}<span class="admin-tab-badge" data-admin-badge="dashboard" hidden>0</span>{% endif %}</a>
+    <a href="{% if request_doc_type %}{{ url_for('administration', tab='edit_requests', doc_type=request_doc_type) }}{% else %}{{ url_for('administration', tab='edit_requests') }}{% endif %}" class="admin-tab {% if tab == 'edit_requests' %}active{% endif %}">Edit requests{% if _ab.get('edit_requests') %}<span class="admin-tab-badge" data-admin-badge="edit_requests" title="Pending edit requests">{{ _ab.get('edit_requests') }}</span>{% else %}<span class="admin-tab-badge" data-admin-badge="edit_requests" hidden>0</span>{% endif %}</a>
+    <a href="{% if request_doc_type %}{{ url_for('administration', tab='print_requests', doc_type=request_doc_type) }}{% else %}{{ url_for('administration', tab='print_requests') }}{% endif %}" class="admin-tab {% if tab == 'print_requests' %}active{% endif %}">Print requests{% if _ab.get('print_requests') %}<span class="admin-tab-badge" data-admin-badge="print_requests" title="Pending print requests">{{ _ab.get('print_requests') }}</span>{% else %}<span class="admin-tab-badge" data-admin-badge="print_requests" hidden>0</span>{% endif %}</a>
+    <a href="{{ url_for('administration', tab='print_logs') }}" class="admin-tab {% if tab == 'print_logs' %}active{% endif %}">Print logs{% if _ab.get('print_logs') %}<span class="admin-tab-badge is-info" data-admin-badge="print_logs" title="New print activity">{{ _ab.get('print_logs') }}</span>{% else %}<span class="admin-tab-badge is-info" data-admin-badge="print_logs" hidden>0</span>{% endif %}</a>
+    <a href="{{ url_for('administration', tab='audit') }}" class="admin-tab {% if tab == 'audit' %}active{% endif %}">Audit log{% if _ab.get('audit') %}<span class="admin-tab-badge is-info" data-admin-badge="audit" title="New staff activity">{{ _ab.get('audit') }}</span>{% else %}<span class="admin-tab-badge is-info" data-admin-badge="audit" hidden>0</span>{% endif %}</a>
+    <a href="{{ url_for('administration', tab='users') }}" class="admin-tab {% if tab == 'users' %}active{% endif %}">Users{% if _ab.get('users') %}<span class="admin-tab-badge is-info" data-admin-badge="users" title="New user accounts">{{ _ab.get('users') }}</span>{% else %}<span class="admin-tab-badge is-info" data-admin-badge="users" hidden>0</span>{% endif %}</a>
     <a href="{{ url_for('civil_registry_reports') }}" class="admin-tab">Reports</a>
-    <a href="{{ url_for('administration', tab='automatic_backup') }}" class="admin-tab {% if tab == 'automatic_backup' %}active{% endif %}">Backup</a>
-    <a href="{{ url_for('administration', tab='office_logs') }}" class="admin-tab {% if tab == 'office_logs' %}active{% endif %}">Office logs</a>
+    <a href="{{ url_for('administration', tab='automatic_backup') }}" class="admin-tab {% if tab == 'automatic_backup' %}active{% endif %}">Backup{% if _ab.get('backup') %}<span class="admin-tab-badge is-warn" data-admin-badge="backup" title="Backup needs attention">!</span>{% else %}<span class="admin-tab-badge is-warn" data-admin-badge="backup" hidden>0</span>{% endif %}</a>
+    <a href="{{ url_for('administration', tab='office_logs') }}" class="admin-tab {% if tab == 'office_logs' %}active{% endif %}">Office logs{% if _ab.get('office_logs') %}<span class="admin-tab-badge is-info" data-admin-badge="office_logs" title="New office activity">{{ _ab.get('office_logs') }}</span>{% else %}<span class="admin-tab-badge is-info" data-admin-badge="office_logs" hidden>0</span>{% endif %}</a>
   </nav>
 
   {% if tab == 'dashboard' %}
@@ -73,12 +77,22 @@
 
       <div class="admin-dash-mid">
         <div class="admin-graph-card admin-card-elevated" id="records-graph"
-             data-birth="{{ birth_count|int }}"
-             data-marriage="{{ marriage_count|int }}"
-             data-death="{{ death_count|int }}">
+             data-birth="{{ _scan_year_counts.get('birth', 0)|int }}"
+             data-marriage="{{ _scan_year_counts.get('marriage', 0)|int }}"
+             data-death="{{ _scan_year_counts.get('death', 0)|int }}">
           <div class="admin-graph-head">
-            <h3 class="admin-graph-title">Records distribution</h3>
-            <p class="admin-graph-subtitle">Birth · Marriage · Death</p>
+            <div>
+              <h3 class="admin-graph-title">Records distribution</h3>
+              <p class="admin-graph-subtitle">Documents scanned · Birth · Marriage · Death</p>
+            </div>
+            <label class="admin-graph-year-label" for="admin-graph-year">Year
+              <select id="admin-graph-year" class="admin-graph-year-select" aria-label="Filter scanned documents by year">
+                {% for y in _scan_years.get('year_list') or [] %}
+                <option value="{{ y }}" {% if y == _scan_default %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+                <option value="all">All years</option>
+              </select>
+            </label>
           </div>
           <div class="admin-graph-grid">
             <div class="donut-wrap">
@@ -115,7 +129,7 @@
           </div>
           <div class="admin-graph-footer-pill">
             <span class="admin-graph-footer-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg></span>
-            Total registered: {{ total_records }}
+            <span id="graph-footer-total">Total scanned ({{ _scan_default }}): {{ (_scan_year_counts.get('birth', 0) + _scan_year_counts.get('marriage', 0) + _scan_year_counts.get('death', 0))|int }}</span>
           </div>
         </div>
 
@@ -124,22 +138,22 @@
           <ul class="admin-breakdown-list">
             <li>
               <span class="admin-bd-main"><span class="admin-bd-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg></span> Birth certificates</span>
-              <span class="admin-bd-num">{{ birth_count }}</span>
+              <span class="admin-bd-num" id="bd-birth">{{ _scan_year_counts.get('birth', 0)|int }}</span>
             </li>
             <li>
               <span class="admin-bd-main"><span class="admin-bd-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7s-3 1.34-3 3 1.34 3 3 3zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9c0-2.21-1.79-4-4-4z"/></svg></span> Marriage certificates</span>
-              <span class="admin-bd-num">{{ marriage_count }}</span>
+              <span class="admin-bd-num" id="bd-marriage">{{ _scan_year_counts.get('marriage', 0)|int }}</span>
             </li>
             <li>
               <span class="admin-bd-main"><span class="admin-bd-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg></span> Death certificates</span>
-              <span class="admin-bd-num">{{ death_count }}</span>
+              <span class="admin-bd-num" id="bd-death">{{ _scan_year_counts.get('death', 0)|int }}</span>
             </li>
             <li class="admin-bd-total">
-              <span class="admin-bd-main">Total records</span>
-              <span class="admin-bd-num">{{ total_records }}</span>
+              <span class="admin-bd-main">Total scanned</span>
+              <span class="admin-bd-num" id="bd-total">{{ (_scan_year_counts.get('birth', 0) + _scan_year_counts.get('marriage', 0) + _scan_year_counts.get('death', 0))|int }}</span>
             </li>
           </ul>
-          <div class="admin-breakdown-footer-pill">Birth {{ birth_count }} - Marriage {{ marriage_count }} - Death {{ death_count }}</div>
+          <div class="admin-breakdown-footer-pill" id="bd-footer">Birth {{ _scan_year_counts.get('birth', 0)|int }} - Marriage {{ _scan_year_counts.get('marriage', 0)|int }} - Death {{ _scan_year_counts.get('death', 0)|int }}</div>
         </div>
       </div>
 
@@ -245,103 +259,10 @@
       })();
     </script>
 
-    <script>
-      (function () {
-        var root = document.getElementById('records-graph');
-        if (!root) return;
-
-        var birth = parseInt(root.dataset.birth || '0', 10) || 0;
-        var marriage = parseInt(root.dataset.marriage || '0', 10) || 0;
-        var death = parseInt(root.dataset.death || '0', 10) || 0;
-        var total = birth + marriage + death;
-
-        var maxV = Math.max(birth, marriage, death, 1);
-        function setBar(idFill, idVal, v) {
-          var fill = document.getElementById(idFill);
-          var val = document.getElementById(idVal);
-          if (val) val.textContent = String(v);
-          if (fill) fill.style.width = Math.round((v / maxV) * 100) + '%';
-        }
-        function setBarsByProgress(progress) {
-          setBar('bar-birth', 'val-birth', Math.round(birth * progress));
-          setBar('bar-marriage', 'val-marriage', Math.round(marriage * progress));
-          setBar('bar-death', 'val-death', Math.round(death * progress));
-        }
-
-        var totalEl = document.getElementById('donut-total');
-        if (totalEl) totalEl.textContent = '0';
-
-        var arcs = document.getElementById('donut-arcs');
-        if (!arcs) return;
-        arcs.innerHTML = '';
-
-        if (total <= 0) {
-          setBarsByProgress(1);
-          return;
-        }
-        var cx = 80, cy = 80, r = 58, sw = 16;
-        var start = -90; // degrees
-        function arcPath(startDeg, sweepDeg) {
-          var endDeg = startDeg + sweepDeg;
-          var toRad = function (d) { return (Math.PI / 180) * d; };
-          var x1 = cx + r * Math.cos(toRad(startDeg));
-          var y1 = cy + r * Math.sin(toRad(startDeg));
-          var x2 = cx + r * Math.cos(toRad(endDeg));
-          var y2 = cy + r * Math.sin(toRad(endDeg));
-          var large = sweepDeg > 180 ? 1 : 0;
-          return 'M ' + x1.toFixed(3) + ' ' + y1.toFixed(3) +
-                 ' A ' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x2.toFixed(3) + ' ' + y2.toFixed(3);
-        }
-        function addArc(value, stroke) {
-          if (value <= 0) return;
-          var sweep = (value / total) * 360;
-          sweep = Math.min(sweep, 359.999);
-          var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          p.setAttribute('d', arcPath(start, sweep));
-          p.setAttribute('fill', 'none');
-          p.setAttribute('stroke', stroke);
-          p.setAttribute('stroke-width', String(sw));
-          p.setAttribute('stroke-linecap', 'round');
-          arcs.appendChild(p);
-          start += sweep;
-        }
-        var duration = 1200;
-        var startAt = null;
-        function easeOutCubic(t) {
-          return 1 - Math.pow(1 - t, 3);
-        }
-        function animate(ts) {
-          if (startAt === null) startAt = ts;
-          var elapsed = ts - startAt;
-          var raw = Math.min(1, elapsed / duration);
-          var p = easeOutCubic(raw);
-
-          arcs.innerHTML = '';
-          /* Donut segments: Birth (green), Marriage (purple), Death (blue) */
-          addArc(birth * p, '#22c55e');
-          addArc(marriage * p, '#9333ea');
-          addArc(death * p, '#2563eb');
-          setBarsByProgress(p);
-          if (totalEl) totalEl.textContent = String(Math.round(total * p));
-
-          if (raw < 1) window.requestAnimationFrame(animate);
-          else {
-            setBarsByProgress(1);
-            if (totalEl) totalEl.textContent = String(total);
-          }
-        }
-
-        // Delay a bit so animation is visible when page opens.
-        window.setTimeout(function () {
-          window.requestAnimationFrame(animate);
-        }, 120);
-      })();
-    </script>
-
   {% elif tab == 'edit_requests' %}
     <div class="admin-section main-card admin-section--table-scroll">
       <h2 class="section-title">Edit requests</h2>
-      <p class="section-desc">Approve or reject staff requests to edit civil records. Approved requests receive a 5-digit code for the staff to complete the edit. {{ log_retention_hint }}</p>
+      <p class="section-desc">Approve or reject staff edit requests. An approved request issues a 5-digit code.</p>
       <form method="get" action="{{ url_for('administration') }}" class="request-doc-type-filter admin-doc-type-filter">
         <input type="hidden" name="tab" value="edit_requests" />
         <label for="admin-document-type-filter">Document type</label>
@@ -359,13 +280,14 @@
               <tr>
                 <th class="col-id" scope="col">ID</th>
                 <th class="col-record" scope="col">Record</th>
-                <th class="col-view" scope="col">View</th>
                 <th class="col-type" scope="col">Type</th>
                 <th class="col-status" scope="col">Status</th>
                 <th class="col-staff" scope="col">Staff</th>
                 <th class="col-requested" scope="col">Requested</th>
                 <th class="col-reason" scope="col">Reason</th>
                 <th class="col-reject" scope="col">Rejection</th>
+                <th class="col-code" scope="col">Code</th>
+                <th class="col-view" scope="col">View</th>
                 <th class="col-actions" scope="col">Actions</th>
               </tr>
             </thead>
@@ -374,13 +296,6 @@
                 <tr>
                   <td class="col-id">{{ req.id }}</td>
                   <td class="col-record">{{ req.record.registry_number or '—' if req.record else '—' }}</td>
-                  <td class="col-view">
-                    {% if req.record %}
-                      <a href="{{ url_for('record_detail', record_id=req.record_id) }}" class="btn btn-secondary btn-sm">Open</a>
-                    {% else %}
-                      —
-                    {% endif %}
-                  </td>
                   <td class="col-type">
                     {% if req.record %}
                       <span class="doc-type-short doc-type-short--{{ req.record.document_type }}">{{ req.record.document_type | capitalize }}</span>
@@ -393,6 +308,21 @@
                   <td class="col-requested">{{ req.requested_at.strftime('%Y-%m-%d %H:%M') if req.requested_at else '—' }}</td>
                   <td class="col-reason cell-reason">{% set text = req.reason %}{% set note_kind = 'reason' %}{% include '_expandable_text.html' %}</td>
                   <td class="col-reject">{% set text = req.rejection_reason %}{% set note_kind = 'rejection' %}{% include '_expandable_text.html' %}</td>
+                  <td class="col-code">
+                    {% if req.status == 'APPROVED' and req.approval_code %}
+                      <strong class="admin-approval-code">{{ req.approval_code }}</strong>
+                      {% if req.code_used_at %}<span class="code-used-chip">Used</span>{% endif %}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td class="col-view">
+                    {% if req.record %}
+                      <a href="{{ url_for('record_detail', record_id=req.record_id) }}" class="btn btn-secondary btn-sm">Open</a>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
                   <td class="col-actions cell-actions">
                     {% if req.status == 'PENDING' %}
                       <div class="request-actions">
@@ -430,7 +360,7 @@
   {% elif tab == 'print_requests' %}
     <div class="admin-section main-card admin-section--table-scroll">
       <h2 class="section-title">Print requests</h2>
-      <p class="section-desc">Approve or reject staff requests to print civil records. Each approved request allows one print; staff must request again for another copy. {{ log_retention_hint }}</p>
+      <p class="section-desc">Approve or reject staff print requests. Each approval is for one print.</p>
       <form method="get" action="{{ url_for('administration') }}" class="request-doc-type-filter admin-doc-type-filter">
         <input type="hidden" name="tab" value="print_requests" />
         <label for="admin-print-doc-type-filter">Document type</label>
@@ -455,6 +385,7 @@
                 <th class="col-requested">Requested</th>
                 <th class="col-reason">Reason</th>
                 <th class="col-reject">Rejection</th>
+                <th class="col-code">Code</th>
                 <th class="col-view">View</th>
                 <th class="col-actions">Actions</th>
               </tr>
@@ -486,6 +417,14 @@
                   <td class="col-requested">{{ req.requested_at.strftime('%Y-%m-%d %H:%M') if req.requested_at else '—' }}</td>
                   <td class="col-reason cell-reason">{% set text = req.reason %}{% set note_kind = 'reason' %}{% include '_expandable_text.html' %}</td>
                   <td class="col-reject">{% set text = req.rejection_reason %}{% set note_kind = 'rejection' %}{% include '_expandable_text.html' %}</td>
+                  <td class="col-code">
+                    {% if req.status == 'APPROVED' and req.approval_code %}
+                      <strong class="admin-approval-code">{{ req.approval_code }}</strong>
+                      {% if req.used_at %}<span class="code-used-chip">Used</span>{% endif %}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
                   <td class="col-view">
                     {% if req.record %}
                       <a href="{{ url_for('record_detail', record_id=req.record_id) }}" class="btn btn-secondary btn-sm">Open</a>
@@ -530,7 +469,7 @@
   {% elif tab == 'print_logs' %}
     <div class="admin-section main-card">
       <h2 class="section-title">Print logs</h2>
-      <p class="section-desc">{{ log_retention_hint }}</p>
+      <p class="section-desc">Who printed, when, and which record.</p>
       {% if print_logs %}
         <div class="table-wrap admin-log-table-wrap">
           <table class="table admin-log-table">
@@ -570,7 +509,7 @@
   {% elif tab == 'audit' %}
     <div class="admin-section main-card">
       <h2 class="section-title">Audit log</h2>
-      <p class="section-desc">{{ log_retention_hint }}</p>
+      <p class="section-desc">Sign-in, edits, and system activity.</p>
       {% if audit_logs %}
         <div class="table-wrap admin-log-table-wrap">
           <table class="table admin-log-table">
@@ -815,4 +754,160 @@
   {% endif %}
 
 </div>
+<script type="application/json" id="scan-year-stats">{{ _scan_years|tojson }}</script>
+<script>
+  (function () {
+    var payload = {};
+    try {
+      payload = JSON.parse(document.getElementById('scan-year-stats').textContent || '{}') || {};
+    } catch (e) {
+      payload = {};
+    }
+    var years = payload.years || {};
+    var allCounts = payload.all || { birth: 0, marriage: 0, death: 0 };
+    var graphSelect = document.getElementById('admin-graph-year');
+    var animToken = 0;
+    var nowYear = String((payload.default_year || new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila', year: 'numeric' })));
+
+    function yearChoices() {
+      var y = parseInt(nowYear, 10) || new Date().getFullYear();
+      var past = [];
+      Object.keys(years).forEach(function (key) {
+        var c = years[key] || {};
+        var total = n(c.birth) + n(c.marriage) + n(c.death);
+        if (total > 0 && parseInt(key, 10) < y) past.push(key);
+      });
+      past.sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
+      var list = past.slice();
+      for (var i = 0; i <= 15; i++) list.push(String(y + i));
+      return list;
+    }
+    function fillYearSelect(select, selected) {
+      if (!select) return;
+      var current = selected || select.value || nowYear;
+      select.innerHTML = '';
+      yearChoices().forEach(function (y) {
+        var opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        if (String(y) === String(current)) opt.selected = true;
+        select.appendChild(opt);
+      });
+      var all = document.createElement('option');
+      all.value = 'all';
+      all.textContent = 'All years';
+      if (current === 'all') all.selected = true;
+      select.appendChild(all);
+    }
+
+    function countsFor(year) {
+      if (!year || year === 'all') return allCounts;
+      return years[year] || { birth: 0, marriage: 0, death: 0 };
+    }
+    function n(v) { return parseInt(v, 10) || 0; }
+    function paintGraph(birth, marriage, death, animate) {
+      var root = document.getElementById('records-graph');
+      if (!root) return;
+      birth = n(birth); marriage = n(marriage); death = n(death);
+      var total = birth + marriage + death;
+      var maxV = Math.max(birth, marriage, death, 1);
+      function setBar(idFill, idVal, v) {
+        var fill = document.getElementById(idFill);
+        var val = document.getElementById(idVal);
+        if (val) val.textContent = String(v);
+        if (fill) fill.style.width = Math.round((v / maxV) * 100) + '%';
+      }
+      var totalEl = document.getElementById('donut-total');
+      var arcs = document.getElementById('donut-arcs');
+      if (!arcs) return;
+      var cx = 80, cy = 80, r = 58, sw = 16;
+      function arcPath(startDeg, sweepDeg) {
+        var endDeg = startDeg + sweepDeg;
+        var toRad = function (d) { return (Math.PI / 180) * d; };
+        var x1 = cx + r * Math.cos(toRad(startDeg));
+        var y1 = cy + r * Math.sin(toRad(startDeg));
+        var x2 = cx + r * Math.cos(toRad(endDeg));
+        var y2 = cy + r * Math.sin(toRad(endDeg));
+        var large = sweepDeg > 180 ? 1 : 0;
+        return 'M ' + x1.toFixed(3) + ' ' + y1.toFixed(3) +
+               ' A ' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x2.toFixed(3) + ' ' + y2.toFixed(3);
+      }
+      function draw(progress) {
+        var p = progress;
+        var b = Math.round(birth * p);
+        var m = Math.round(marriage * p);
+        var dth = Math.round(death * p);
+        var t = b + m + dth;
+        setBar('bar-birth', 'val-birth', b);
+        setBar('bar-marriage', 'val-marriage', m);
+        setBar('bar-death', 'val-death', dth);
+        if (totalEl) totalEl.textContent = String(t);
+        arcs.innerHTML = '';
+        if (total <= 0) return;
+        var start = -90;
+        function addArc(value, stroke) {
+          if (value <= 0) return;
+          var sweep = (value / total) * 360 * p;
+          sweep = Math.min(sweep, 359.999);
+          var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', arcPath(start, sweep));
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', stroke);
+          path.setAttribute('stroke-width', String(sw));
+          path.setAttribute('stroke-linecap', 'round');
+          arcs.appendChild(path);
+          start += sweep;
+        }
+        addArc(birth, '#22c55e');
+        addArc(marriage, '#9333ea');
+        addArc(death, '#2563eb');
+      }
+      var token = ++animToken;
+      if (!animate || total <= 0) {
+        draw(1);
+        return;
+      }
+      var duration = 700;
+      var startAt = null;
+      function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+      function step(ts) {
+        if (token !== animToken) return;
+        if (startAt === null) startAt = ts;
+        var raw = Math.min(1, (ts - startAt) / duration);
+        draw(easeOutCubic(raw));
+        if (raw < 1) window.requestAnimationFrame(step);
+      }
+      window.requestAnimationFrame(step);
+    }
+    function applyYear(year, animate) {
+      var c = countsFor(year);
+      var birth = n(c.birth);
+      var marriage = n(c.marriage);
+      var death = n(c.death);
+      var total = birth + marriage + death;
+      var label = year === 'all' ? 'all years' : String(year);
+      var footer = document.getElementById('graph-footer-total');
+      if (footer) footer.textContent = 'Total scanned (' + label + '): ' + total;
+      var bdB = document.getElementById('bd-birth');
+      var bdM = document.getElementById('bd-marriage');
+      var bdD = document.getElementById('bd-death');
+      var bdT = document.getElementById('bd-total');
+      var bdF = document.getElementById('bd-footer');
+      if (bdB) bdB.textContent = String(birth);
+      if (bdM) bdM.textContent = String(marriage);
+      if (bdD) bdD.textContent = String(death);
+      if (bdT) bdT.textContent = String(total);
+      if (bdF) bdF.textContent = 'Birth ' + birth + ' - Marriage ' + marriage + ' - Death ' + death;
+      paintGraph(birth, marriage, death, animate);
+      if (graphSelect && graphSelect.value !== year) graphSelect.value = year;
+    }
+    function onChange(ev) {
+      applyYear(ev.target.value, true);
+    }
+    var initial = payload.default_year || nowYear;
+    fillYearSelect(graphSelect, initial);
+    if (graphSelect) graphSelect.addEventListener('change', onChange);
+    applyYear((graphSelect && graphSelect.value) || initial, true);
+  })();
+</script>
 {% endblock %}

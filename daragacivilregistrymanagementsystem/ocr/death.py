@@ -7,6 +7,7 @@ import cv2
 from ocr.shared import run_ocr_on_image
 from ocr.engine import extract_from_ocr_text, ocr_pages_to_text
 from ocr.field_boxes import extract_field_boxes, is_plausible_cause_of_death
+from ocr.person_name import compose_first_middle_last
 from ocr.sex import sex_from_ocr_text, sex_from_tokens
 
 DEBUG_TEMPLATE_MATCH = False
@@ -499,7 +500,7 @@ def _extract_name(items, img_w, img_h):
         if not kept:
             continue
 
-        text = _join_tokens(kept)
+        text = compose_first_middle_last(kept, xmin, xmax) or _join_tokens(kept)
         letters = _alpha_count(text)
         avg_score = sum(x["score"] for x in kept) / len(kept)
 
@@ -558,7 +559,7 @@ def _extract_name_of_mother(items, img_w, img_h) -> str:
             ymax = min(ymax, father_label["y1"] - 4)
 
         region = _tokens_in_region(items, xmin, xmax, ymin, ymax, min_score=0.25)
-        text = _choose_best_row(
+        text = compose_first_middle_last(region, xmin, xmax) or _choose_best_row(
             region,
             banned_words=banned,
             prefer_y=mother_label["cy"] + 10,

@@ -16,16 +16,27 @@ set "PG_BIN=%USERPROFILE%\scoop\apps\postgresql\current\bin"
 set "PG_DATA=%USERPROFILE%\scoop\apps\postgresql\current\data"
 set "PATH=%PG_BIN%;%PATH%"
 
-if exist "%PG_BIN%\pg_ctl.exe" (
-    "%PG_BIN%\pg_ctl.exe" -D "%PG_DATA%" status >nul 2>&1
-    if errorlevel 1 (
-        echo Starting PostgreSQL...
-        "%PG_BIN%\pg_ctl.exe" -D "%PG_DATA%" -l "%PG_DATA%\logfile" start
-        timeout /t 3 /nobreak >nul
-    ) else (
-        echo PostgreSQL is already running.
+if exist "%PG_BIN%\pg_isready.exe" "%PG_BIN%\pg_isready.exe" -h 127.0.0.1 -p 5432 >nul 2>&1
+if errorlevel 1 (
+    echo Starting PostgreSQL...
+    if exist "%PG_DATA%\postmaster.pid" (
+        "%PG_BIN%\pg_ctl.exe" -D "%PG_DATA%" -m fast -t 5 stop >nul 2>&1
+        timeout /t 2 /nobreak >nul
+        if exist "%PG_DATA%\postmaster.pid" del /f /q "%PG_DATA%\postmaster.pid" >nul 2>&1
     )
+    start "" /b "%PG_BIN%\pg_ctl.exe" -D "%PG_DATA%" -l "%TEMP%\daraga-postgres.log" start >nul 2>&1
+    set /a _w=0
+    :wait_root_pg
+    "%PG_BIN%\pg_isready.exe" -h 127.0.0.1 -p 5432 >nul 2>&1
+    if not errorlevel 1 goto pg_root_ready
+    set /a _w+=1
+    if %_w% GEQ 20 goto pg_root_ready
+    timeout /t 2 /nobreak >nul
+    goto wait_root_pg
+) else (
+    echo PostgreSQL is already running.
 )
+:pg_root_ready
 
 netstat -ano | findstr ":5001" | findstr "LISTENING" >nul
 if not errorlevel 1 (

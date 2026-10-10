@@ -18,6 +18,8 @@ os.environ.setdefault("MKL_NUM_THREADS", _ocr_threads)
 os.environ.setdefault("OPENBLAS_NUM_THREADS", _ocr_threads)
 os.environ.setdefault("NUMEXPR_NUM_THREADS", _ocr_threads)
 os.environ.setdefault("FLAGS_omp_num_threads", _ocr_threads)
+os.environ.setdefault("FLAGS_use_mkldnn", "1")
+os.environ.setdefault("FLAGS_enable_pir_in_executor", "0")
 
 import cv2
 import numpy as np
@@ -115,21 +117,33 @@ def get_ocr():
         use_doc_unwarping=False,
         text_det_limit_side_len=_OCR_MAX_SIDE,
         text_det_limit_type="max",
-        text_recognition_batch_size=32,
+        text_recognition_batch_size=48,
         cpu_threads=cpu_threads,
         enable_mkldnn=True,
+        show_log=False,
     )
+    try:
+        import paddle
+
+        if paddle.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0:
+            ocr_kwargs["device"] = "gpu:0"
+    except Exception:
+        pass
     try:
         with _quiet_stdio():
             try:
                 _OCR_INSTANCE = PaddleOCR(**ocr_kwargs)
             except (TypeError, ValueError):
                 ocr_kwargs.pop("enable_mkldnn", None)
+                ocr_kwargs.pop("show_log", None)
+                ocr_kwargs.pop("device", None)
                 try:
                     _OCR_INSTANCE = PaddleOCR(**ocr_kwargs)
                 except (TypeError, ValueError):
                     ocr_kwargs.pop("cpu_threads", None)
                     ocr_kwargs.pop("ocr_version", None)
+                    ocr_kwargs.pop("show_log", None)
+                    ocr_kwargs.pop("device", None)
                     try:
                         _OCR_INSTANCE = PaddleOCR(**ocr_kwargs)
                     except TypeError:
@@ -221,11 +235,10 @@ def run_ocr_on_image(img, max_side=None):
     ocr_img, scale = _resize_for_ocr(img, max_side=max_side)
     with _OCR_LOCK:
         ocr = get_ocr()
-        with _quiet_stdio():
-            if hasattr(ocr, "predict"):
-                raw = ocr.predict(ocr_img)
-            else:
-                raw = ocr.ocr(ocr_img, cls=False)
+        if hasattr(ocr, "predict"):
+            raw = ocr.predict(ocr_img)
+        else:
+            raw = ocr.ocr(ocr_img, cls=False)
         if hasattr(ocr, "predict"):
             pages = _normalize_ocr_pages(raw)
             return _scale_pages_to_original(pages, scale)

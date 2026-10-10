@@ -40,6 +40,10 @@ body {
   max-width: min(1180px, 100%) !important;
 }
 
+body.page-administration .main {
+  max-width: none !important;
+}
+
 body.page-registry-reports .main,
 body.page-registry-reports.reg-focus .main {
   max-width: none !important;
@@ -51,6 +55,12 @@ img,
 video,
 canvas,
 svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.document-viewer-image,
+.scan-preview-viewer-inner .document-viewer-image {
   max-width: 100%;
   height: auto;
 }

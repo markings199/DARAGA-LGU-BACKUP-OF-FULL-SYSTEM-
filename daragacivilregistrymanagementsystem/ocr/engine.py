@@ -86,9 +86,10 @@ def _squash_alpha(s: str) -> str:
     return re.sub(r"[^A-Z0-9]+", "", (s or "").upper())
 
 
-def detect_document_type_detail(ocr_text: str) -> Dict[str, Any]:
+def detect_document_type_detail(ocr_text: str, header_only: bool = False) -> Dict[str, Any]:
     """
     Identify a PSA civil-registry certificate from OCR text.
+    The printed type name is at the top: Certificate of Live Birth / Marriage / Death.
     Returns doc_type (birth|marriage|death|None), confidence, reason, label.
     """
     empty = {
@@ -110,16 +111,18 @@ def detect_document_type_detail(ocr_text: str) -> Dict[str, Any]:
             "label": document_type_label(doc_type),
         }
 
-    if "CERTIFICATEOFLIVEBIRTH" in squash or "LIVEBIRTH" in squash:
+    if "CERTIFICATEOFLIVEBIRTH" in squash or "LIVEBIRTH" in squash or "LIVEB1RTH" in squash:
         return _hit("birth", "high", "Certificate of Live Birth")
-    if "CERTIFICATEOFDEATH" in squash:
+    if "CERTIFICATEOFDEATH" in squash or "OFDEATH" in squash or "OFDEA1H" in squash:
         return _hit("death", "high", "Certificate of Death")
-    if "CERTIFICATEOFMARRIAGE" in squash:
+    if "CERTIFICATEOFMARRIAGE" in squash or "OFMARRIAGE" in squash or "OFMARRLAGE" in squash:
         return _hit("marriage", "high", "Certificate of Marriage")
     if "CERTIF" in squash and "MARRIAG" in squash and "LIVEBIRTH" not in squash:
         return _hit("marriage", "high", "Marriage certificate heading")
     if "CERTIF" in squash and "DEATH" in squash and "LIVEBIRTH" not in squash and "MARRIAG" not in squash:
         return _hit("death", "high", "Death certificate heading")
+    if "CERTIF" in squash and "LIVE" in squash and "BIRTH" in t:
+        return _hit("birth", "high", "Certificate of Live Birth")
 
     if _FORM_BIRTH.search(t) or "FORMNO102" in squash or "MUNICIPALFORMNO102" in squash:
         return _hit("birth", "high", "Municipal Form No. 102")
@@ -127,6 +130,16 @@ def detect_document_type_detail(ocr_text: str) -> Dict[str, Any]:
         return _hit("death", "high", "Municipal Form No. 103")
     if _FORM_MARRIAGE.search(t) or "FORMNO97" in squash or "MUNICIPALFORMNO97" in squash:
         return _hit("marriage", "high", "Municipal Form No. 97")
+
+    if "CONTRACTINGPART" in squash or "PLACEOFMARRIAGE" in squash or "DATEOFMARRIAGE" in squash:
+        return _hit("marriage", "high", "Marriage certificate heading")
+    if "TYPEOFBIRTH" in squash or "WEIGHTATBIRTH" in squash or "NAMEOFCHILD" in squash:
+        return _hit("birth", "high", "Birth certificate heading")
+    if "DATEOFDEATH" in squash or "CAUSESOFDEATH" in squash or "NAMEOFDECEASED" in squash:
+        return _hit("death", "high", "Death certificate heading")
+
+    if header_only:
+        return empty
 
     if "CAUSEOFDEATH" in squash:
         return _hit("death", "high", "Cause of Death")

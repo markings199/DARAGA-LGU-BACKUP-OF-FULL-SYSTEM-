@@ -124,6 +124,10 @@
     xhr.setRequestHeader("X-Daraga-Restore", "1");
     xhr.setRequestHeader("Accept", "application/json");
     xhr.responseType = "text";
+    xhr.timeout = 8 * 60 * 1000;
+    xhr.ontimeout = function () {
+      fail("Full rebuild took too long. Close this, restart Start.bat, then try the same zip again.");
+    };
     xhr.upload.onprogress = function (event) {
       if (!event.lengthComputable) return;
       var pct = (event.loaded / event.total) * 88;

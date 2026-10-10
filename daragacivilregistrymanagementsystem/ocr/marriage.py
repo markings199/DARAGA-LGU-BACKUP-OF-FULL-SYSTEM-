@@ -1260,7 +1260,9 @@ def extract_parent_pair(items, label, working_xmax, split_x, stop_label=None):
         label["y1"] - 8, ymax, min_score=0.16
     )
     left, right = split_left_right(tokens, split_x, label["x2"])
-    return normalize_name(left), normalize_name(right)
+    husband_parent = _name_tokens_to_full(left, label["x2"], split_x) or normalize_name(left)
+    wife_parent = _name_tokens_to_full(right, split_x, working_xmax) or normalize_name(right)
+    return husband_parent, wife_parent
 
 
 def resolve_duplicate_parents(items, father_label, mother_label, working_xmax, split_x, h_f, h_m, w_f, w_m):
@@ -1797,8 +1799,7 @@ def extract_marriage_data(img_path: str) -> Dict[str, Any]:
             incoming = collapse_repeated_name(sanitize_person_name(v))
             if not incoming:
                 continue
-            # Husband: prefer First→Middle→Last box compose over scrambled layout order.
-            if k == "Husband Name" and len(incoming.split()) >= 2:
+            if len(incoming.split()) >= 2:
                 out[k] = incoming
                 continue
             out[k] = collapse_repeated_name(

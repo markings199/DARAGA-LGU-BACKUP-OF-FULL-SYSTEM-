@@ -83,7 +83,7 @@
           <a href="#record-print-section" class="btn btn-primary">Print document</a>
         {% endif %}
         {% if _role == 'STAFF' %}
-          {% if not can_print %}
+          {% if not can_print and not print_unlock_req %}
             <a href="{{ url_for('request_print', record_id=record.id) }}" class="btn btn-primary">Request print</a>
           {% endif %}
           <a href="{{ url_for('request_edit', record_id=record.id) }}" class="btn btn-secondary">Request edit</a>
@@ -98,15 +98,50 @@
         </div>
       {% endif %}
 
-      {% if current_user and (current_user.role or '')|upper == 'STAFF' and my_requests %}
-        <div class="rd-code-card">
+      {% if current_user and (current_user.role or '')|upper == 'STAFF' and print_unlock_req and not can_print %}
+        <div class="rd-code-card" id="staff-print-code">
           <div class="rd-code-card-copy">
-            <h3 class="rd-code-card-title">Use approval code</h3>
-            <p class="rd-code-card-hint">Enter the 5-digit code from an approved edit request to open this record for correction.</p>
+            <h3 class="rd-code-card-title">Print code</h3>
+            <p class="rd-code-card-hint">Enter below.</p>
+            <p class="rd-code-reveal">
+              <span class="rd-code-reveal-label">Admin code</span>
+              <strong class="rd-code-reveal-digits approval-code-display">{{ print_unlock_req.approval_code }}</strong>
+            </p>
+          </div>
+          <form method="post" action="{{ url_for('record_verify_print_code', record_id=record.id) }}" class="rd-code-form">
+            <label class="rd-code-label" for="print_approval_code_{{ print_unlock_req.id }}">Type print code</label>
+            <div class="rd-code-row">
+              <input
+                id="print_approval_code_{{ print_unlock_req.id }}"
+                type="text"
+                name="approval_code"
+                placeholder="00000"
+                maxlength="5"
+                pattern="[0-9]{5}"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                required
+                class="rd-code-input"
+              />
+              <button type="submit" class="btn btn-primary btn-sm">Use code &amp; print</button>
+            </div>
+          </form>
+        </div>
+      {% endif %}
+
+      {% if current_user and (current_user.role or '')|upper == 'STAFF' and my_requests %}
+        <div class="rd-code-card" id="staff-edit-code">
+          <div class="rd-code-card-copy">
+            <h3 class="rd-code-card-title">Edit code</h3>
+            <p class="rd-code-card-hint">Enter below.</p>
           </div>
           {% for req in my_requests %}
+            <p class="rd-code-reveal">
+              <span class="rd-code-reveal-label">Admin code</span>
+              <strong class="rd-code-reveal-digits approval-code-display">{{ req.approval_code }}</strong>
+            </p>
             <form method="post" action="{{ url_for('record_verify_code', record_id=record.id) }}" class="rd-code-form">
-              <label class="rd-code-label" for="approval_code_{{ req.id }}">Approval code</label>
+              <label class="rd-code-label" for="approval_code_{{ req.id }}">Type edit code</label>
               <div class="rd-code-row">
                 <input
                   id="approval_code_{{ req.id }}"
@@ -117,6 +152,7 @@
                   pattern="[0-9]{5}"
                   inputmode="numeric"
                   autocomplete="one-time-code"
+                  required
                   class="rd-code-input"
                 />
                 <button type="submit" class="btn btn-primary btn-sm">Use code &amp; edit</button>

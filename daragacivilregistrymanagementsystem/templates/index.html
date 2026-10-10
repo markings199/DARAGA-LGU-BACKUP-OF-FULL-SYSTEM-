@@ -335,6 +335,10 @@
     align-items: center;
     margin-top: 6px;
   }
+  #scan-from-device[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
   .btn-scanflow-ghost {
     display: inline-flex;
     align-items: center;
@@ -650,28 +654,35 @@
   }
   .scanflow-preview-head-ic svg { width: 13px; height: 13px; fill: currentColor; }
   .scanflow-preview-shell {
+    position: relative;
     border: 1px dashed #94a3b8;
     border-radius: 8px;
     padding: 8px;
     background: #ffffff;
     box-shadow: none;
     min-height: 140px;
+    overflow: visible;
   }
   #scan-preview-viewer-wrap {
     position: relative;
+    z-index: 1;
   }
   .ocr-doc-scan {
     display: none;
     position: absolute;
-    inset: 0;
-    z-index: 3;
+    inset: 8px;
+    z-index: 12;
     overflow: hidden;
     border-radius: 8px;
     pointer-events: none;
   }
-  body.page-scan-workflow.ocr-busy #scan-preview-viewer-wrap:not([hidden]) .ocr-doc-scan {
+  body.page-scan-workflow.ocr-busy .ocr-doc-scan,
+  body.page-scan-workflow.is-device-scanning .ocr-doc-scan {
     display: block;
     animation: ocr-doc-scan-enter 0.4s ease-out;
+  }
+  #scan-preview-viewer-wrap:not([hidden]) ~ .ocr-doc-scan {
+    top: 54px;
   }
   .ocr-doc-scan-veil {
     position: absolute;
@@ -690,9 +701,13 @@
     animation: ocr-doc-scan-grid 6s linear infinite;
   }
   .ocr-doc-scan-fields { display: none; }
+  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-header {
+    position: relative;
+    z-index: 13;
+  }
   body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-pane {
     position: relative;
-    z-index: 4;
+    z-index: 1;
   }
   body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-image-wrap {
     position: relative;
@@ -702,151 +717,13 @@
     display: block;
     vertical-align: top;
   }
-  .ocr-doc-targets {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 6;
-    pointer-events: none;
-    overflow: hidden;
-  }
-  .ocr-doc-target-beam {
-    position: absolute;
-    left: -2%;
-    right: -2%;
-    top: 0;
-    height: 11%;
-    z-index: 1;
-    background: linear-gradient(
-      180deg,
-      transparent 0%,
-      rgba(56, 189, 248, 0.08) 40%,
-      rgba(186, 230, 253, 0.55) 50%,
-      rgba(52, 211, 153, 0.35) 54%,
-      transparent 100%
-    );
-    box-shadow: 0 0 16px rgba(34, 211, 238, 0.28);
-    animation: ocr-doc-scan-move 2.8s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
-  }
-  .ocr-doc-targets[hidden] { display: none !important; }
-  .ocr-doc-target {
-    position: absolute;
-    box-sizing: border-box;
-    border: 1px solid rgba(186, 230, 253, 0.28);
-    background: rgba(14, 165, 233, 0.05);
-    border-radius: 4px;
-    opacity: 0;
-    transform: scale(0.98);
-    animation: ocr-doc-target-in 0.45s ease-out forwards;
-  }
-  .ocr-doc-target::before,
-  .ocr-doc-target::after {
-    content: "";
-    position: absolute;
-    pointer-events: none;
-  }
-  .ocr-doc-target::before {
-    inset: -1px;
-    border-radius: 4px;
-    box-shadow:
-      inset 6px 0 0 -4px rgba(125, 211, 252, 0.0),
-      inset -6px 0 0 -4px rgba(125, 211, 252, 0.0);
-  }
-  .ocr-doc-target.is-upcoming {
-    opacity: 0.42;
-    transform: none;
-  }
-  .ocr-doc-target.is-done {
-    opacity: 0.9;
-    transform: none;
-    border-color: rgba(74, 222, 128, 0.78);
-    background: rgba(16, 185, 129, 0.14);
-    box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.18);
-  }
-  .ocr-doc-target.is-done::after {
-    content: "";
-    top: 3px;
-    right: 4px;
-    width: 7px;
-    height: 4px;
-    border-left: 1.5px solid #bbf7d0;
-    border-bottom: 1.5px solid #bbf7d0;
-    transform: rotate(-45deg);
-    opacity: 0.95;
-  }
-  .ocr-doc-target.is-active {
-    opacity: 1;
-    z-index: 3;
-    transform: none;
-    border-color: #7dd3fc;
-    background: linear-gradient(180deg, rgba(34, 211, 238, 0.2), rgba(56, 189, 248, 0.1));
-    box-shadow:
-      0 0 0 1px rgba(165, 243, 252, 0.55),
-      0 0 18px rgba(34, 211, 238, 0.42),
-      inset 0 0 12px rgba(125, 211, 252, 0.12);
-    animation: ocr-doc-target-pulse 1.2s ease-in-out infinite;
-  }
-  .ocr-doc-target.is-active .ocr-doc-target-sweep {
-    position: absolute;
-    left: 6%;
-    right: 6%;
-    top: 0;
-    height: 45%;
-    background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.55), transparent);
-    animation: ocr-doc-target-sweep 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  }
+  .ocr-doc-targets,
+  .ocr-doc-target,
+  .ocr-doc-target-beam,
+  .ocr-doc-target-sweep,
   .ocr-doc-target-tag {
-    display: none;
-    position: absolute;
-    left: 0;
-    top: 0;
-    transform: translateY(calc(-100% - 4px));
-    max-width: min(100%, 240px);
-    padding: 3px 7px;
-    border-radius: 5px;
-    background: rgba(8, 17, 34, 0.92);
-    color: #f0f9ff;
-    font-size: 0.64rem;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border: 1px solid rgba(125, 211, 252, 0.5);
-    box-shadow: 0 6px 16px rgba(2, 8, 23, 0.35);
-  }
-  .ocr-doc-target.is-active .ocr-doc-target-tag {
-    display: block;
-    animation: ocr-doc-tag-in 0.28s ease-out;
-  }
-  @keyframes ocr-doc-target-in {
-    to { opacity: 0.38; transform: scale(1); }
-  }
-  @keyframes ocr-doc-target-pulse {
-    0%, 100% { box-shadow: 0 0 0 1px rgba(165, 243, 252, 0.4), 0 0 12px rgba(34, 211, 238, 0.28); }
-    50% { box-shadow: 0 0 0 2px rgba(186, 230, 253, 0.85), 0 0 22px rgba(34, 211, 238, 0.55); }
-  }
-  @keyframes ocr-doc-target-sweep {
-    0% { transform: translateY(-40%); opacity: 0; }
-    18% { opacity: 1; }
-    100% { transform: translateY(160%); opacity: 0; }
-  }
-  @keyframes ocr-doc-tag-in {
-    from { opacity: 0; transform: translateY(calc(-100% + 4px)); }
-    to { opacity: 1; transform: translateY(calc(-100% - 4px)); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .ocr-doc-target,
-    .ocr-doc-target.is-active,
-    .ocr-doc-target.is-active .ocr-doc-target-sweep,
-    .ocr-doc-target.is-active .ocr-doc-target-tag,
-    .ocr-doc-target-beam {
-      animation: none;
-    }
-    .ocr-doc-target { opacity: 0.4; transform: none; }
-    .ocr-doc-target.is-active { opacity: 1; }
+    display: none !important;
+    animation: none !important;
   }
   .ocr-doc-scan-mover {
     position: absolute;
@@ -874,30 +751,31 @@
     left: 0;
     right: 0;
     top: 50%;
-    height: 56px;
-    margin-top: -28px;
+    height: 72px;
+    margin-top: -36px;
     background: linear-gradient(
       180deg,
       transparent 0%,
-      rgba(56, 189, 248, 0.1) 40%,
-      rgba(186, 230, 253, 0.45) 49%,
-      rgba(52, 211, 153, 0.55) 51%,
-      rgba(56, 189, 248, 0.1) 60%,
+      rgba(37, 99, 235, 0.18) 38%,
+      rgba(56, 189, 248, 0.55) 48%,
+      rgba(255, 255, 255, 0.92) 50%,
+      rgba(34, 211, 238, 0.55) 52%,
+      rgba(37, 99, 235, 0.18) 62%,
       transparent 100%
     );
   }
   .ocr-doc-scan-core {
     position: absolute;
-    left: 6%;
-    right: 6%;
+    left: 4%;
+    right: 4%;
     top: 50%;
-    height: 2px;
-    margin-top: -1px;
+    height: 3px;
+    margin-top: -1.5px;
     border-radius: 999px;
-    background: linear-gradient(90deg, transparent 0%, #fff 12%, #a5f3fc 50%, #86efac 88%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, #fff 10%, #38bdf8 50%, #4ade80 90%, transparent 100%);
     box-shadow:
-      0 0 8px 1px rgba(125, 211, 252, 0.9),
-      0 0 22px 5px rgba(34, 211, 238, 0.4);
+      0 0 10px 2px rgba(56, 189, 248, 0.95),
+      0 0 28px 8px rgba(37, 99, 235, 0.45);
     animation: ocr-doc-scan-core 1.1s ease-in-out infinite;
   }
   .ocr-doc-scan-corner {
@@ -1071,7 +949,6 @@
     background: #ffffff;
     border-color: #e2e8f0;
     padding: 0;
-    /* Full-width certificate; pane grows so the whole page stays visible (no side gaps). */
     height: auto;
     min-height: 0;
     max-height: none;
@@ -1099,9 +976,9 @@
   }
   body.page-scan-workflow .main::-webkit-scrollbar,
   body.page-scan-workflow .document-viewer-pane::-webkit-scrollbar {
-    width: 7px;
-    height: 7px;
-    display: block;
+    width: 8px;
+    height: 8px;
+    display: block !important;
   }
   body.page-scan-workflow .main::-webkit-scrollbar-track,
   body.page-scan-workflow .document-viewer-pane::-webkit-scrollbar-track {
@@ -1422,6 +1299,106 @@
       margin-left: 0;
     }
   }
+  .scanflow-source {
+    margin: 0 0 12px;
+  }
+  .scanflow-source-heading {
+    margin: 0 0 6px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #0f2b5c;
+  }
+  .scanflow-source-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .scanflow-source-card {
+    position: relative;
+    margin: 0;
+    cursor: pointer;
+  }
+  .scanflow-source-card input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    margin: 0;
+  }
+  .scanflow-source-card-inner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+    padding: 8px 10px;
+    border: 1px solid #d7e2ef;
+    border-radius: 10px;
+    background: #f8fafc;
+  }
+  .scanflow-source-card:hover .scanflow-source-card-inner {
+    border-color: #9fb6d4;
+    background: #fbfdff;
+  }
+  .scanflow-source-card input:focus-visible + .scanflow-source-card-inner {
+    box-shadow: 0 0 0 3px rgba(0, 32, 128, 0.16);
+  }
+  .scanflow-source-card input:checked + .scanflow-source-card-inner {
+    border-color: #002080;
+    background: linear-gradient(180deg, #f4f7ff 0%, #eef4ff 100%);
+    box-shadow: 0 0 0 1px #002080;
+  }
+  .scanflow-source-ic {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #eef2f8;
+    color: #1f3f73;
+  }
+  .scanflow-source-ic svg {
+    width: 16px;
+    height: 16px;
+  }
+  .scanflow-source-card input:checked + .scanflow-source-card-inner .scanflow-source-ic {
+    background: #002080;
+    color: #fff;
+  }
+  .scanflow-source-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .scanflow-source-title {
+    font-size: 0.84rem;
+    font-weight: 800;
+    color: #0f2b5c;
+    line-height: 1.2;
+  }
+  .scanflow-source-desc {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    line-height: 1.3;
+  }
+  body.page-scan-workflow:not(.scan-source-scanner) .scanflow-row-scanner,
+  body.page-scan-workflow:not(.scan-source-scanner) .scanflow-row-scans {
+    display: none !important;
+  }
+  body.page-scan-workflow.scan-source-scanner .scanflow-row-upload {
+    display: none !important;
+  }
+  @media (max-width: 760px) {
+    .scanflow-source-options {
+      grid-template-columns: 1fr;
+    }
+  }
+
   @media (max-height: 900px) {
     body.page-scan-workflow .scanflow-hero-wrap {
       margin-bottom: 8px;
@@ -1461,9 +1438,9 @@
           <h1 class="scanflow-hero-title">Scan workflow</h1>
           <p class="scanflow-hero-tagline">
             {% if current_user and (current_user.role or '')|upper == 'ADMIN' %}
-              Administrator — scan or upload a document, then run OCR.
+              Administrator — choose Upload image or Scanner device, then run OCR.
             {% else %}
-              Scan or upload a civil registry document, then run OCR.
+              Choose Upload image or Scanner device, then run OCR.
             {% endif %}
           </p>
         </div>
@@ -1505,11 +1482,40 @@
       </div>
       <div class="scanflow-card-head-copy">
         <h2>Scan to archive</h2>
-        <p class="scanflow-card-sub">Scan or upload the certificate. Document type is identified automatically.</p>
+        <p class="scanflow-card-sub">Select one capture source. Document type is identified automatically.</p>
       </div>
     </div>
     <form method="post" action="{{ url_for('index') }}" enctype="multipart/form-data" id="scan-form">
       <div class="scanflow-form-body">
+      <div class="scanflow-source" role="radiogroup" aria-label="Capture source">
+        <p class="scanflow-source-heading">Capture source</p>
+        <div class="scanflow-source-options">
+          <label class="scanflow-source-card">
+            <input type="radio" name="scan_source" value="upload" id="scan-source-upload" />
+            <span class="scanflow-source-card-inner">
+              <span class="scanflow-source-ic" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+              </span>
+              <span class="scanflow-source-copy">
+                <span class="scanflow-source-title">Upload image</span>
+                <span class="scanflow-source-desc">Use a saved JPG or PNG file</span>
+              </span>
+            </span>
+          </label>
+          <label class="scanflow-source-card">
+            <input type="radio" name="scan_source" value="scanner" id="scan-source-scanner" />
+            <span class="scanflow-source-card-inner">
+              <span class="scanflow-source-ic" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 21h10"/></svg>
+              </span>
+              <span class="scanflow-source-copy">
+                <span class="scanflow-source-title">Scanner device</span>
+                <span class="scanflow-source-desc">Detect the office scanner, then scan</span>
+              </span>
+            </span>
+          </label>
+        </div>
+      </div>
       <div class="scanflow-form-grid">
       <div class="scanflow-field-row">
         <div class="scanflow-field-label-col">
@@ -1535,7 +1541,7 @@
         </div>
       </div>
 
-      <div class="scanflow-field-row">
+      <div class="scanflow-field-row scanflow-row-scans">
         <div class="scanflow-field-label-col">
           <svg class="scanflow-field-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 012-2h10"/></svg>
           <label for="num_scans">Number of scans</label>
@@ -1549,7 +1555,7 @@
       </div>
       </div>
 
-      <div class="scanflow-field-row">
+      <div class="scanflow-field-row scanflow-row-scanner">
         <div class="scanflow-field-label-col">
           <svg class="scanflow-field-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 21h10"/><path d="M7 13h.01"/></svg>
           <label for="scanner-device-select">Scanner / device</label>
@@ -1563,7 +1569,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
               Detect scanner
             </button>
-            <button type="button" class="btn-scanflow-ghost" id="scan-from-device"{% if active_ocr %} disabled{% endif %}>
+            <button type="button" class="btn-scanflow-ghost" id="scan-from-device" disabled title="Detect a scanner first">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 21h10"/></svg>
               <span class="scan-from-label">Scan from printer</span>
             </button>
@@ -1582,10 +1588,10 @@
         </div>
       </div>
 
-      <div class="scanflow-field-row">
+      <div class="scanflow-field-row scanflow-row-upload">
         <div class="scanflow-field-label-col">
           <svg class="scanflow-field-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
-          <label for="image">Upload image</label>
+          <label for="image">Image file</label>
         </div>
         <div class="scanflow-field-control field">
           {% set _upload_label = '' %}
@@ -1600,10 +1606,10 @@
       <div class="scanflow-actions-primary">
         <p class="scanflow-ocr-hint app-note app-note--quiet" role="note">
           <span class="app-note-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M11 12h1v4h1"/></svg></span>
-          <span class="app-note-text">Document type is detected automatically. OCR fills the form; records are saved only after you confirm.</span>
+          <span class="app-note-text" id="scan-source-hint-text">Choose a capture source, add the document, then run OCR.</span>
         </p>
         <div class="scanflow-ocr-btns">
-          <button type="submit" class="btn btn-primary btn-scanflow-primary{% if active_ocr %} is-running{% endif %}" id="btn-ocr"{% if active_ocr %} disabled{% endif %}>
+          <button type="submit" class="btn btn-primary btn-scanflow-primary{% if active_ocr %} is-running{% endif %}" id="btn-ocr"{% if active_ocr or not scan_preview %} disabled{% endif %}>
             <svg class="btn-ocr-idle-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
             <span class="btn-ocr-spin" aria-hidden="true"></span>
             <span class="btn-ocr-label">{% if active_ocr %}Running OCR…{% else %}Run OCR{% endif %}</span>
@@ -1650,7 +1656,7 @@
           <span class="scanflow-preview-placeholder-ic" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
           </span>
-          Upload or scan a file to preview it here, then run OCR.
+          Add a document to preview it here, then run OCR.
           <div id="scan-preview-filename" class="scanflow-preview-filename"{% if not scan_preview or not scan_preview.image_filename %} hidden{% endif %}>{% if scan_preview and scan_preview.image_filename %}{{ scan_preview.original_name or scan_preview.image_filename.split('/')[-1] }}{% endif %}</div>
         </div>
         <div id="scan-preview-viewer-wrap" class="scan-preview-viewer-inner"{% if not scan_preview or not scan_preview.image_url %} hidden{% endif %}>
@@ -1660,21 +1666,21 @@
           {% set document_viewer_section_id = 'scan-wf-preview-viewer' %}
           {% set document_viewer_fit = 'fill' %}
           {% include '_document_viewer_markup.html' %}
-          <div class="ocr-doc-scan" aria-hidden="true">
-            <span class="ocr-doc-scan-veil"></span>
-            <span class="ocr-doc-scan-grid"></span>
-            <span class="ocr-doc-scan-fields"></span>
-            <span class="ocr-doc-scan-mover">
-              <span class="ocr-doc-scan-wash"></span>
-              <span class="ocr-doc-scan-beam"></span>
-              <span class="ocr-doc-scan-core"></span>
-            </span>
-            <span class="ocr-doc-scan-corner ocr-doc-scan-corner--tl"></span>
-            <span class="ocr-doc-scan-corner ocr-doc-scan-corner--tr"></span>
-            <span class="ocr-doc-scan-corner ocr-doc-scan-corner--bl"></span>
-            <span class="ocr-doc-scan-corner ocr-doc-scan-corner--br"></span>
-            <span class="ocr-doc-scan-label"><span class="ocr-doc-scan-live"></span><span id="ocr-doc-scan-label-text">Reading document</span><span class="ocr-doc-scan-count" id="ocr-doc-scan-label-count"></span><span class="ocr-doc-scan-dots"></span></span>
-          </div>
+        </div>
+        <div class="ocr-doc-scan" aria-hidden="true">
+          <span class="ocr-doc-scan-veil"></span>
+          <span class="ocr-doc-scan-grid"></span>
+          <span class="ocr-doc-scan-fields"></span>
+          <span class="ocr-doc-scan-mover">
+            <span class="ocr-doc-scan-wash"></span>
+            <span class="ocr-doc-scan-beam"></span>
+            <span class="ocr-doc-scan-core"></span>
+          </span>
+          <span class="ocr-doc-scan-corner ocr-doc-scan-corner--tl"></span>
+          <span class="ocr-doc-scan-corner ocr-doc-scan-corner--tr"></span>
+          <span class="ocr-doc-scan-corner ocr-doc-scan-corner--bl"></span>
+          <span class="ocr-doc-scan-corner ocr-doc-scan-corner--br"></span>
+          <span class="ocr-doc-scan-label"><span class="ocr-doc-scan-live"></span><span id="ocr-doc-scan-label-text">Reading document</span><span class="ocr-doc-scan-count" id="ocr-doc-scan-label-count"></span><span class="ocr-doc-scan-dots"></span></span>
         </div>
       </div>
     </div>
@@ -1682,7 +1688,7 @@
 </div>
 <script type="application/json" id="ocr-field-guides" data-align-url="{{ url_for('api_ocr_field_guides') }}">{{ ocr_field_guides|default({})|tojson }}</script>
 
-<script src="{{ url_for('static', filename='js/document-viewer.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/document-viewer.js') }}?v=preview-old-1" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   var fileInput = document.getElementById('image');
@@ -1694,6 +1700,40 @@ document.addEventListener('DOMContentLoaded', function() {
   var scanPreviewBlobUrl = null;
   var stateCheck = document.querySelector('.scanflow-state-check');
   var fnEl = document.getElementById('scan-preview-filename');
+  var SCAN_SOURCE_STORE = 'dcr-scan-source';
+  var scanSourceHint = document.getElementById('scan-source-hint-text');
+
+  function currentScanSource() {
+    return document.body.classList.contains('scan-source-scanner') ? 'scanner' : 'upload';
+  }
+
+  function setScanSource(mode) {
+    var source = mode === 'scanner' ? 'scanner' : 'upload';
+    document.body.classList.toggle('scan-source-scanner', source === 'scanner');
+    document.body.classList.toggle('scan-source-upload', source === 'upload');
+    var uploadRadio = document.getElementById('scan-source-upload');
+    var scannerRadio = document.getElementById('scan-source-scanner');
+    if (uploadRadio) uploadRadio.checked = source === 'upload';
+    if (scannerRadio) scannerRadio.checked = source === 'scanner';
+    if (scanSourceHint) {
+      scanSourceHint.textContent = source === 'scanner'
+        ? 'Detect the scanner once, then Scan from printer. Run OCR after the preview is ready.'
+        : 'Choose an image file, then run OCR.';
+    }
+    try { sessionStorage.setItem(SCAN_SOURCE_STORE, source); } catch (e) {}
+    if (source === 'scanner' && window.DaragaScanner && typeof window.DaragaScanner.sync === 'function') {
+      window.DaragaScanner.sync();
+    }
+  }
+
+  var savedSource = 'upload';
+  try { savedSource = sessionStorage.getItem(SCAN_SOURCE_STORE) || 'upload'; } catch (e) {}
+  setScanSource(savedSource);
+  document.querySelectorAll('input[name="scan_source"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      if (this.checked) setScanSource(this.value);
+    });
+  });
 
   function syncStateCheckIcon() {
     if (!stateCheck) return;
@@ -1799,10 +1839,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     document.body.classList.remove('ocr-busy');
     if (btnOcr) {
-      btnOcr.disabled = false;
       btnOcr.classList.remove('is-running');
       var ocrLbl2 = btnOcr.querySelector('.btn-ocr-label');
       if (ocrLbl2) ocrLbl2.textContent = 'Run OCR';
+      btnOcr.disabled = !hasScanDocument();
     }
     setCancelOcrVisible(hasScanDocument());
     if (ocrLoading) {
@@ -1874,6 +1914,9 @@ document.addEventListener('DOMContentLoaded', function() {
       status.textContent = '';
     }
     setCancelOcrVisible(false);
+    if (btnOcr && !btnOcr.classList.contains('is-running')) {
+      btnOcr.disabled = true;
+    }
     if (window.DaragaDocType && window.DaragaDocType.reset) {
       window.DaragaDocType.reset();
     }
@@ -1887,6 +1930,9 @@ document.addEventListener('DOMContentLoaded', function() {
   function markReadyForOcr() {
     document.getElementById('workflow-state').textContent = 'READY';
     document.getElementById('workflow-next').textContent = 'Click OCR';
+    if (btnOcr && !btnOcr.classList.contains('is-running')) {
+      btnOcr.disabled = false;
+    }
     syncStateCheckIcon();
   }
 
@@ -1942,12 +1988,13 @@ document.addEventListener('DOMContentLoaded', function() {
   function detectDocumentType() {
     if (typeManual) return;
     var fd = new FormData();
-    if (fileInput && fileInput.files && fileInput.files.length) {
+    var stagedName = document.getElementById('image_filename');
+    if (stagedName && stagedName.value) {
+      fd.append('image_filename', stagedName.value);
+    } else if (fileInput && fileInput.files && fileInput.files.length) {
       fd.append('image', fileInput.files[0]);
     } else {
-      var fn = document.getElementById('image_filename');
-      if (!fn || !fn.value) return;
-      fd.append('image_filename', fn.value);
+      return;
     }
     var seq = ++detectSeq;
     setDocTypeStatus('is-busy', 'Identifying document type…');
@@ -2003,29 +2050,155 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  document.getElementById('detect-scanner').onclick = function() {
-    fetch('{{ url_for("api_scanners") }}').then(function(r){ return r.json(); }).then(function(data) {
-      var sel = document.getElementById('scanner-device-select');
-      sel.innerHTML = '';
-      var list = data.scanners || [];
-      if (!list.length) {
-        sel.disabled = true;
-        sel.innerHTML = '<option value="">- No devices -</option>';
-        return;
-      }
-      list.forEach(function(d) {
-        var o = document.createElement('option');
-        o.value = String(d.id);
-        o.textContent = d.name || ('Device ' + d.id);
-        sel.appendChild(o);
-      });
-      sel.disabled = false;
-    }).catch(function(){});
-  };
+  var SCANNER_STORE = 'dcr-scanner-devices';
+  var detectBtn = document.getElementById('detect-scanner');
+  var scanBtn = document.getElementById('scan-from-device');
+  var scannerSelect = document.getElementById('scanner-device-select');
 
-  document.getElementById('scan-from-device').onclick = function() {
+  function notifyScan(title, message, tone) {
+    if (window.DaragaToast && window.DaragaToast.show) {
+      window.DaragaToast.show({ tone: tone || 'warning', title: title, message: message });
+    }
+  }
+
+  function ocrBusyNow() {
+    return !!(document.body.classList.contains('ocr-busy') || (btnOcr && btnOcr.classList.contains('is-running')));
+  }
+
+  function scannerDeviceReady() {
+    return !!(scannerSelect && !scannerSelect.disabled && String(scannerSelect.value || '').trim());
+  }
+
+  function persistScanners(list, selectedId) {
+    try {
+      sessionStorage.setItem(SCANNER_STORE, JSON.stringify({
+        scanners: list || [],
+        selectedId: selectedId || ''
+      }));
+    } catch (e) {}
+  }
+
+  function readStoredScanners() {
+    try {
+      var raw = sessionStorage.getItem(SCANNER_STORE);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function clearStoredScanners() {
+    try { sessionStorage.removeItem(SCANNER_STORE); } catch (e) {}
+  }
+
+  function setScanFromReady() {
+    if (!scanBtn) return;
+    if (ocrBusyNow() || document.body.classList.contains('is-device-scanning')) {
+      scanBtn.disabled = true;
+      return;
+    }
+    var ready = scannerDeviceReady();
+    scanBtn.disabled = !ready;
+    scanBtn.title = ready ? 'Scan from the selected device' : 'Detect a scanner first';
+  }
+
+  window.DaragaScanner = { sync: setScanFromReady };
+
+  function fillScannerSelect(list, selectedId) {
+    if (!scannerSelect) return false;
+    var devices = Array.isArray(list) ? list : [];
+    scannerSelect.innerHTML = '';
+    if (!devices.length) {
+      scannerSelect.disabled = true;
+      scannerSelect.innerHTML = '<option value="">Click Detect scanner to list devices</option>';
+      clearStoredScanners();
+      setScanFromReady();
+      return false;
+    }
+    var chosen = selectedId ? String(selectedId) : '';
+    var found = false;
+    devices.forEach(function (d) {
+      var o = document.createElement('option');
+      o.value = String(d.id);
+      o.textContent = d.name || ('Device ' + d.id);
+      if (chosen && o.value === chosen) {
+        o.selected = true;
+        found = true;
+      }
+      scannerSelect.appendChild(o);
+    });
+    if (!found && scannerSelect.options.length) {
+      scannerSelect.selectedIndex = 0;
+    }
+    scannerSelect.disabled = ocrBusyNow();
+    persistScanners(devices, scannerSelect.value);
+    setScanFromReady();
+    return true;
+  }
+
+  function loadScanners(opts) {
+    opts = opts || {};
+    var silent = !!opts.silent;
+    if (detectBtn && !silent) detectBtn.disabled = true;
+    return fetch('{{ url_for("api_scanners") }}', {
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+      cache: 'no-store'
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var list = data.scanners || [];
+        var stored = readStoredScanners() || {};
+        var ok = fillScannerSelect(list, stored.selectedId);
+        if (!silent) {
+          if (ok) {
+            notifyScan('Scanner ready', 'Device connected. You can Scan from printer.', 'success');
+          } else {
+            notifyScan('No scanner', 'Connect the scanner, then click Detect scanner.', 'warning');
+          }
+        }
+        return ok;
+      })
+      .catch(function () {
+        if (!silent) {
+          notifyScan('Detect failed', 'Could not list scanners. Try again.', 'error');
+        }
+        setScanFromReady();
+        return false;
+      })
+      .then(function (ok) {
+        if (detectBtn) detectBtn.disabled = ocrBusyNow();
+        return ok;
+      });
+  }
+
+  if (scannerSelect) {
+    scannerSelect.addEventListener('change', function () {
+      var stored = readStoredScanners() || {};
+      persistScanners(stored.scanners || [], scannerSelect.value);
+      setScanFromReady();
+    });
+  }
+
+  var storedScanners = readStoredScanners();
+  if (storedScanners && storedScanners.scanners && storedScanners.scanners.length) {
+    fillScannerSelect(storedScanners.scanners, storedScanners.selectedId);
+    loadScanners({ silent: true });
+  }
+
+  if (detectBtn) {
+    detectBtn.onclick = function () {
+      loadScanners({ silent: false });
+    };
+  }
+
+  if (scanBtn) scanBtn.onclick = function() {
     var sel = document.getElementById('scanner-device-select');
     var btnScan = document.getElementById('scan-from-device');
+    if (!scannerDeviceReady()) {
+      notifyScan('Detect scanner first', 'Click Detect scanner, then Scan from printer.');
+      return;
+    }
     var anim = document.getElementById('scan-device-anim');
     var animTitle = document.getElementById('scan-device-anim-title');
     var animSub = document.getElementById('scan-device-anim-sub');
@@ -2033,6 +2206,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var detectBtn = document.getElementById('detect-scanner');
 
     function setScanning(on) {
+      document.body.classList.toggle('is-device-scanning', on);
       if (btnScan) {
         btnScan.classList.toggle('is-scanning', on);
         btnScan.disabled = on;
@@ -2054,7 +2228,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     setScanning(true);
     var fd = new FormData();
-    fd.append('device_index', parseInt(sel.value || '1', 10) || 1);
+    fd.append('device_index', parseInt(sel.value, 10));
     fetch('{{ url_for("api_scan") }}', { method: 'POST', body: fd })
       .then(function(r){ return r.json().then(function(j){ return r.ok ? j : Promise.reject(j); }); })
       .then(function(data) {
@@ -2071,10 +2245,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         markReadyForOcr();
         detectDocumentType();
-        setTimeout(function() { setScanning(false); }, 750);
+        setTimeout(function() {
+          setScanning(false);
+          setScanFromReady();
+        }, 750);
       })
       .catch(function(err){
         setScanning(false);
+        setScanFromReady();
         if (window.DaragaToast && window.DaragaToast.error) {
           window.DaragaToast.error(err && err.error, "Scan failed. Check the printer and try again.");
         }
@@ -2101,6 +2279,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (data.image_filename) {
           document.getElementById('image_filename').value = data.image_filename;
         }
+        fileInput.value = '';
         if (data.image_url) {
           showScanPreview(data.image_url, data.original_name || file.name || data.image_filename);
         }

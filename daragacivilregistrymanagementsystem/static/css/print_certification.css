@@ -19,10 +19,10 @@
 .print-panel,
 .print-format-request-field {
   margin-top: 10px;
-  border: 1px solid rgba(15, 43, 92, 0.12);
-  border-radius: 10px;
-  background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%);
-  box-shadow: 0 4px 14px rgba(15, 43, 92, 0.06);
+  border: 1px solid rgba(0, 32, 128, 0.14);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 43, 92, 0.08);
   overflow: hidden;
 }
 
@@ -31,24 +31,25 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid rgba(15, 43, 92, 0.08);
+  padding: 7px 12px;
+  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .print-panel-title {
   margin: 0;
-  font-size: 0.86rem;
+  font-size: 0.92rem;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.2;
-  color: #0f2b5c;
+  color: #ffffff;
 }
 
 .print-panel-subtitle {
-  margin: 1px 0 0;
-  font-size: 0.72rem;
-  color: #64748b;
-  font-weight: 500;
+  margin: 2px 0 0;
+  font-size: 0.74rem;
+  color: #bfdbfe;
+  font-weight: 600;
   line-height: 1.3;
 }
 
@@ -104,7 +105,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  padding: 8px 10px 2px;
+  padding: 8px 12px 2px;
 }
 
 .print-mode-options--three {
@@ -144,12 +145,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 0;
-  padding: 7px 8px;
+  min-height: 40px;
+  padding: 6px 8px;
   border: 1px solid #d7e2ef;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(15, 43, 92, 0.04);
+  border-radius: 10px;
+  background: #f8fafc;
+  box-shadow: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
@@ -258,43 +259,112 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
-  padding: 8px 10px 10px;
+  gap: 6px;
+  padding: 8px 12px 0;
 }
 .print-setup {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px 8px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
 }
-.print-setup--signers {
-  padding-top: 6px;
-  border-top: 1px solid rgba(15, 43, 92, 0.08);
+.print-setup--layout,
+.print-setup--signers,
+.print-setup--blanks {
+  padding-top: 8px;
+  border-top: 0;
+}
+.print-setup-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.print-setup-note {
+  grid-column: auto;
+  margin: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #002080;
+  background: #e8eefc;
+  line-height: 1.4;
+}
+.print-setup-field--date,
+.print-setup-field--issued {
+  grid-column: 1 / -1;
+}
+.print-amount-wrap {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+.print-peso {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+  background: #eef2f7;
+  color: #0f172a;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+.print-amount-wrap input {
+  border-radius: 0 8px 8px 0;
 }
 .print-setup-heading {
   grid-column: 1 / -1;
-  margin: 0 0 2px;
-  font-size: 0.62rem;
+  margin: 0;
+  font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #64748b;
+  color: #0f2b5c;
 }
 .print-setup-field {
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: #64748b;
+  color: #475569;
+}
+.print-req {
+  color: #dc2626;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+.print-setup-field.is-incomplete input,
+.print-setup-field input.is-incomplete {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.18);
+  background: #fff7f7;
+}
+.print-panel-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin: 2px -12px 0;
+  padding: 6px 12px 8px;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
 }
 .print-panel-actions .btn-print-document {
   position: relative;
   z-index: 4;
-  align-self: flex-end;
-  margin-top: 2px;
+  align-self: auto;
+  margin-top: 0;
   pointer-events: auto;
   cursor: pointer;
 }
@@ -305,16 +375,22 @@
   min-height: 30px;
   height: 30px;
   margin: 0;
-  padding: 3px 8px;
-  border: 1px solid #d7e2ef;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
   background: #fff;
   color: #0f172a;
-  font-size: 0.78rem;
+  font-size: 0.86rem;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.25;
   text-transform: none;
   letter-spacing: 0;
+}
+.print-setup-field select:focus,
+.print-setup-field input:focus {
+  outline: none;
+  border-color: #002080;
+  box-shadow: 0 0 0 3px rgba(0, 32, 128, 0.14);
 }
 
 .print-panel-compact-row {
@@ -322,7 +398,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 7px 12px;
+  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
 }
 
 .print-panel--compact {
@@ -330,11 +407,13 @@
 }
 
 .btn-print-document {
-  min-width: 0;
+  min-width: 96px;
   min-height: 32px;
   padding: 6px 12px;
-  gap: 6px;
-  font-size: 0.8rem;
+  gap: 8px;
+  font-size: 0.86rem;
+  font-weight: 800;
+  border-radius: 9px;
 }
 
 .btn-print-document svg {
@@ -353,7 +432,9 @@
     grid-template-columns: 1fr;
   }
   .print-setup,
-  .print-setup--signers {
+  .print-setup--layout,
+  .print-setup--signers,
+  .print-setup--blanks {
     grid-template-columns: 1fr;
   }
 }
@@ -373,13 +454,15 @@
 
 [data-theme="dark"] .print-panel,
 [data-theme="dark"] .print-format-request-field {
-  background: linear-gradient(180deg, #161f2e 0%, #121a26 100%);
+  background: #161f2e;
   border-color: rgba(148, 163, 184, 0.22);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
-[data-theme="dark"] .print-panel-head {
-  border-bottom-color: rgba(148, 163, 184, 0.16);
+[data-theme="dark"] .print-panel-head,
+[data-theme="dark"] .print-panel-compact-row {
+  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 
 [data-theme="dark"] .print-panel-title,
@@ -388,7 +471,10 @@
   color: #f8fafc;
 }
 
-[data-theme="dark"] .print-panel-subtitle,
+[data-theme="dark"] .print-panel-subtitle {
+  color: #bfdbfe;
+}
+
 [data-theme="dark"] .print-option-desc,
 [data-theme="dark"] .print-option-kicker {
   color: #94a3b8;
@@ -432,10 +518,24 @@
   color: #93c5fd;
 }
 
-[data-theme="dark"] .print-setup--signers {
-  border-top-color: rgba(148, 163, 184, 0.16);
+[data-theme="dark"] .print-setup--layout,
+[data-theme="dark"] .print-setup--signers,
+[data-theme="dark"] .print-setup--blanks {
+  background: #121a26;
+  border-color: rgba(148, 163, 184, 0.18);
 }
-[data-theme="dark"] .print-setup-heading,
+[data-theme="dark"] .print-setup-note {
+  color: #bfdbfe;
+  background: rgba(37, 99, 235, 0.22);
+}
+[data-theme="dark"] .print-peso {
+  background: #0f172a;
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #f1f5f9;
+}
+[data-theme="dark"] .print-setup-heading {
+  color: #e2e8f0;
+}
 [data-theme="dark"] .print-setup-field {
   color: #94a3b8;
 }
@@ -444,6 +544,19 @@
   background: #1e293b;
   border-color: rgba(148, 163, 184, 0.28);
   color: #f1f5f9;
+}
+[data-theme="dark"] .print-panel-foot {
+  background: #161f2e;
+  border-top-color: rgba(148, 163, 184, 0.16);
+}
+[data-theme="dark"] .print-req {
+  color: #f87171;
+}
+[data-theme="dark"] .print-setup-field.is-incomplete input,
+[data-theme="dark"] .print-setup-field input.is-incomplete {
+  border-color: #f87171;
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.28);
+  background: #3f1d24;
 }
 [data-theme="dark"] .print-setup-field select:focus,
 [data-theme="dark"] .print-setup-field input:focus {
@@ -461,6 +574,7 @@
 /* —— Certification form layout (screen preview when debugging: keep hidden) —— */
 .cert-sheet {
   position: relative;
+  isolation: isolate;
   box-sizing: border-box;
   width: 100%;
   max-width: 8.5in;
@@ -471,6 +585,86 @@
   line-height: 1.45;
   color: #000;
   background: #fff;
+}
+
+.cert-sheet::before,
+.cert-sheet::after {
+  content: none !important;
+  display: none !important;
+}
+
+.cert-sheet > * {
+  position: relative;
+  z-index: 1;
+}
+.cert-line-rule,
+.cert-fill,
+.cert-inline-u,
+.cert-official-name,
+.cert-official-title,
+.cert-issued-blank,
+.cert-pay-value,
+.cert-date-value {
+  background-color: #fff;
+}
+
+.cert-ctc-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  color-adjust: exact;
+}
+
+.cert-ctc-watermark__mark {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  transform: translate(-50%, -50%) rotate(-32deg);
+  white-space: nowrap;
+}
+
+.cert-ctc-watermark__title {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 34pt;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: #c8ccd6;
+}
+
+.cert-ctc-watermark__sub {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10pt;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: #d2d5de;
+}
+
+#print-area-original {
+  position: relative;
+}
+
+#print-area-original .cert-ctc-watermark {
+  z-index: 2;
+}
+
+#print-area-original .cert-ctc-watermark__title {
+  color: rgba(0, 32, 128, 0.28);
+}
+
+#print-area-original .cert-ctc-watermark__sub {
+  color: rgba(0, 32, 128, 0.22);
 }
 .cert-print-surface[data-print-font="arial"] .cert-sheet {
   font-family: Arial, Helvetica, sans-serif;
@@ -581,17 +775,22 @@
 .cert-intro {
   margin: 0 0 0.2in;
   text-align: justify;
+  text-align-last: left;
   text-indent: 0.45in;
   font-size: 12pt;
 }
 .cert-inline-u {
-  display: inline-block;
-  min-width: 0.55in;
+  display: inline;
+  margin: 0 0.22em;
+  padding: 0 0.4em 1px;
   border-bottom: 1px solid #000;
-  text-align: center;
+  white-space: nowrap;
   font-weight: 700;
-  padding: 0 6px 1px;
   line-height: 1.15;
+}
+.cert-inline-u__val {
+  display: inline;
+  font-weight: 700;
 }
 
 .cert-line-table {
@@ -643,6 +842,27 @@
   min-height: 1.2em;
   padding: 0 2px 1px 0.04in;
   box-sizing: border-box;
+  background-color: transparent;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.cert-pay-entry {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.05in;
+  min-width: 1.35in;
+}
+.cert-pay-entry .cert-peso {
+  flex: 0 0 auto;
+  font-weight: 700;
+  padding: 0 0 1px;
+  border: 0;
+}
+.cert-pay-entry .cert-pay-value {
+  flex: 1 1 auto;
+  min-width: 0.85in;
+  min-height: 1.15em;
 }
 .cert-line-table--issued {
   table-layout: auto;
@@ -941,18 +1161,28 @@ td.cert-issued-upon {
   min-height: 1.2em;
   padding: 0 2px 1px 0.04in;
   box-sizing: border-box;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.cert-issued-cell {
+  padding: 0.28in 0 0.08in;
+  border: none;
+  vertical-align: top;
+  background: #fff;
 }
 .cert-fill--short {
   width: 2.2in;
 }
 .cert-fill--long {
-  width: 3.7in;
+  width: 100%;
   max-width: 100%;
 }
 .cert-issued-sentence {
-  margin: 0.14in 0 0;
-  width: calc(1.62in + 0.12in + 0.05in + 3.7in);
+  margin: 0;
+  width: 100%;
   max-width: 100%;
+  background: #fff;
 }
 .cert-issued-sentence .cert-issued-row {
   display: flex;
@@ -969,12 +1199,12 @@ td.cert-issued-upon {
 .cert-issued-sentence .cert-issued-blank {
   flex: 1 1 auto;
   width: auto;
-  min-width: 0;
+  min-width: 2.4in;
   border-bottom: 1px solid #000;
   min-height: 1.15em;
-  padding: 0 0 1px;
+  padding: 0 0.12em 1px;
   outline: none;
-  background: transparent;
+  background: #fff;
 }
 .cert-issued-sentence .cert-issued-upon {
   display: block;
@@ -1034,11 +1264,20 @@ td.cert-issued-upon {
   .record-print-block > button {
     display: none !important;
   }
+  :root,
+  html,
+  body,
+  [data-theme="dark"],
+  [data-theme="light"] {
+    color-scheme: light !important;
+    forced-color-adjust: none;
+  }
   html,
   body,
   .layout,
   .main {
     background: #fff !important;
+    color: #000 !important;
     margin: 0 !important;
     padding: 0 !important;
     height: auto !important;
@@ -1047,6 +1286,100 @@ td.cert-issued-upon {
     overflow: visible !important;
     display: block !important;
     box-shadow: none !important;
+  }
+  .cert-ctc-watermark,
+  .cert-ctc-watermark__title,
+  .cert-ctc-watermark__sub {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  .cert-sheet,
+  #print-area-certification {
+    background: #fff !important;
+    color: #000 !important;
+    color-scheme: light !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+  }
+  .cert-sheet,
+  .cert-sheet table,
+  .cert-sheet td,
+  .cert-sheet th,
+  .cert-sheet p,
+  .cert-sheet span,
+  .cert-sheet div {
+    color: #000 !important;
+    box-shadow: none !important;
+    outline: none !important;
+    text-shadow: none !important;
+  }
+  .cert-line-table,
+  .cert-line-table td,
+  .cert-line-table th,
+  .cert-marriage-hw,
+  .cert-marriage-hw td,
+  .cert-marriage-hw th,
+  .cert-pay-table,
+  .cert-pay-table td {
+    border: none !important;
+    background: transparent !important;
+  }
+  .cert-line-rule,
+  .cert-fill,
+  .cert-inline-u,
+  .cert-issued-blank,
+  .cert-value,
+  .cert-pay-entry {
+    border: 0 !important;
+    border-bottom: 0.75pt solid #000 !important;
+    box-shadow: none !important;
+    outline: none !important;
+    background: transparent !important;
+    color: #000 !important;
+    -webkit-text-stroke: 0 !important;
+  }
+  .cert-sheet::before,
+  .cert-sheet::after {
+    content: none !important;
+    display: none !important;
+  }
+  .cert-sheet > * {
+    z-index: 1 !important;
+  }
+  .cert-line-rule,
+  .cert-fill {
+    background-color: transparent !important;
+    box-shadow: none !important;
+  }
+  .cert-inline-u,
+  .cert-official-name,
+  .cert-official-title,
+  .cert-issued-blank,
+  .cert-pay-value,
+  .cert-date-value {
+    background-color: transparent !important;
+    color: #000 !important;
+  }
+  .cert-sheet .cert-ctc-watermark {
+    display: none !important;
+  }
+  #print-area-original.print-surface-active .cert-ctc-watermark {
+    z-index: 2;
+  }
+  .cert-ctc-watermark__title {
+    font-size: 32pt;
+    color: #c8ccd6 !important;
+  }
+  .cert-ctc-watermark__sub {
+    color: #d2d5de !important;
+  }
+  #print-area-original .cert-ctc-watermark__title {
+    color: rgba(0, 32, 128, 0.3) !important;
+  }
+  #print-area-original .cert-ctc-watermark__sub {
+    color: rgba(0, 32, 128, 0.24) !important;
   }
   .record-print-block {
     margin: 0 !important;
@@ -1159,6 +1492,19 @@ td.cert-issued-upon {
   .cert-intro {
     margin-bottom: 0.14in;
     font-size: 12pt;
+    text-align: justify;
+    text-align-last: left;
+  }
+  .cert-inline-u {
+    display: inline;
+    margin: 0 0.22em;
+    padding: 0 0.4em 1px;
+    font-weight: 700;
+  }
+  .cert-inline-u__val {
+    display: inline;
+    font-weight: 700;
+    transform: none;
   }
   .cert-field {
     margin: 0.09in 0;
@@ -1194,15 +1540,23 @@ td.cert-issued-upon {
   .cert-line-rule,
   .cert-fill {
     padding: 0 2px 1px 0.04in;
-    border-bottom: 1px solid #000;
+    border: 0 !important;
+    border-bottom: 0.75pt solid #000 !important;
+    box-shadow: none !important;
+    background: transparent !important;
   }
   .cert-fill--long {
-    width: 3.7in;
+    width: 100%;
     max-width: 100%;
   }
+  .cert-issued-cell {
+    padding: 0.28in 0 0.08in !important;
+    background: #fff !important;
+  }
   .cert-issued-sentence {
-    margin-top: 0.14in;
-    width: calc(1.62in + 0.12in + 0.05in + 3.7in);
+    margin: 0;
+    width: 100%;
+    background: #fff !important;
   }
   .cert-issued-sentence .cert-issued-row {
     gap: 0;
@@ -1211,7 +1565,9 @@ td.cert-issued-upon {
   .cert-issued-sentence .cert-issued-blank {
     flex: 1 1 auto;
     width: auto;
-    padding: 0 0 1px;
+    min-width: 2.4in;
+    padding: 0 0.12em 1px;
+    background: #fff !important;
   }
   .cert-issued-sentence .cert-issued-upon {
     margin-top: 0.015in;

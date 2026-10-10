@@ -14,7 +14,7 @@
     </div>
     <div class="staff-header-text">
       <h1 class="page-title">My edit requests</h1>
-      <p class="page-state">Track requests to change civil records. Approved requests show a code you can use to unlock editing.</p>
+      <p class="page-state">When admin approves, the 5-digit code appears here. Type that same code to unlock editing.</p>
     </div>
   </div>
 
@@ -67,13 +67,10 @@
                 <td class="col-reason">{% set text = req.reason %}{% set note_kind = 'reason' %}{% include '_expandable_text.html' %}</td>
                 <td class="col-reject">{% set text = req.rejection_reason %}{% set note_kind = 'rejection' %}{% include '_expandable_text.html' %}</td>
                 <td class="code-cell">
-                  {% if req.status == 'APPROVED' and req.approval_code %}
-                    <div class="code-cell-stack">
-                      <strong class="approval-code-display">{{ req.approval_code }}</strong>
-                      {% if req.code_used_at %}
-                        <span class="code-used-chip">Used</span>
-                      {% endif %}
-                    </div>
+                  {% if req.status == 'APPROVED' and req.approval_code and req.code_used_at %}
+                    <span class="code-used-chip">Used</span>
+                  {% elif req.status == 'APPROVED' and req.approval_code %}
+                    <strong class="approval-code-display" title="Type this code to unlock">{{ req.approval_code }}</strong>
                   {% else %}
                     —
                   {% endif %}
@@ -82,7 +79,20 @@
                   {% if req.status == 'APPROVED' and req.approval_code and not req.code_used_at and req.record %}
                     <form method="post" action="{{ url_for('record_verify_code', record_id=req.record_id) }}" class="unlock-form">
                       <input type="hidden" name="next" value="{% if request_doc_type %}{{ url_for('my_edit_requests', doc_type=request_doc_type) }}{% else %}{{ url_for('my_edit_requests') }}{% endif %}" />
-                      <input type="hidden" name="approval_code" value="{{ req.approval_code }}" />
+                      <label class="sr-only" for="staff_approval_code_{{ req.id }}">5-digit approval code</label>
+                      <input
+                        id="staff_approval_code_{{ req.id }}"
+                        type="text"
+                        name="approval_code"
+                        class="unlock-code-input"
+                        placeholder="00000"
+                        maxlength="5"
+                        pattern="[0-9]{5}"
+                        inputmode="numeric"
+                        autocomplete="one-time-code"
+                        required
+                        aria-label="Type the 5-digit code from admin"
+                      />
                       <button type="submit" class="btn btn-primary btn-unlock">Unlock</button>
                     </form>
                   {% elif req.code_used_at %}

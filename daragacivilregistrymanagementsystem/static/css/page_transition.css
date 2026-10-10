@@ -65,6 +65,17 @@ html.pt-leaving .login-card-inner {
   }
 }
 
+body.page-registry-reports .reg-status,
+body.page-registry-reports .reg-scroll,
+body.page-registry-reports .reg-pager,
+html.pt-leaving body.page-registry-reports .reg-status,
+html.pt-leaving body.page-registry-reports .reg-scroll,
+html.pt-leaving body.page-registry-reports .reg-pager {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
 @media print {
   main.main > *,
   .login-card-inner {

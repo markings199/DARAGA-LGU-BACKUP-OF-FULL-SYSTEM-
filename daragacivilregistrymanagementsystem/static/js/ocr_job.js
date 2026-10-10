@@ -72,10 +72,21 @@
   }
 
   function lockScanInputs(locked) {
-    ["document_type", "image", "detect-scanner", "scan-from-device", "num_scans", "document_type_override", "doc-type-change-btn"].forEach(function (id) {
+    ["document_type", "image", "detect-scanner", "num_scans", "document_type_override", "doc-type-change-btn", "scanner-device-select", "scan-source-upload", "scan-source-scanner"].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.disabled = !!locked;
     });
+    var scanBtn = document.getElementById("scan-from-device");
+    if (scanBtn) {
+      if (locked) {
+        scanBtn.disabled = true;
+      } else if (window.DaragaScanner && typeof window.DaragaScanner.sync === "function") {
+        window.DaragaScanner.sync();
+      } else {
+        var sel = document.getElementById("scanner-device-select");
+        scanBtn.disabled = !(sel && sel.value);
+      }
+    }
   }
 
   function scanDocumentPresent() {

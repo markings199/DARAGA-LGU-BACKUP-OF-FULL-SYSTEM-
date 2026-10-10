@@ -1,5 +1,7 @@
 # Start Daraga Civil Registry. Keep this window open while the office uses the system.
 $ErrorActionPreference = "Continue"
+Write-Host ""
+Write-Host "Starting Daraga Civil Registry..." -ForegroundColor Green
 $AppDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $AppDir
 
@@ -11,43 +13,67 @@ if (-not (Test-Path $venvPython)) {
     exit 1
 }
 
-$pgBinCandidates = @(
-    "$env:USERPROFILE\scoop\apps\postgresql\current\bin",
-    "C:\Program Files\PostgreSQL\16\bin",
-    "C:\Program Files\PostgreSQL\15\bin",
-    "C:\Program Files\PostgreSQL\14\bin"
-)
-foreach ($bin in $pgBinCandidates) {
-    if (Test-Path $bin) {
-        $env:Path = "$bin;$env:Path"
-        break
+$pgBin = Join-Path $env:USERPROFILE "scoop\apps\postgresql\current\bin"
+$pgData = Join-Path $env:USERPROFILE "scoop\apps\postgresql\current\data"
+$pgLog = Join-Path $env:TEMP "daraga-postgres.log"
+$pgIsReady = Join-Path $pgBin "pg_isready.exe"
+$pgCtl = Join-Path $pgBin "pg_ctl.exe"
+if (Test-Path $pgBin) { $env:Path = "$pgBin;$env:Path" }
+
+function Test-PostgresReady {
+    if (-not (Test-Path $pgIsReady)) { return $false }
+    & $pgIsReady -h 127.0.0.1 -p 5432 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+
+Write-Host "Checking PostgreSQL..."
+if (Test-PostgresReady) {
+    Write-Host "PostgreSQL is ready."
+} elseif (Test-Path $pgCtl) {
+    Write-Host "Starting PostgreSQL..."
+    & $pgCtl -D $pgData status 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        $pidFile = Join-Path $pgData "postmaster.pid"
+        if (Test-Path $pidFile) {
+            Write-Host "Clearing a leftover PostgreSQL lock..."
+            & $pgCtl -D $pgData -m fast -t 5 stop 2>$null | Out-Null
+            Start-Sleep -Seconds 2
+            if (Test-Path $pidFile) { Remove-Item $pidFile -Force -ErrorAction SilentlyContinue }
+        }
+        Start-Process -FilePath $pgCtl -ArgumentList @("-D", $pgData, "-l", $pgLog, "start") -WindowStyle Hidden | Out-Null
+    }
+    $ready = $false
+    for ($i = 1; $i -le 20; $i++) {
+        if (Test-PostgresReady) { $ready = $true; break }
+        Write-Host "Waiting for PostgreSQL ($i/20)..."
+        Start-Sleep -Seconds 2
+    }
+    if ($ready) {
+        Write-Host "PostgreSQL is ready."
+    } else {
+        Write-Host "PostgreSQL is still starting. Loading the app anyway..."
     }
 }
-$pgData = "$env:USERPROFILE\scoop\apps\postgresql\current\data"
-if (Test-Path $pgData) {
-    pg_ctl -D $pgData start 2>$null | Out-Null
-}
-$ready = $false
-for ($i = 0; $i -lt 20; $i++) {
-    try {
-        & pg_isready -h 127.0.0.1 -p 5432 | Out-Null
-        if ($LASTEXITCODE -eq 0) { $ready = $true; break }
-    } catch { }
-    Start-Sleep -Seconds 1
-}
-if (-not $ready) {
-    Write-Host "PostgreSQL did not start. Open PowerShell and run:" -ForegroundColor Red
-    Write-Host '  $env:Path = "$env:USERPROFILE\scoop\apps\postgresql\current\bin;$env:Path"'
-    Write-Host '  pg_ctl -D "$env:USERPROFILE\scoop\apps\postgresql\current\data" start'
+
+$listening = $false
+try {
+    $listening = [bool](netstat -ano | Select-String ":5001" | Select-String "LISTENING")
+} catch { }
+if ($listening) {
+    Write-Host "The system is already running. Opening http://127.0.0.1:5001"
+    Start-Process "http://127.0.0.1:5001"
     Read-Host "Press Enter to close"
-    exit 1
+    exit 0
 }
 
-New-Item -ItemType Directory -Force -Path "C:\CivilRegistryData" | Out-Null
-New-Item -ItemType Directory -Force -Path "C:\CivilRegistryBackups" | Out-Null
-
-Write-Host "Starting Daraga Civil Registry..." -ForegroundColor Green
 Write-Host "Keep this window open. Open http://127.0.0.1:5001 in your browser."
+Write-Host "Loading the application. First start can take about one minute..."
 Write-Host "Press Ctrl+C to stop."
 Write-Host ""
-& $venvPython (Join-Path $AppDir "app.py")
+$env:PYTHONUNBUFFERED = "1"
+& $venvPython -u (Join-Path $AppDir "app.py")
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "The system stopped with an error." -ForegroundColor Red
+    Read-Host "Press Enter to close"
+    exit $LASTEXITCODE
+}

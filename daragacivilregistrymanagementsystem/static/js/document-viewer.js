@@ -54,7 +54,6 @@
         var baseH = getPaneContentHeight(pane);
         var nw = img.naturalWidth || 0;
         var nh = img.naturalHeight || 0;
-        /* Leave a tiny inset so borders never clip the page edge. */
         var availW = Math.max(1, baseW - 2);
         var availH = Math.max(1, baseH - 2);
         if (nw > 0 && nh > 0 && availH > 1) {
@@ -72,7 +71,7 @@
         pane.style.overflowX = scale <= 1.01 ? "hidden" : "auto";
         pane.style.overflowY = scale <= 1.01 ? "hidden" : "auto";
       } else if (fitMode === "fill") {
-        /* Full width of the panel; panel grows with the image so the whole page is visible. */
+        /* Full width; pane grows with the page so the whole certificate is visible (no inner scroll). */
         displayW = Math.max(1, Math.round(baseW * scale));
         pane.style.display = "block";
         pane.style.alignItems = "";
@@ -89,7 +88,7 @@
           pane.style.overflowX = "auto";
           pane.style.overflowY = "auto";
           pane.style.height = "";
-          pane.style.maxHeight = "min(72vh, 820px)";
+          pane.style.maxHeight = "min(82vh, 920px)";
         }
       } else {
         /* Width-fill inside a fixed pane (scan workflow / default). */
@@ -102,16 +101,18 @@
         pane.style.overflowY = "auto";
       }
       img.style.width = displayW + "px";
-      img.style.maxWidth = "none";
+      img.style.maxWidth = scale <= 1.01 ? "100%" : "none";
       img.style.minWidth = "0";
+      img.style.objectFit = "contain";
+      img.style.objectPosition = "top center";
       if (displayH != null) {
         img.style.height = displayH + "px";
       } else {
         img.style.height = "auto";
       }
       wrap.style.width = displayW + "px";
-      wrap.style.maxWidth = "none";
-      wrap.style.minWidth = displayW + "px";
+      wrap.style.maxWidth = scale <= 1.01 ? "100%" : "none";
+      wrap.style.minWidth = "0";
       wrap.style.height = displayH != null ? displayH + "px" : "auto";
       wrap.style.transform = "none";
       wrap.style.marginLeft = "0";

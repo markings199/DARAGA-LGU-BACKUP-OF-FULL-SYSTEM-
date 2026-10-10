@@ -1,5 +1,4 @@
-{# Theme toggle — blue circle with white home icon (matches sidebar / administration branding).
-   Optional: theme_toggle_extra_class e.g. login-theme-toggle #}
+{# Theme toggle — sun / moon. Optional: theme_toggle_extra_class e.g. login-theme-toggle #}
 <button
   type="button"
   class="theme-toggle{% if theme_toggle_extra_class %} {{ theme_toggle_extra_class }}{% endif %}"
@@ -7,11 +6,16 @@
   aria-pressed="false"
   title="Switch to dark mode"
 >
-  <span class="theme-toggle-icon home-circle-mark theme-icon-dark" aria-hidden="true">
-    {% include '_icon_home_circle.html' %}
+  <span class="theme-toggle-icon theme-icon-dark" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 14.5A8.5 8.5 0 1110.5 3 7 7 0 0021 14.5z"/>
+    </svg>
   </span>
-  <span class="theme-toggle-icon home-circle-mark theme-icon-light" aria-hidden="true">
-    {% include '_icon_home_circle.html' %}
+  <span class="theme-toggle-icon theme-icon-light" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 3v1.5M12 19.5V21M4.9 4.9l1.1 1.1M18 18l1.1 1.1M3 12h1.5M19.5 12H21M4.9 19.1L6 18M18 6l1.1-1.1"/>
+    </svg>
   </span>
   <span class="theme-toggle-label">Dark</span>
 </button>

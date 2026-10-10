@@ -108,21 +108,14 @@ def run_worker(in_q, out_q) -> None:
         path = job.get("path") or ""
         image_filename = job.get("image_filename") or ""
         try:
-            if not engine_ready:
-                if job_type != "detect":
-                    out_q.put(
-                        {
-                            "type": "progress",
-                            "job_id": job_id,
-                            "progress": 18,
-                            "message": "Loading OCR engine...",
-                        }
-                    )
-                get_ocr()
-                warmup_ocr()
-                engine_ready = True
             if job_type == "detect":
-                result = detect_from_image(path)
+                result = detect_from_image(path, ocr_fallback=False)
+                if not (result.get("doc_type") or "").strip():
+                    if not engine_ready:
+                        get_ocr()
+                        warmup_ocr()
+                        engine_ready = True
+                    result = detect_from_image(path, ocr_fallback=True)
                 out_q.put(
                     {
                         "type": "detect_done",
@@ -134,6 +127,18 @@ def run_worker(in_q, out_q) -> None:
                     }
                 )
                 continue
+            if not engine_ready:
+                out_q.put(
+                    {
+                        "type": "progress",
+                        "job_id": job_id,
+                        "progress": 18,
+                        "message": "Loading OCR engine...",
+                    }
+                )
+                get_ocr()
+                warmup_ocr()
+                engine_ready = True
             if doc_type not in ("birth", "marriage", "death"):
                 out_q.put(
                     {
@@ -143,8 +148,11 @@ def run_worker(in_q, out_q) -> None:
                         "message": "Identifying document type...",
                     }
                 )
-                detected = detect_from_image(path)
+                detected = detect_from_image(path, ocr_fallback=False)
                 doc_type = (detected.get("doc_type") or "").strip().lower()
+                if doc_type not in ("birth", "marriage", "death"):
+                    detected = detect_from_image(path, ocr_fallback=True)
+                    doc_type = (detected.get("doc_type") or "").strip().lower()
                 if doc_type not in ("birth", "marriage", "death"):
                     out_q.put(
                         {

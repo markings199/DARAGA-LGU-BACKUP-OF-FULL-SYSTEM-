@@ -15,10 +15,9 @@
     document.documentElement.classList.remove("pt-leaving");
   }
 
-  window.addEventListener("pageshow", function (event) {
-    if (event.persisted) resetEnter();
-  });
+  window.addEventListener("pageshow", resetEnter);
   window.addEventListener("pagehide", resetEnter);
+  window.addEventListener("focus", resetEnter);
 
   function skipLink(anchor) {
     if (!anchor || anchor.hasAttribute("download")) return true;
@@ -39,6 +38,9 @@
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") return true;
     if (url.origin !== window.location.origin) return true;
+    var path = (url.pathname || "").toLowerCase();
+    if (/\.(pdf|xlsx|xls|csv|zip)$/.test(path)) return true;
+    if (/\/reports\/(pdf|excel)\b/.test(path) || /\/administration\/reports\/(pdf|excel)\b/.test(path)) return true;
     var here = window.location.href.split("#")[0];
     var next = url.href.split("#")[0];
     if (here === next) return true;

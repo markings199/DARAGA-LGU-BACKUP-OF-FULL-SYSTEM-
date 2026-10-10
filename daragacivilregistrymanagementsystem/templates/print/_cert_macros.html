@@ -5,16 +5,24 @@
 </div>
 {% endmacro %}
 
-{% macro cert_pay_row(label, value='', peso=false) %}
+{% macro cert_pay_row(label, value='', peso=false, field_key='') %}
 <tr>
   <td class="cert-pay-label">{{ label }}</td>
   <td class="cert-pay-colon">:</td>
-  <td class="cert-pay-blank"><span class="cert-line-rule">{% if peso %}&#8369;{% endif %}{{ value if value else '\xa0' }}</span></td>
+  <td class="cert-pay-blank">
+    <span class="cert-line-rule cert-pay-entry">
+      {% if peso %}<span class="cert-peso" aria-hidden="true">&#8369;</span>{% endif %}
+      <span
+        class="cert-pay-value"
+        {% if field_key %}data-cert-field="{{ field_key }}" data-cert-blank="{{ field_key }}"{% endif %}
+      >{{ value if value else '\xa0' }}</span>
+    </span>
+  </td>
 </tr>
 {% endmacro %}
 
-{% macro cert_inline_blank(value, field_key) %}
-<span class="cert-inline-u"{% if field_key %} data-cert-field="{{ field_key }}"{% endif %}>{{ value if value else ' ' }}</span>
+{% macro cert_inline_blank(value, field_key, extra_class='') %}
+<span class="cert-inline-u {{ extra_class }}"{% if field_key %} data-cert-field="{{ field_key }}"{% endif %}><span class="cert-inline-u__val"{% if field_key %} data-cert-blank="{{ field_key }}"{% endif %}>{{ value if value else '\xa0' }}</span></span>
 {% endmacro %}
 
 {% macro cert_line_row(label, value, field_key='', upper=false, fill_class='') %}
@@ -32,7 +40,7 @@
   <td class="cert-line-label cert-issued-label">This certification is issued to</td>
   <td class="cert-line-colon">:</td>
   <td class="cert-line-value">
-    <span class="cert-line-rule" contenteditable="true" spellcheck="false" data-cert-field="Issued To">&nbsp;</span>
+    <span class="cert-line-rule" data-cert-field="Issued To" data-cert-blank="Issued To">&nbsp;</span>
   </td>
 </tr>
 <tr>
@@ -44,7 +52,7 @@
 <div class="cert-issued-sentence">
   <div class="cert-issued-row">
     <span class="cert-issued-phrase">This certification is issued to:</span>
-    <span class="cert-issued-blank" contenteditable="true" spellcheck="false" data-cert-field="Issued To">&nbsp;</span>
+    <span class="cert-issued-blank" data-cert-field="Issued To" data-cert-blank="Issued To">&nbsp;</span>
   </div>
   <div class="cert-issued-upon">upon his/her request.</div>
 </div>

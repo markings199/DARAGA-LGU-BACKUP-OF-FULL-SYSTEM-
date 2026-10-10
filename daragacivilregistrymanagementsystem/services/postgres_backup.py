@@ -7,12 +7,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import inspect
-
 from models import (
     AuditLog,
     BackupRun,
     EditRequest,
+    NotificationRead,
     PrintLog,
     PrintRequest,
     Record,
@@ -28,6 +27,7 @@ MODELS = (
     AuditLog,
     PrintLog,
     BackupRun,
+    NotificationRead,
 )
 
 TABLE_ORDER = tuple(model.__tablename__ for model in MODELS)
@@ -91,12 +91,42 @@ def dump_period_records_json(dest: Path, records: list[Any]) -> None:
 
 
 def _reset_postgres_identity(table: str) -> None:
+    if table not in TABLE_ORDER:
+        return
     db.session.execute(
         db.text(
-            f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
-            f"COALESCE((SELECT MAX(id) FROM {table}), 1), true)"
+            f"""
+            DO $$
+            DECLARE seq text;
+            BEGIN
+              seq := pg_get_serial_sequence('{table}', 'id');
+              IF seq IS NOT NULL THEN
+                PERFORM setval(seq, COALESCE((SELECT MAX(id) FROM {table}), 1), true);
+              END IF;
+            END $$;
+            """
         )
     )
+
+
+def _disconnect_other_postgres_clients() -> None:
+    """Close other app connections so Full rebuild is not blocked by notifications or idle locks."""
+    my_pid = db.session.execute(db.text("SELECT pg_backend_pid()")).scalar()
+    try:
+        with db.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.execute(
+                db.text(
+                    "SELECT pg_terminate_backend(pid) "
+                    "FROM pg_stat_activity "
+                    "WHERE datname = current_database() "
+                    "  AND pid <> pg_backend_pid() "
+                    "  AND pid <> :pid "
+                    "  AND backend_type = 'client backend'"
+                ),
+                {"pid": int(my_pid or 0)},
+            )
+    except Exception:
+        pass
 
 
 def _as_int_id(value: Any) -> int | None:
@@ -225,53 +255,13 @@ def restore_period_documents_from_json(src: Path) -> int:
 
 
 def restore_documents_from_json(src: Path) -> int:
-    """Replace civil registry records only. Users and login stay; audit history is not replayed."""
+    """Merge certificates from a backup. Does not wipe edit/print queues or print history."""
     payload = json.loads(src.read_text(encoding="utf-8"))
-    if str(payload.get("scope") or "").strip().lower() == "period":
-        return restore_period_documents_from_json(src)
     tables = _prepare_tables_for_restore(payload.get("tables") or {})
     records = tables.get("records") or []
     if not records:
         raise RuntimeError("This backup has no civil registry documents to restore.")
-
-    dialect = db.engine.dialect.name
-    try:
-        if dialect == "postgresql":
-            db.session.execute(db.text("SET LOCAL lock_timeout = '8s'"))
-            db.session.execute(
-                db.text("TRUNCATE TABLE records RESTART IDENTITY CASCADE")
-            )
-        else:
-            db.session.execute(db.text("DELETE FROM records"))
-        db.session.flush()
-
-        columns = {col.name: col for col in Record.__table__.columns}
-        chunk: list[dict[str, Any]] = []
-        loaded = 0
-        chunk_size = 250
-        for raw in records:
-            kwargs = {}
-            for name, col in columns.items():
-                if name not in raw:
-                    continue
-                kwargs[name] = _parse_value(raw[name], col)
-            chunk.append(kwargs)
-            loaded += 1
-            if len(chunk) >= chunk_size:
-                db.session.bulk_insert_mappings(Record, chunk)
-                db.session.flush()
-                chunk = []
-        if chunk:
-            db.session.bulk_insert_mappings(Record, chunk)
-            db.session.flush()
-
-        if dialect == "postgresql":
-            _reset_postgres_identity("records")
-        db.session.commit()
-        return loaded
-    except Exception:
-        db.session.rollback()
-        raise
+    return restore_period_documents_from_json(src)
 
 
 def restore_database_json(src: Path) -> int:
@@ -290,6 +280,9 @@ def restore_database_json(src: Path) -> int:
 
     try:
         if dialect == "postgresql":
+            _disconnect_other_postgres_clients()
+            db.session.execute(db.text("SET LOCAL lock_timeout = '15s'"))
+            db.session.execute(db.text("SET LOCAL statement_timeout = '180s'"))
             joined = ", ".join(reversed(TABLE_ORDER))
             db.session.execute(db.text(f"TRUNCATE TABLE {joined} RESTART IDENTITY CASCADE"))
         else:
@@ -324,11 +317,8 @@ def restore_database_json(src: Path) -> int:
         db.session.flush()
 
         if dialect == "postgresql":
-            inspector = inspect(db.engine)
             for table in TABLE_ORDER:
-                col_names = {col["name"] for col in inspector.get_columns(table)}
-                if "id" in col_names:
-                    _reset_postgres_identity(table)
+                _reset_postgres_identity(table)
 
         db.session.commit()
         return loaded

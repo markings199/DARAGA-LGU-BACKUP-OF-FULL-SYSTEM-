@@ -75,6 +75,10 @@
   {{ cert_line_row('Date of Registration', cert_field(data, 'Date of Registration'), 'Date of Registration', true, 'cert-fill--short') }}
   {{ cert_line_row('Date of Marriage', cert_field(data, 'Date of Marriage'), 'Date of Marriage', true, 'cert-fill--short') }}
   {{ cert_line_row('Place of Marriage', cert_field(data, 'Place of Marriage'), 'Place of Marriage', true, 'cert-fill--long') }}
+  <tr>
+    <td colspan="3" class="cert-issued-cell">
+      {{ cert_issued_sentence() }}
+    </td>
+  </tr>
 </table>
-{{ cert_issued_sentence() }}
 {% include 'print/_cert_footer.html' %}

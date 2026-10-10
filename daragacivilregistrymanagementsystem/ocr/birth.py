@@ -10,6 +10,7 @@ import cv2
 from ocr.shared import run_ocr_on_image
 from ocr.engine import extract_from_ocr_text, ocr_pages_to_text
 from ocr.field_boxes import extract_field_boxes
+from ocr.person_name import compose_first_middle_last
 from ocr.sex import sex_from_ocr_text, sex_from_tokens
 
 
@@ -829,8 +830,6 @@ def helper_like_token(it):
         return True
     if nt in {"FIRST", "MIDDLE", "LAST"}:
         return True
-    if len(nt) <= 6 and alpha_count(nt) >= 2:
-        return True
     return False
 
 
@@ -905,6 +904,29 @@ def assign_tokens_to_slots(tokens, centers):
         parts.append(" ".join(last_parts))
 
     return normalize_simple_text(" ".join(parts))
+
+
+def extract_psa_person_name(items, label, stop_y, working_xmax, exclude_keywords=None):
+    """Read a Form 102 name row as First, Middle, Last."""
+    if not label:
+        return ""
+    tokens = tokens_in_region(
+        items,
+        label["x1"] + 20,
+        working_xmax,
+        label["y1"] - 8,
+        stop_y,
+        min_score=0.18,
+    )
+    name = assign_tokens_to_slots(tokens, infer_slot_centers(items, label, working_xmax))
+    if name:
+        return name
+    name = compose_first_middle_last(tokens, label["x1"] + 20, working_xmax)
+    if name:
+        return name
+    return extract_name_field_v2(
+        items, label, stop_y, working_xmax, exclude_keywords=exclude_keywords
+    )
 
 
 def row_has_field_keywords(row):
@@ -1689,7 +1711,6 @@ def _template_birth_map(result) -> Dict[str, str]:
 # =========================================================
 def extract_birth_data(img_path: str) -> Dict[str, Any]:
     img = load_cropped_birth_image(img_path, CROP_LEFT, CROP_RIGHT)
-    img = enhance_birth_image(img)
     result = run_ocr_on_image(img)
     try:
         box_map: Dict[str, str] = {}
@@ -1901,7 +1922,7 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
 
         data["Date of Registration"] = reg_date
 
-        # Name of Child - improved extraction
+        # Name of Child is First | Middle | Last on Form 102 — keep that order.
         if name_label:
             next_y = min(
                 [y for y in [
@@ -1909,22 +1930,10 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
                     sex_label["y1"] if sex_label else None
                 ] if y is not None] or [name_label["y2"] + 45]
             )
-            data["Name of Child"] = extract_name_field_v2(
+            data["Name of Child"] = extract_psa_person_name(
                 items, name_label, next_y, working_xmax,
                 exclude_keywords=["DATE OF BIRTH", "SEX", "PLACE OF BIRTH"]
             )
-            if not data["Name of Child"]:
-                name_tokens = tokens_in_region(
-                    items,
-                    name_label["x1"] + 20,
-                    working_xmax,
-                    name_label["y1"] - 6,
-                    next_y,
-                    min_score=0.18,
-                )
-                data["Name of Child"] = assign_tokens_to_slots(
-                    name_tokens, infer_slot_centers(items, name_label, working_xmax)
-                )
         if not data["Name of Child"]:
             y0 = name_label["y2"] if name_label else img_h * 0.08
             y1 = dob_label["y1"] if dob_label else img_h * 0.28
@@ -1966,22 +1975,10 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
                     mother_rel_label["y1"] if mother_rel_label else None
                 ] if y is not None] or [mother_label["y2"] + 45]
             )
-            data["Name of Mother"] = extract_name_field_v2(
+            data["Name of Mother"] = extract_psa_person_name(
                 items, mother_label, next_y, working_xmax,
                 exclude_keywords=["CITIZENSHIP", "RELIGION", "NAME OF FATHER"]
             )
-            if not data["Name of Mother"]:
-                mother_tokens = tokens_in_region(
-                    items,
-                    mother_label["x1"] + 20,
-                    working_xmax,
-                    mother_label["y1"] - 6,
-                    next_y,
-                    min_score=0.18,
-                )
-                data["Name of Mother"] = assign_tokens_to_slots(
-                    mother_tokens, infer_slot_centers(items, mother_label, working_xmax)
-                )
         if not data["Name of Mother"]:
             y0 = mother_label["y2"] if mother_label else img_h * 0.22
             y1 = father_label["y1"] if father_label else img_h * 0.48
@@ -2017,22 +2014,10 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
                     father_rel_label["y1"] if father_rel_label else None
                 ] if y is not None] or [father_label["y2"] + 45]
             )
-            data["Name of Father"] = extract_name_field_v2(
+            data["Name of Father"] = extract_psa_person_name(
                 items, father_label, next_y, working_xmax,
                 exclude_keywords=["CITIZENSHIP", "RELIGION", "MARRIAGE"]
             )
-            if not data["Name of Father"]:
-                father_tokens = tokens_in_region(
-                    items,
-                    father_label["x1"] + 20,
-                    working_xmax,
-                    father_label["y1"] - 6,
-                    next_y,
-                    min_score=0.18,
-                )
-                data["Name of Father"] = assign_tokens_to_slots(
-                    father_tokens, infer_slot_centers(items, father_label, working_xmax)
-                )
         if not data["Name of Father"]:
             y0 = father_label["y2"] if father_label else img_h * 0.36
             y1 = marriage_label["y1"] if marriage_label else img_h * 0.62

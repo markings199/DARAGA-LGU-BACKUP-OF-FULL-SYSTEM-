@@ -15,7 +15,7 @@
     </div>
     <div class="staff-header-text">
       <h1 class="page-title">My print requests</h1>
-      <p class="page-state">Track requests to print civil records. When admin approves, open the record and use <strong>Print</strong> once; submit a new request for another copy.</p>
+      <p class="page-state">When admin approves, the 5-digit code appears here. Type that same code before you can print.</p>
     </div>
   </div>
 
@@ -49,6 +49,7 @@
               <th class="col-print-status">Print status</th>
               <th class="col-reason">Reason</th>
               <th class="col-reject">Reject note</th>
+              <th class="col-code">Code</th>
               <th class="col-actions">Actions</th>
             </tr>
           </thead>
@@ -78,7 +79,7 @@
                 <td class="col-status"><span class="status-badge status-{{ req.status|lower }}">{{ req.status }}</span></td>
                 <td class="col-print-status">
                   {% if req.status == 'APPROVED' and not req.used_at %}
-                    <span class="staff-print-ready-badge">Ready to print</span>
+                    <span class="staff-print-ready-badge">Enter code to print</span>
                   {% elif req.used_at %}
                     <span class="staff-print-done">
                       <span class="staff-print-done-label">Printed</span>
@@ -92,13 +93,37 @@
                 </td>
                 <td class="col-reason cell-reason">{% set text = req.reason %}{% set note_kind = 'reason' %}{% include '_expandable_text.html' %}</td>
                 <td class="col-reject cell-reject">{% set text = req.rejection_reason %}{% set note_kind = 'rejection' %}{% include '_expandable_text.html' %}</td>
+                <td class="code-cell">
+                  {% if req.status == 'APPROVED' and req.approval_code and req.used_at %}
+                    <span class="code-used-chip">Used</span>
+                  {% elif req.status == 'APPROVED' and req.approval_code %}
+                    <strong class="approval-code-display" title="Type this code to print">{{ req.approval_code }}</strong>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
                 <td class="col-actions cell-actions">
-                  {% if req.record %}
-                    {% if req.status == 'APPROVED' and not req.used_at %}
-                      <a href="{{ url_for('record_detail', record_id=req.record_id) }}" class="btn btn-primary btn-view-record">Open &amp; print</a>
-                    {% else %}
-                      <a href="{{ url_for('record_detail', record_id=req.record_id) }}" class="btn btn-secondary btn-view-record">View record</a>
-                    {% endif %}
+                  {% if req.record and req.status == 'APPROVED' and req.approval_code and not req.used_at %}
+                    <form method="post" action="{{ url_for('record_verify_print_code', record_id=req.record_id) }}" class="unlock-form">
+                      <input type="hidden" name="next" value="{% if request_doc_type %}{{ url_for('my_print_requests', doc_type=request_doc_type) }}{% else %}{{ url_for('my_print_requests') }}{% endif %}" />
+                      <label class="sr-only" for="staff_print_code_{{ req.id }}">5-digit print code</label>
+                      <input
+                        id="staff_print_code_{{ req.id }}"
+                        type="text"
+                        name="approval_code"
+                        class="unlock-code-input"
+                        placeholder="00000"
+                        maxlength="5"
+                        pattern="[0-9]{5}"
+                        inputmode="numeric"
+                        autocomplete="one-time-code"
+                        required
+                        aria-label="Type the 5-digit print code from admin"
+                      />
+                      <button type="submit" class="btn btn-primary btn-unlock">Unlock</button>
+                    </form>
+                  {% elif req.record %}
+                    <a href="{{ url_for('record_detail', record_id=req.record_id) }}" class="btn btn-secondary btn-view-record">View record</a>
                   {% else %}
                     —
                   {% endif %}

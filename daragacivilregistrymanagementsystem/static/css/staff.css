@@ -205,9 +205,9 @@ body.page-staff-requests .staff-requests-table .col-reason,
 body.page-staff-requests .staff-requests-table .col-reject {
   max-width: 18rem;
   overflow: visible;
-  text-overflow: unset;
-  white-space: normal;
-  vertical-align: top;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 body.page-staff-requests .code-cell {
   font-variant-numeric: tabular-nums;
@@ -220,9 +220,9 @@ body.page-staff-requests .code-cell-stack {
   gap: 4px 6px;
 }
 body.page-staff-requests .approval-code-display {
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  color: var(--staff-green);
+  font-size: 1rem;
+  letter-spacing: 0.14em;
+  color: #002080;
   font-weight: 900;
   line-height: 1.2;
 }
@@ -238,7 +238,47 @@ body.page-staff-requests .code-used-chip {
   text-transform: uppercase;
   line-height: 1.4;
 }
-body.page-staff-requests .unlock-form { display: inline-block; }
+body.page-staff-requests .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+body.page-staff-requests .code-ask-admin {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+body.page-staff-requests .unlock-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+body.page-staff-requests .unlock-code-input {
+  width: 4.6rem;
+  min-height: 24px;
+  height: 28px;
+  padding: 2px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+body.page-staff-requests .unlock-code-input:focus {
+  outline: 2px solid #002080;
+  outline-offset: 1px;
+  border-color: #002080;
+}
 body.page-staff-requests .btn-unlock,
 body.page-staff-requests .btn-view-record {
   display: inline-block;
@@ -321,10 +361,11 @@ body.page-staff-requests .staff-print-requests-table .col-reject {
   min-width: 0;
   max-width: 18rem;
   overflow: visible;
-  text-overflow: unset;
-  white-space: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.75rem;
   color: #64748b;
+  vertical-align: middle;
 }
 body.page-staff-requests .staff-print-requests-table .col-actions {
   width: 108px;
@@ -750,6 +791,33 @@ body.page-record-detail .rd-code-card-hint {
   color: #64748b;
   font-weight: 600;
 }
+body.page-record-detail .rd-code-reveal {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px dashed rgba(0, 32, 128, 0.22);
+}
+body.page-record-detail .rd-code-reveal-label {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+body.page-record-detail .rd-code-reveal-digits,
+body.page-record-detail .approval-code-display {
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  color: #002080;
+  font-variant-numeric: tabular-nums;
+}
 body.page-record-detail .rd-code-label {
   display: block;
   font-size: 0.72rem;
@@ -789,6 +857,31 @@ body.page-record-detail .rd-code-form + .rd-code-form {
 body.page-record-detail .record-detail-preview .scan-preview-viewer-inner {
   margin: 0 12px 12px;
   border-radius: 12px;
+}
+
+body.page-archiving .archive-sections .table-wrap.archive-table-scroll,
+body.page-archiving.page-archiving-staff .archive-sections .table-wrap.archive-table-scroll {
+  overflow: auto !important;
+  max-height: calc(28px + (20 * 32px));
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e8eef5;
+}
+body.page-archiving .archive-sections .table-wrap.archive-table-scroll::-webkit-scrollbar,
+body.page-archiving.page-archiving-staff .archive-sections .table-wrap.archive-table-scroll::-webkit-scrollbar {
+  width: 8px !important;
+  height: 8px !important;
+  display: block !important;
+}
+body.page-archiving .archive-sections .table-wrap.archive-table-scroll::-webkit-scrollbar-track,
+body.page-archiving.page-archiving-staff .archive-sections .table-wrap.archive-table-scroll::-webkit-scrollbar-track {
+  background: #e8eef5;
+  border-radius: 999px;
+}
+body.page-archiving .archive-sections .table-wrap.archive-table-scroll::-webkit-scrollbar-thumb,
+body.page-archiving.page-archiving-staff .archive-sections .table-wrap.archive-table-scroll::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 999px;
 }
 
 /* —— Request edit (staff): professional split layout —— */

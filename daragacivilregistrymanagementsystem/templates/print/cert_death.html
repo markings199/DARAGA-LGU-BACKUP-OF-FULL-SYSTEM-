@@ -1,4 +1,4 @@
-{% from 'print/_cert_macros.html' import cert_line_row, cert_issued_row %}
+{% from 'print/_cert_macros.html' import cert_line_row, cert_issued_sentence %}
 {% set meta = form_meta %}
 {% include 'print/_cert_header.html' %}
 
@@ -16,8 +16,12 @@
   {{ cert_line_row('Civil Status', cert_field(data, 'Civil Status'), 'Civil Status', true) }}
   {{ cert_line_row('Nationality', cert_field(data, 'Nationality') or cert_field(data, 'Citizenship'), 'Nationality', true) }}
   {{ cert_line_row('Date of Death', cert_field(data, 'Date of Death'), 'Date of Death', true) }}
-  {{ cert_line_row('Place of Death', cert_field(data, 'Place of Death'), 'Place of Death', true) }}
+  {{ cert_line_row('Place of Death', cert_field(data, 'Place of Death'), 'Place of Death', true, 'cert-fill--long') }}
   {{ cert_line_row('Cause of Death', cert_field(data, 'Cause of Death'), 'Cause of Death', true) }}
-  {{ cert_issued_row() }}
+  <tr>
+    <td colspan="3" class="cert-issued-cell">
+      {{ cert_issued_sentence() }}
+    </td>
+  </tr>
 </table>
 {% include 'print/_cert_footer.html' %}

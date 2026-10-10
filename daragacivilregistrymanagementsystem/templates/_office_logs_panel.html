@@ -1,12 +1,12 @@
 {% set lr = log_retention or {} %}
 {% set st = office_log_stats or {} %}
-{% set keep = lr.get('keep_days', 30) %}
+{% set keep = lr.get('keep_days', 90) %}
 <div class="admin-section main-card office-logs-page">
   <header class="ol-hero">
     <div class="ol-hero-copy">
       <p class="ol-kicker">Municipality of Daraga</p>
       <h2 class="section-title">Office logs</h2>
-      <p class="ol-lead">Manage how long queues and activity logs stay on this server. Certificates are never deleted.</p>
+      <p class="ol-lead">How long queues and activity logs stay on this server.</p>
     </div>
     <div class="ol-hero-aside">
       <span class="ol-chip {% if lr.get('enabled', True) %}is-ok{% else %}is-off{% endif %}">
@@ -78,7 +78,7 @@
         <h3>Kept</h3>
         <ul class="ol-list">
           <li>Pending edit and print requests</li>
-          <li>Unused approved print requests</li>
+          <li>Unused approved edit and print requests</li>
           <li>Birth, marriage, and death records</li>
           <li>Certificate scans on the server</li>
         </ul>

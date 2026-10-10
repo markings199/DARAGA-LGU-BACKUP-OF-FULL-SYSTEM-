@@ -28,9 +28,9 @@
       "Finishing…",
     ],
     copy: [
-      "Creating a backup copy…",
-      "Saving in Admin Backup…",
-      "Copying to the Daraga LGU server…",
+      "Connecting to the Daraga LGU server…",
+      "Sending waiting backup files…",
+      "Verifying the office copy…",
       "Finishing…",
     ],
   };
