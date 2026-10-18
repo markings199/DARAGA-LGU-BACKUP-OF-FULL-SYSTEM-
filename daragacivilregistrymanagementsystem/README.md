@@ -63,12 +63,14 @@ python scripts/migrate_sqlite_to_postgres.py --sqlite "C:\path\to\civil_registry
 | Folder | Purpose |
 |--------|---------|
 | `app.py`, `models.py` | Application entry and database models |
+| `Start.bat`, `Install.bat` | Daily start and first-time install |
 | `.env` / `.env.example` | PostgreSQL `DATABASE_URL` and optional `DARAGA_DATA_ROOT` / `DARAGA_BACKUP_ROOT` |
 | `templates/` | HTML pages (Jinja) |
-| `static/` | CSS, JavaScript, seal image |
-| `ocr/` | OCR engines and form JSON (`ocr/forms/`) |
+| `static/css`, `static/js` | Styles and browser scripts |
+| `ocr/` | OCR engines; see `ocr/README.md` for `forms/`, `templates/`, `title_templates/` |
 | `services/` | Backup, print, annotation, scanner, server storage |
-| `scripts/` | PostgreSQL setup, SQLite migration, optional seed |
+| `scripts/` | PostgreSQL setup and SQLite migration |
+| `packaging/` | Office ZIP builder and install/start PowerShell |
 | `uploads/` | Default scans folder **on the application server** when no `DARAGA_DATA_ROOT` is set |
 | `backups/` | Default backup folder **on the application server** when no backup volume is set |
 

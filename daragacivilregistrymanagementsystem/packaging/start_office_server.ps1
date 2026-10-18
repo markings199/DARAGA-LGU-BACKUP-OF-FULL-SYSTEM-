@@ -2,7 +2,7 @@
 # Keep this window open so daily automatic backup can run.
 
 $ErrorActionPreference = "Continue"
-$appDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$appDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $appDir
 
 $pgBinCandidates = @(

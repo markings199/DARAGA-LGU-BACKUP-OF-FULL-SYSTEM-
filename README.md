@@ -4,6 +4,21 @@ This copy of the Daraga civil registry app uses **PostgreSQL** instead of SQLite
 
 **App folder:** [daragacivilregistrymanagementsystem/](daragacivilregistrymanagementsystem/)
 
+## Folder layout
+
+| Path | Purpose |
+|------|---------|
+| `Start Daraga Civil Registry.bat` | Start PostgreSQL (if needed) and the app from the repo root |
+| `daragacivilregistrymanagementsystem/` | Flask application (run `python app.py` here) |
+| `daragacivilregistrymanagementsystem/ocr/` | OCR engines and form templates |
+| `daragacivilregistrymanagementsystem/services/` | Backup, print, scanner, storage |
+| `daragacivilregistrymanagementsystem/static/` | CSS, JavaScript, seal image |
+| `daragacivilregistrymanagementsystem/templates/` | HTML pages |
+| `daragacivilregistrymanagementsystem/scripts/` | Database setup and SQLite migration |
+| `daragacivilregistrymanagementsystem/packaging/` | Install/start scripts and office ZIP builder |
+| `docs/` | Capstone reviewer notes |
+| `uploads/`, `backups/` | Live scans and backup ZIPs **on this PC only** (not on GitHub) |
+
 ## Download and run
 
 1. Clone or download this repo from GitHub.

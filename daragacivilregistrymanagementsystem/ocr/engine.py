@@ -276,7 +276,7 @@ def extract_from_ocr_text(
     """
     Core API:
     - detect doc type if not provided
-    - load templates from templates/<doc_type>/*.json
+    - load templates from forms/<doc_type>/*.json
     - try templates until match; fallback to next
     Returns:
       {

@@ -17,7 +17,7 @@ New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 $excludeDirs = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 @(
     ".git", ".venv", "venv", "env", "__pycache__", "uploads", "backups",
-    "dist", "build", ".idea", ".vscode"
+    "uploads_backup_", "dist", "build", ".idea", ".vscode"
 ) | ForEach-Object { [void]$excludeDirs.Add($_) }
 
 $excludeNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -28,6 +28,7 @@ function Test-ExcludedPath([string]$FullPath) {
     foreach ($part in $rel.Split([char[]]@("\", "/"))) {
         if ($excludeDirs.Contains($part)) { return $true }
         if ($part.StartsWith("_restore")) { return $true }
+        if ($part.StartsWith("uploads_backup")) { return $true }
         if ($part.EndsWith(".egg-info")) { return $true }
     }
     $leaf = Split-Path $FullPath -Leaf
