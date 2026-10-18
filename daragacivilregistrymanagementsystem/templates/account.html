@@ -2,7 +2,7 @@
 {% block title %}My account{% endblock %}
 {% block body_class %}page-account{% endblock %}
 {% block after_theme %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/account.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account.css') }}?v=photo-crop-1" />
 {% endblock %}
 
 {% block content %}
@@ -13,7 +13,33 @@
   <article class="account-shell">
     <aside class="account-brand" aria-label="Signed-in user">
       <p class="account-kicker">My account</p>
-      <div class="account-avatar" aria-hidden="true">{{ uname[:1]|upper }}</div>
+      {% set photo_url = user_photo_url(current_user) %}
+      <form class="account-photo-form" id="account-photo-form" method="post" action="{{ url_for('account_upload_photo') }}" enctype="multipart/form-data">
+        <label class="account-avatar{% if photo_url %} account-avatar--photo{% endif %}" for="account_photo_file" title="Choose a photo from this computer">
+          {% if photo_url %}
+            <img src="{{ photo_url }}" alt="" />
+          {% else %}
+            {{ uname[:1]|upper }}
+          {% endif %}
+          <span class="account-avatar-edit" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </span>
+        </label>
+        <input
+          id="account_photo_file"
+          class="account-photo-input"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+        />
+        <input id="account_photo_cropped" class="account-photo-input" type="file" name="photo" tabindex="-1" />
+        <div class="account-photo-actions">
+          <label class="btn btn-secondary account-photo-btn" for="account_photo_file">Choose from this computer</label>
+          {% if photo_url %}
+            <button type="submit" name="remove_photo" value="1" class="btn btn-secondary account-photo-btn">Remove</button>
+          {% endif %}
+        </div>
+        <p class="account-photo-hint">Crop the photo · JPEG or PNG · 8 MB</p>
+      </form>
       <h1 class="account-username">{{ uname }}</h1>
       <span class="account-role account-role--{{ role|lower }}">{{ 'Administrator' if role == 'ADMIN' else 'Staff' }}</span>
       <p class="account-office">Municipality of Daraga · Civil Registry</p>
@@ -27,11 +53,15 @@
     <div class="account-main">
       <section class="account-panel" aria-labelledby="account-details-title">
         <header class="account-panel-head">
-          <span class="account-panel-ic" aria-hidden="true">
+          <span class="account-panel-ic{% if photo_url %} account-panel-ic--photo{% endif %}" aria-hidden="true">
+            {% if photo_url %}
+              <img src="{{ photo_url }}" alt="" />
+            {% else %}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
               <circle cx="12" cy="7" r="4"/>
             </svg>
+            {% endif %}
           </span>
           <div>
             <h2 id="account-details-title">Account</h2>
@@ -153,6 +183,27 @@
   </section>
   {% endif %}
 </div>
+
+<div class="account-crop" id="account-crop" hidden>
+  <div class="account-crop-backdrop" data-crop-cancel="1"></div>
+  <div class="account-crop-panel" role="dialog" aria-modal="true" aria-labelledby="account-crop-title">
+    <h2 id="account-crop-title">Adjust photo</h2>
+    <p class="account-crop-lead">Drag to move. Use zoom to fill the circle, then save.</p>
+    <div class="account-crop-stage" id="account-crop-stage">
+      <img id="account-crop-image" alt="" draggable="false" />
+    </div>
+    <label class="account-crop-zoom" for="account-crop-zoom">
+      <span>Zoom</span>
+      <input id="account-crop-zoom" type="range" min="100" max="300" value="100" />
+    </label>
+    <p class="account-crop-error" id="account-crop-error" hidden></p>
+    <div class="account-crop-actions">
+      <button type="button" class="btn btn-secondary" data-crop-cancel="1">Cancel</button>
+      <button type="button" class="btn btn-primary" id="account-crop-save">Save photo</button>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/account-photo-crop.js') }}?v=photo-crop-1"></script>
 <script>
 (function () {
   var eyeOpen = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';

@@ -22,6 +22,24 @@ if not exist "%~dp0.venv\Scripts\python.exe" (
     exit /b 1
 )
 
+"%~dp0.venv\Scripts\python.exe" -c "import flask" >nul 2>&1
+if errorlevel 1 (
+    echo Flask is missing. Installing required packages now...
+    echo This can take several minutes the first time. Keep this window open.
+    echo.
+    "%~dp0.venv\Scripts\python.exe" -m pip install --upgrade pip
+    "%~dp0.venv\Scripts\python.exe" -m pip install -r "%~dp0requirements.txt"
+    "%~dp0.venv\Scripts\python.exe" -c "import flask" >nul 2>&1
+    if errorlevel 1 (
+        echo.
+        echo Packages did not install. Double-click Install.bat, wait until it finishes, then Start.bat again.
+        pause
+        exit /b 1
+    )
+    echo Packages installed.
+    echo.
+)
+
 set "PG_BIN=%USERPROFILE%\scoop\apps\postgresql\current\bin"
 set "PG_DATA=%USERPROFILE%\scoop\apps\postgresql\current\data"
 set "PG_LOG=%TEMP%\daraga-postgres.log"

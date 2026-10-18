@@ -3,7 +3,7 @@
    Optional: image_filename, image_url, print_log_url, can_print, print_heading, sync_from_form, locked_print_format
    suppress_screen_controls: if true, only print surfaces + script (controls rendered elsewhere).
 #}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/print_certification.css') }}?v=print-ui-3" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/print_certification.css') }}?v=date-paid-fit-2" />
 
 {% set _heading = print_heading|default('Daraga Civil Registry') %}
 {% set _locked = normalize_print_format(locked_print_format) if locked_print_format else '' %}

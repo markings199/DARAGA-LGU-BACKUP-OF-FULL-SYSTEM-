@@ -1,0 +1,71 @@
+{# Compact supporting-documents panel. Required: record, attachments, attachment_kinds, current_user. Optional: client_folder #}
+{% set _role = (current_user.role or '')|upper if current_user else '' %}
+{% set _folder = client_folder or '' %}
+<section class="rd-supporting no-print" id="rd-supporting">
+  <div class="rd-supporting-head">
+    <h3 class="rd-supporting-title">Supporting documents</h3>
+    {% if _folder %}
+      <span class="rd-supporting-folder" title="{{ _folder }}">{{ _folder }}</span>
+    {% endif %}
+  </div>
+
+  {% if attachments %}
+    <ul class="rd-supporting-list">
+      {% for att in attachments %}
+        <li class="rd-supporting-item">
+          <div class="rd-supporting-file">
+            <span class="rd-supporting-kind">{{ att.kind or 'Other' }}</span>
+            <span class="rd-supporting-name" title="{{ att.original_name }}">{{ att.original_name or 'Document' }}</span>
+            <span class="rd-supporting-meta">
+              {% if att.size_bytes %}{{ (att.size_bytes / 1024)|round(0)|int }} KB{% endif %}
+              {% if att.created_at %} · {{ att.created_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}
+            </span>
+          </div>
+          <div class="rd-supporting-actions">
+            <a class="btn btn-secondary btn-sm" href="{{ url_for('record_view_attachment', record_id=record.id, attachment_id=att.id) }}">View</a>
+            <a class="btn btn-secondary btn-sm" href="{{ url_for('record_get_attachment', record_id=record.id, attachment_id=att.id, download=1) }}">Download</a>
+            {% if _role in ('ADMIN', 'STAFF') %}
+              <form method="post" action="{{ url_for('record_delete_attachment', record_id=record.id, attachment_id=att.id) }}">
+                <button
+                  type="submit"
+                  class="btn btn-secondary btn-sm rd-supporting-remove"
+                  data-app-confirm
+                  data-confirm-title="Remove file"
+                  data-confirm-message="Remove {{ att.original_name }}?"
+                  data-confirm-ok="Remove"
+                  data-confirm-cancel="Cancel"
+                >Remove</button>
+              </form>
+            {% endif %}
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="rd-supporting-empty">None on file</p>
+  {% endif %}
+
+  <form
+    class="rd-supporting-form"
+    method="post"
+    action="{{ url_for('record_add_attachment', record_id=record.id) }}"
+    enctype="multipart/form-data"
+  >
+    <label class="rd-supporting-label" for="attachment_kind">Type</label>
+    <select id="attachment_kind" name="attachment_kind" class="rd-supporting-select">
+      {% for kind in attachment_kinds %}
+        <option value="{{ kind }}">{{ kind }}</option>
+      {% endfor %}
+    </select>
+    <input
+      id="attachment_file"
+      class="rd-supporting-file-input"
+      type="file"
+      name="attachment"
+      accept=".pdf,.jpg,.jpeg,.png,.webp,.tif,.tiff,application/pdf,image/*"
+      multiple
+      required
+    />
+    <button type="submit" class="btn btn-primary btn-sm">Attach</button>
+  </form>
+</section>

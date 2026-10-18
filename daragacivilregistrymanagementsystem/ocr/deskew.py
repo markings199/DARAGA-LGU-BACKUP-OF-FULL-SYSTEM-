@@ -356,6 +356,8 @@ def _trim_scanner_margins(img):
     y_bottom = _junk_depth_rows(gray, True)
     x1 = width - x_right
     y1 = height - y_bottom
+    if y0 > int(height * 0.04):
+        y0 = 0
     if x0 <= 2 and y0 <= 2 and x1 >= width - 2 and y1 >= height - 2:
         return img, False
     if (x1 - x0) < 0.72 * width or (y1 - y0) < 0.72 * height:
@@ -403,10 +405,12 @@ def straighten_document_file(path: str | os.PathLike) -> bool:
         height, width = gray.shape
         quad = _page_quad(gray)
         if _quad_is_crooked(quad, width, height):
-            warped = _warp_quad(img, quad)
-            if warped is not None:
-                img = warped
-                changed = True
+            top_y = float(min(quad[0][1], quad[1][1], quad[2][1], quad[3][1]))
+            if top_y <= 0.05 * height:
+                warped = _warp_quad(img, quad)
+                if warped is not None:
+                    img = warped
+                    changed = True
         trimmed, did_trim = _trim_scanner_margins(img)
         if did_trim:
             img = trimmed

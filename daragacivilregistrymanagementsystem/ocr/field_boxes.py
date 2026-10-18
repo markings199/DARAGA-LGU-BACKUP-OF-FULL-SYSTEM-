@@ -320,14 +320,17 @@ def _text_in_box(
     img_h: int,
     *,
     left_to_right: bool = False,
+    min_score: float = 0.2,
+    pad_frac_x: float = 0.03,
+    pad_frac_y: float = 0.08,
 ) -> str:
     x1, y1, x2, y2 = box
     left = x1 * img_w
     right = x2 * img_w
     top = y1 * img_h
     bottom = y2 * img_h
-    pad_x = max(4.0, (right - left) * 0.03)
-    pad_y = max(3.0, (bottom - top) * 0.08)
+    pad_x = max(4.0, (right - left) * pad_frac_x)
+    pad_y = max(3.0, (bottom - top) * pad_frac_y)
     left -= pad_x
     right += pad_x
     top -= pad_y
@@ -335,7 +338,7 @@ def _text_in_box(
     hits = [
         it
         for it in items
-        if left <= it["cx"] <= right and top <= it["cy"] <= bottom and it.get("score", 1.0) >= 0.2
+        if left <= it["cx"] <= right and top <= it["cy"] <= bottom and it.get("score", 1.0) >= min_score
     ]
     if left_to_right:
         hits.sort(key=lambda it: (it["x1"], it["cy"]))
@@ -476,6 +479,22 @@ def _clean_value(kind: str, raw: str) -> str:
     if kind == "age":
         hits = []
         upper = text.upper()
+        upper = re.sub(r"\b(?:19|20)\d{2}\b", " ", upper)
+        upper = re.sub(r"\bAGE\b", " ", upper)
+        # OCR often reads 31 as 3I / 3l and 28 as 2B.
+        compact = re.sub(r"[^A-Z0-9]", "", upper)
+        mapped = compact.translate(str.maketrans({
+            "O": "0", "Q": "0", "D": "0",
+            "I": "1", "L": "1",
+            "Z": "2",
+            "S": "5",
+            "B": "8",
+            "G": "6",
+        }))
+        if re.fullmatch(r"\d{1,3}", mapped):
+            val = int(mapped)
+            if 12 <= val <= 99:
+                return str(val)
         for m in re.finditer(r"(?<!\d)(\d{1,3})\s*(YEARS?|YRS)?\b", upper):
             val = int(m.group(1))
             unit = m.group(2) or ""
@@ -616,6 +635,13 @@ def _fill_boxes(spec: Dict[str, Any], items_template: List[Dict[str, Any]]) -> D
         elif kind == "sex":
             raw = _text_in_box(items_template, field["box"], tw, th)
             value = sex_from_ocr_text(raw)
+        elif kind == "age":
+            raw = _text_in_box(
+                items_template, field["box"], tw, th,
+                min_score=0.08, pad_frac_x=0.45, pad_frac_y=0.85,
+            )
+            value = _subtract_printed(raw, field.get("printed") or "")
+            value = _clean_value(kind, value)
         else:
             raw = _text_in_box(items_template, field["box"], tw, th)
             value = _subtract_printed(raw, field.get("printed") or "")

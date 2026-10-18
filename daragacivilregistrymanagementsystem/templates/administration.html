@@ -372,22 +372,21 @@
         </select>
       </form>
       {% if print_requests %}
-        <div class="table-wrap admin-requests-table-wrap admin-print-requests-table-wrap">
-          <table class="table admin-requests-table admin-print-requests-table">
+        <div class="table-wrap admin-requests-table-wrap admin-edit-requests-table-wrap">
+          <table class="table admin-requests-table admin-edit-requests-table">
             <thead>
               <tr>
-                <th class="col-id">ID</th>
-                <th class="col-record">Record</th>
-                <th class="col-type">Type</th>
-                <th class="col-print-format">Print</th>
-                <th class="col-status">Status</th>
-                <th class="col-staff">Staff</th>
-                <th class="col-requested">Requested</th>
-                <th class="col-reason">Reason</th>
-                <th class="col-reject">Rejection</th>
-                <th class="col-code">Code</th>
-                <th class="col-view">View</th>
-                <th class="col-actions">Actions</th>
+                <th class="col-id" scope="col">ID</th>
+                <th class="col-record" scope="col">Record</th>
+                <th class="col-type" scope="col">Type</th>
+                <th class="col-status" scope="col">Status</th>
+                <th class="col-staff" scope="col">Staff</th>
+                <th class="col-requested" scope="col">Requested</th>
+                <th class="col-reason" scope="col">Reason</th>
+                <th class="col-reject" scope="col">Rejection</th>
+                <th class="col-code" scope="col">Code</th>
+                <th class="col-view" scope="col">View</th>
+                <th class="col-actions" scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -398,16 +397,12 @@
                   <td class="col-type">
                     {% if req.record %}
                       <span class="doc-type-short doc-type-short--{{ req.record.document_type }}">{{ req.record.document_type | capitalize }}</span>
-                    {% else %}
-                      —
-                    {% endif %}
-                  </td>
-                  <td class="col-print-format">
-                    {% if req.record %}
-                      <span
-                        class="print-format-badge print-format-badge--{{ normalize_print_format(req.print_format) }}"
-                        title="{{ print_format_label(req.print_format, req.record.document_type) }}"
-                      >{{ print_format_short_label(req.print_format, req.record.document_type) }}</span>
+                      {% if req.print_format %}
+                        <span
+                          class="print-format-badge print-format-badge--{{ normalize_print_format(req.print_format) }}"
+                          title="{{ print_format_label(req.print_format, req.record.document_type) }}"
+                        >{{ print_format_short_label(req.print_format, req.record.document_type) }}</span>
+                      {% endif %}
                     {% else %}
                       —
                     {% endif %}
@@ -441,7 +436,7 @@
                         </form>
                         <form method="post" action="{{ url_for('print_request_reject', request_id=req.id) }}" class="action-form action-form-reject">
                           {% if request_doc_type %}<input type="hidden" name="doc_type" value="{{ request_doc_type }}" />{% endif %}
-                          <input type="text" name="rejection_reason" placeholder="Note (optional)" class="reject-input" aria-label="Rejection note" />
+                          <input type="text" name="rejection_reason" placeholder="Note" class="reject-input" aria-label="Rejection note" />
                           <button type="submit" class="btn btn-delete-sm">Reject</button>
                         </form>
                       </div>

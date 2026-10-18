@@ -15,6 +15,7 @@ class User(db.Model):
     session_version = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     last_login_at = db.Column(db.DateTime)
+    photo_path = db.Column(db.String(256), nullable=False, default="")
 
 
 class Record(db.Model):
@@ -33,6 +34,25 @@ class Record(db.Model):
     status = db.Column(db.String(32), nullable=False, default="archived")  # e.g. archived, pending
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RecordAttachment(db.Model):
+    """Supporting paper stored in this record's client folder. Can be added many times."""
+    __tablename__ = "record_attachments"
+    id = db.Column(db.Integer, primary_key=True)
+    record_id = db.Column(db.Integer, db.ForeignKey("records.id", ondelete="CASCADE"), nullable=False, index=True)
+    original_name = db.Column(db.String(255), nullable=False, default="")
+    stored_path = db.Column(db.String(512), nullable=False, default="")
+    kind = db.Column(db.String(64), nullable=False, default="Other")
+    size_bytes = db.Column(db.Integer, nullable=False, default=0)
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    uploaded_by = db.relationship("User", foreign_keys=[uploaded_by_id])
+    record = db.relationship(
+        "Record",
+        backref=db.backref("attachments", lazy="dynamic", cascade="all, delete-orphan"),
+    )
 
 
 class EditRequest(db.Model):

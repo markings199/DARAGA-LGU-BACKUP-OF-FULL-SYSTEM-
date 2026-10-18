@@ -13,6 +13,7 @@ os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
 os.environ.setdefault("KMP_WARNINGS", "0")
 os.environ.setdefault("OMP_DISPLAY_ENV", "FALSE")
 os.environ.setdefault("WERKZEUG_DEBUG_PIN", "off")
+os.environ.setdefault("FLASK_SKIP_DOTENV", "1")
 _cpu_n = os.cpu_count() or 4
 _ocr_threads = "2" if _cpu_n >= 4 else "1"
 os.environ.setdefault("OCR_CPU_THREADS", _ocr_threads)
@@ -44,7 +45,8 @@ class _QuietConsole:
     def write(self, text):
         if not text:
             return 0
-        if any(marker in text for marker in self._DROP):
+        sample = text.decode("utf-8", "replace") if isinstance(text, (bytes, bytearray)) else text
+        if any(marker in sample for marker in self._DROP):
             return len(text)
         return self._wrapped.write(text)
 
@@ -89,8 +91,15 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from sqlalchemy import or_
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
-from models import db, User, Record, EditRequest, AuditLog, PrintLog, PrintRequest, BackupRun, NotificationRead
+from models import db, User, Record, RecordAttachment, EditRequest, AuditLog, PrintLog, PrintRequest, BackupRun, NotificationRead
+from services.record_files import (
+    certificate_in_client_folder,
+    client_folder_rel,
+    supporting_folder_rel,
+)
+from services.lgu_office import LGU_LOCAL_DATA_DIR
 from services.vault_storage import (
     apply_vault,
     vault_status,
@@ -216,6 +225,15 @@ def _load_env_files() -> None:
 _load_env_files()
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+ALLOWED_ATTACHMENT_EXTS = frozenset({".jpg", ".jpeg", ".png", ".pdf", ".webp", ".tif", ".tiff"})
+ATTACHMENT_KINDS = (
+    "Valid ID",
+    "Affidavit",
+    "Authorization",
+    "PSA / court paper",
+    "Other",
+)
+MAX_ATTACHMENTS_PER_UPLOAD = 12
 
 UPLOAD_DIR, _UPLOAD_STORAGE_ERROR = prepare_upload_storage(BASE_DIR)
 if _UPLOAD_STORAGE_ERROR:
@@ -280,8 +298,16 @@ def _upload_candidate_roots() -> list[Path]:
 
     add(UPLOAD_DIR)
     add(local_upload_dir(BASE_DIR))
+    add(LGU_LOCAL_DATA_DIR / "uploads")
     try:
         for extra in BASE_DIR.glob("_restore_uploads_*"):
+            if extra.is_dir():
+                add(extra)
+    except OSError:
+        pass
+    try:
+        desktop = Path.home() / "Desktop"
+        for extra in desktop.glob("DaragaCivilRegistry_Package_*/DaragaCivilRegistry/uploads"):
             if extra.is_dir():
                 add(extra)
     except OSError:
@@ -297,36 +323,53 @@ def _existing_file_for_rel(norm: str) -> Path | None:
     return None
 
 
-def _file_matching_registry(norm: str) -> Path | None:
-    """If the stored filename was renamed, find the scan by registry number in the same folder."""
-    parts = [p for p in norm.replace("\\", "/").split("/") if p]
-    if len(parts) < 2:
-        return None
-    folder = parts[0].lower()
-    name = parts[-1]
-    if folder not in ALLOWED_UPLOAD_TOP:
-        return None
-    match = _REGISTRY_IN_NAME.search(name)
-    if not match:
-        return None
-    needle = match.group(1)
-    hits: list[Path] = []
-    for root in _upload_candidate_roots():
-        folder_path = root / folder
+def _iter_scan_files(root: Path):
+    for sub in ("birth", "marriage", "death", "files", "temp"):
+        folder = root / sub
+        if not folder.is_dir():
+            continue
         try:
-            names = list(folder_path.iterdir())
+            for item in folder.rglob("*"):
+                if item.is_file() and item.suffix.lower() in ALLOWED_IMAGE_EXTS:
+                    yield item
         except OSError:
             continue
-        for item in names:
+
+
+def _path_to_upload_rel(found: Path) -> str:
+    for root in _upload_candidate_roots():
+        try:
+            return _normalize_upload_relpath(found.relative_to(root).as_posix())
+        except (ValueError, OSError):
+            continue
+    return _normalize_upload_relpath(found.name)
+
+
+def _file_matching_registry(norm: str, registry: str = "", doc_type: str = "") -> Path | None:
+    """Find a scan when it was renamed, moved into a client folder, or lives in another copy."""
+    name = Path(norm or "").name
+    match = _REGISTRY_IN_NAME.search(name or "") or _REGISTRY_IN_NAME.search(norm or "")
+    if not match and registry:
+        match = _REGISTRY_IN_NAME.search(registry)
+    needle = match.group(1) if match else ""
+    want_type = (doc_type or "").strip().lower()
+    name_l = name.lower()
+    hits: list[Path] = []
+    for root in _upload_candidate_roots():
+        for item in _iter_scan_files(root):
             try:
-                if item.is_file() and needle in item.name and item.suffix.lower() in ALLOWED_IMAGE_EXTS:
+                in_type = want_type in ("", "record") or want_type in item.as_posix().replace("\\", "/").lower()
+                if needle and needle in item.name and in_type:
+                    hits.append(item)
+                elif name_l and item.name.lower() == name_l:
                     hits.append(item)
             except OSError:
                 continue
     if not hits:
         return None
-    exact = [item for item in hits if item.name == name]
+    exact = [item for item in hits if item.name.lower() == name_l] if name_l else []
     if exact:
+        exact.sort(key=lambda item: item.stat().st_mtime if item.exists() else 0, reverse=True)
         return exact[0]
     hits.sort(key=lambda item: item.stat().st_mtime if item.exists() else 0, reverse=True)
     return hits[0]
@@ -349,12 +392,105 @@ def _upload_file_path(rel: str, *, for_write: bool = False) -> Path | None:
     return primary
 
 
+def _repair_record_image_path(record: Record) -> str:
+    """Point the record at the scan file if it was moved or this copy uses another uploads folder."""
+    rel = _normalize_upload_relpath(record.image_path or record.image_front_path or "")
+    found = _upload_file_path(rel) if rel else None
+    if found is None or not found.is_file():
+        found = _file_matching_registry(
+            rel,
+            registry=record.registry_number or "",
+            doc_type=record.document_type or "",
+        )
+    if found is None or not found.is_file():
+        return rel
+    new_rel = _path_to_upload_rel(found)
+    if new_rel and new_rel != rel:
+        record.image_path = new_rel
+        record.image_front_path = new_rel
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        return new_rel
+    return rel or new_rel
+
+
 def _existing_upload_relpath(rel: str) -> str:
     """Return a safe uploads-relative path only if that file is still on disk."""
     path = _upload_file_path(rel)
     if path is None or not path.is_file():
         return ""
     return _normalize_upload_relpath(rel)
+
+
+def _ensure_record_client_folder(record: Record) -> str:
+    """Create this record's office folder: files/{type}/{id}_{name}/supporting/."""
+    rel = client_folder_rel(record)
+    folder = _upload_file_path(rel, for_write=True)
+    if folder is not None:
+        (folder / "supporting").mkdir(parents=True, exist_ok=True)
+    return rel
+
+
+def _place_certificate_in_client_folder(record: Record) -> str:
+    """Keep the original certificate inside this client's folder. Safe to call many times."""
+    folder_rel = _ensure_record_client_folder(record)
+    current = _normalize_upload_relpath(record.image_path or record.image_front_path or "")
+    if not current or certificate_in_client_folder(current, folder_rel):
+        return folder_rel
+    src = _upload_file_path(current)
+    if src is None or not src.is_file():
+        return folder_rel
+    dest_rel = f"{folder_rel}/{src.name}"
+    dest = _upload_file_path(dest_rel, for_write=True)
+    if dest is None:
+        return folder_rel
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.exists() and src.resolve() != dest.resolve():
+            dest = dest.with_name(f"{dest.stem}_{uuid.uuid4().hex[:6]}{dest.suffix}")
+            dest_rel = f"{folder_rel}/{dest.name}"
+        if src.resolve() != dest.resolve():
+            shutil.copy2(src, dest)
+            if dest.is_file() and dest.stat().st_size > 0:
+                record.image_path = dest_rel
+                record.image_front_path = dest_rel
+                db.session.commit()
+                try:
+                    src.unlink()
+                except OSError:
+                    pass
+    except OSError:
+        db.session.rollback()
+    return folder_rel
+
+
+def _list_record_attachments(record_id: int):
+    return (
+        RecordAttachment.query.filter_by(record_id=record_id)
+        .order_by(RecordAttachment.created_at.desc(), RecordAttachment.id.desc())
+        .all()
+    )
+
+
+def _supporting_template_vars(record: Record) -> dict:
+    _repair_record_image_path(record)
+    return {
+        "attachments": _list_record_attachments(record.id),
+        "attachment_kinds": ATTACHMENT_KINDS,
+        "client_folder": _place_certificate_in_client_folder(record),
+    }
+
+
+def _safe_attachment_filename(original: str, kind: str) -> str:
+    ext = Path(original or "").suffix.lower()
+    if ext not in ALLOWED_ATTACHMENT_EXTS:
+        return ""
+    stem = secure_filename(Path(original).stem) or "document"
+    kind_part = secure_filename((kind or "other").lower().replace("/", "-")) or "other"
+    stamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    return f"{stamp}_{kind_part}_{stem[:40]}_{uuid.uuid4().hex[:6]}{ext}"
 
 
 def _flatten_nested_uploads() -> None:
@@ -458,6 +594,53 @@ DATE_FIELD_KEYS = {
     "Date of Marriage of Parents",
 }
 SEX_FIELD_KEYS = {"Sex"}
+
+REQUIRED_REVIEW_FIELDS = {
+    "birth": (
+        "Registry Number",
+        "Date of Registration",
+        "Name of Child",
+        "Sex",
+        "Date of Birth",
+        "Place of Birth",
+        "Name of Mother",
+        "Citizenship of Mother",
+        "Name of Father",
+        "Citizenship of Father",
+        "Date of Marriage of Parents",
+        "Place of Marriage of Parents",
+    ),
+    "marriage": (
+        "Registry Number",
+        "Date of Registration",
+        "Date of Marriage",
+        "Place of Marriage",
+        "Husband Name",
+        "Husband Age",
+        "Husband Citizenship",
+        "Husband Civil Status",
+        "Husband Father",
+        "Husband Mother",
+        "Wife Name",
+        "Wife Age",
+        "Wife Citizenship",
+        "Wife Civil Status",
+        "Wife Father",
+        "Wife Mother",
+    ),
+    "death": (
+        "Registry Number",
+        "Date of Registration",
+        "Name of Deceased",
+        "Sex",
+        "Age",
+        "Civil Status",
+        "Nationality",
+        "Date of Death",
+        "Place of Death",
+        "Cause of Death",
+    ),
+}
 
 # JSON keys used for mother's name across document types (stored in Record.data_json).
 MOTHER_NAME_JSON_KEYS = (
@@ -607,6 +790,26 @@ def metadata_display_label(key: str) -> str:
     return METADATA_DISPLAY_LABELS.get(key or "", key or "")
 
 
+def required_review_fields(doc_type: str) -> tuple[str, ...]:
+    return REQUIRED_REVIEW_FIELDS.get((doc_type or "").strip().lower(), ())
+
+
+def is_required_review_field(doc_type: str, key: str) -> bool:
+    return bool(key) and key in required_review_fields(doc_type)
+
+
+def _field_has_review_value(submitted: dict, key: str) -> bool:
+    raw = submitted.get(key)
+    if raw is None:
+        return False
+    return bool(str(raw).strip())
+
+
+def missing_required_review_fields(doc_type: str, submitted: dict) -> list[str]:
+    data = submitted or {}
+    return [key for key in required_review_fields(doc_type) if not _field_has_review_value(data, key)]
+
+
 _FLASH_ERROR_MARKERS = (
     "fail",
     "invalid",
@@ -665,6 +868,8 @@ app.jinja_env.globals["flash_tone"] = flash_tone
 app.jinja_env.globals["flash_title"] = flash_title
 app.jinja_env.globals["DATE_FIELD_KEYS"] = DATE_FIELD_KEYS
 app.jinja_env.globals["SEX_FIELD_KEYS"] = SEX_FIELD_KEYS
+app.jinja_env.globals["required_review_fields"] = required_review_fields
+app.jinja_env.globals["is_required_review_field"] = is_required_review_field
 
 
 def date_input_value(raw: str) -> str:
@@ -725,6 +930,7 @@ def inject_template_globals():
         "metadata_display_label": metadata_display_label,
         "flash_tone": flash_tone,
         "flash_title": flash_title,
+        "user_photo_url": _user_photo_url,
     }
 
 
@@ -793,7 +999,7 @@ def _upload_preview_url(rel: str) -> str:
     return url
 
 
-def _save_ocr_image_from_request():
+def _save_ocr_image_from_request(straighten: bool = True):
     file = request.files.get("image")
     image_filename_form = (request.form.get("image_filename") or "").strip()
 
@@ -829,7 +1035,8 @@ def _save_ocr_image_from_request():
             except OSError:
                 pass
             return None, None, "The file is too large to store on the server. It was not saved."
-        _straighten_saved_scan(save_path)
+        if straighten:
+            _straighten_saved_scan(save_path)
         image_filename = f"temp/{save_path.name}"
         return save_path, image_filename, None
     if image_filename_form:
@@ -840,7 +1047,8 @@ def _save_ocr_image_from_request():
         save_path = _upload_file_path(image_filename)
         if save_path is None or not save_path.exists():
             return None, None, "Scanned image no longer found. Please scan again."
-        _straighten_saved_scan(save_path)
+        if straighten:
+            _straighten_saved_scan(save_path)
         return save_path, image_filename, None
     return None, None, "Please scan from printer or choose an image file first."
 
@@ -1064,7 +1272,9 @@ def _pop_detect_wait(job_id: str):
         return _DETECT_WAITS.pop(job_id, None)
 
 
-def _detect_document_type_sync(save_path: Path, prefer_worker: bool = True) -> dict:
+def _detect_document_type_sync(
+    save_path: Path, prefer_worker: bool = True, ocr_fallback: bool = True
+) -> dict:
     from ocr.detect import detect_from_image
     from ocr.engine import document_type_label
 
@@ -1077,6 +1287,13 @@ def _detect_document_type_sync(save_path: Path, prefer_worker: bool = True) -> d
             "confidence": visual.get("confidence") or "high",
             "reason": visual.get("reason") or "",
         }
+    if not ocr_fallback:
+        return {
+            "doc_type": None,
+            "label": "",
+            "confidence": "none",
+            "reason": visual.get("reason") or "Could not identify the document type",
+        }
 
     job_id = f"detect-{uuid.uuid4().hex}"
     holder = _register_detect_wait(job_id)
@@ -1085,7 +1302,7 @@ def _detect_document_type_sync(save_path: Path, prefer_worker: bool = True) -> d
         _ensure_ocr_listener()
         queued = submit_detect_job(job_id, str(save_path))
     if prefer_worker and queued:
-        holder["event"].wait(timeout=90)
+        holder["event"].wait(timeout=8)
         _pop_detect_wait(job_id)
         payload = holder.get("payload") or {}
         found = (payload.get("doc_type") or "").strip().lower()
@@ -1369,6 +1586,86 @@ def _bump_session_version(user, keep_current_session: bool = False) -> None:
         session["session_version"] = int(user.session_version)
 
 
+MAX_AVATAR_BYTES = 2 * 1024 * 1024
+AVATAR_MAX_PX = 512
+
+
+def _avatar_rel_for_user(user_id: int) -> str:
+    return f"avatars/u_{int(user_id)}.jpg"
+
+
+def _user_photo_file(user) -> Path | None:
+    rel = _normalize_upload_relpath(getattr(user, "photo_path", None) or "")
+    if not rel.lower().startswith("avatars/"):
+        return None
+    path = _upload_file_path(rel)
+    if path is not None and path.is_file():
+        return path
+    return None
+
+
+def _user_photo_url(user) -> str:
+    if not user or not getattr(user, "photo_path", None):
+        return ""
+    path = _user_photo_file(user)
+    if path is None:
+        return ""
+    return url_for("account_photo", user_id=user.id, v=int(path.stat().st_mtime))
+
+
+def _delete_user_photo_file(user) -> None:
+    path = _user_photo_file(user)
+    if path is None:
+        return
+    try:
+        path.unlink()
+    except OSError:
+        pass
+
+
+def _save_user_photo(user, storage) -> str | None:
+    raw = storage.read(MAX_AVATAR_BYTES + 1)
+    if not raw:
+        return "Choose a photo to upload."
+    if len(raw) > MAX_AVATAR_BYTES:
+        return "Photo must be 2 MB or smaller."
+    try:
+        from PIL import Image, ImageOps, UnidentifiedImageError
+    except ImportError:
+        return "Photo tools are not installed on this computer."
+    try:
+        img = Image.open(BytesIO(raw))
+        img.load()
+    except (UnidentifiedImageError, OSError, ValueError):
+        return "Use a JPEG or PNG photo."
+    if (img.format or "").upper() not in ("JPEG", "PNG", "WEBP"):
+        return "Use a JPEG or PNG photo."
+    if img.width < 32 or img.height < 32:
+        return "Photo is too small."
+    if img.width * img.height > 25_000_000:
+        return "Photo is too large."
+    img = ImageOps.exif_transpose(img)
+    img = img.convert("RGB")
+    side = min(img.size)
+    left = (img.width - side) // 2
+    top = (img.height - side) // 2
+    img = img.crop((left, top, left + side, top + side))
+    img.thumbnail((AVATAR_MAX_PX, AVATAR_MAX_PX))
+    rel = _avatar_rel_for_user(user.id)
+    dest = _upload_file_path(rel, for_write=True)
+    if dest is None:
+        return "Could not save the photo."
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_name(dest.stem + ".tmp.jpg")
+        img.save(tmp, format="JPEG", quality=85, optimize=True)
+        tmp.replace(dest)
+    except OSError as exc:
+        return describe_storage_error(exc, dest)
+    user.photo_path = rel
+    return None
+
+
 @app.route("/account")
 @login_required
 def account():
@@ -1439,6 +1736,55 @@ def account_change_password():
     return redirect(url_for("account"))
 
 
+@app.route("/account/photo", methods=["POST"])
+@login_required
+def account_upload_photo():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for("login"))
+    storage_err = _require_server_storage()
+    if storage_err:
+        flash(storage_err, "error")
+        return redirect(url_for("account"))
+    if (request.form.get("remove_photo") or "").strip():
+        _delete_user_photo_file(user)
+        user.photo_path = ""
+        db.session.commit()
+        _log_audit(user.id, "ACCOUNT_PHOTO_REMOVE", f"username={user.username}")
+        flash("Photo removed.")
+        return redirect(url_for("account"))
+    file = request.files.get("photo")
+    if not file or not (file.filename or "").strip():
+        flash("Choose a photo to upload.")
+        return redirect(url_for("account"))
+    err = _save_user_photo(user, file)
+    if err:
+        flash(err, "error")
+        return redirect(url_for("account"))
+    db.session.commit()
+    _log_audit(user.id, "ACCOUNT_PHOTO_UPLOAD", f"username={user.username}")
+    flash("Photo saved.")
+    return redirect(url_for("account"))
+
+
+@app.route("/account/photo/<int:user_id>")
+@login_required
+def account_photo(user_id):
+    user = db.session.get(User, user_id)
+    if not user:
+        return ("", 404)
+    path = _user_photo_file(user)
+    if path is None:
+        return ("", 404)
+    rel = _normalize_upload_relpath(user.photo_path or "")
+    if rel != _avatar_rel_for_user(user.id):
+        return ("", 404)
+    resp = send_file(path, as_attachment=False, mimetype="image/jpeg", conditional=True)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Cache-Control"] = "private, no-store"
+    return resp
+
+
 @app.route("/", methods=["GET", "POST"])
 @login_required
 def index():
@@ -1447,7 +1793,10 @@ def index():
         if err:
             flash(err)
             return redirect(url_for("index"))
-        _set_staged_scan(image_filename, doc_type=doc_type if doc_type != "auto" else "")
+        if doc_type not in DOCUMENT_TYPES:
+            flash("Identify the document type before running OCR.")
+            return redirect(url_for("index"))
+        _set_staged_scan(image_filename, doc_type=doc_type)
         job_id = _start_ocr_job(doc_type, save_path, image_filename)
         session["last_ocr_job_id"] = job_id
         session.modified = True
@@ -1515,7 +1864,7 @@ def api_scan():
 @login_required
 def api_scan_stage():
     """Persist an uploaded/scanned image in the session until Cancel OCR."""
-    save_path, image_filename, err = _save_ocr_image_from_request()
+    save_path, image_filename, err = _save_ocr_image_from_request(straighten=False)
     if err:
         return {"ok": False, "error": err}, 400
     doc_type = (request.form.get("document_type") or "").strip()
@@ -1536,11 +1885,11 @@ def api_scan_stage():
 @app.route("/api/detect-document-type", methods=["POST"])
 @login_required
 def api_detect_document_type():
-    """Identify birth, marriage, or death from the scanned certificate heading."""
-    save_path, image_filename, err = _save_ocr_image_from_request()
+    """Identify birth, marriage, or death from the top certificate heading only."""
+    save_path, image_filename, err = _save_ocr_image_from_request(straighten=False)
     if err:
         return {"ok": False, "error": err}, 400
-    detected = _detect_document_type_sync(save_path)
+    detected = _detect_document_type_sync(save_path, prefer_worker=False, ocr_fallback=True)
     doc_type = detected.get("doc_type") or ""
     if doc_type not in ("birth", "marriage", "death"):
         doc_type = ""
@@ -1563,10 +1912,9 @@ def api_ocr_start():
     if err:
         return {"ok": False, "error": err}, 400
 
-    _set_staged_scan(
-        image_filename,
-        doc_type=doc_type if doc_type in ("birth", "marriage", "death") else "",
-    )
+    if doc_type not in DOCUMENT_TYPES:
+        return {"ok": False, "error": "Identify the document type before running OCR."}, 400
+    _set_staged_scan(image_filename, doc_type=doc_type)
     job_id = _start_ocr_job(doc_type, save_path, image_filename)
     session["last_ocr_job_id"] = job_id
     session.modified = True
@@ -2565,6 +2913,7 @@ def record_detail(record_id):
         form_meta=form_meta(record.document_type),
         approved_print_format=approved_print_format,
         annotation_form=annotation_form_defaults(data),
+        **_supporting_template_vars(record),
     )
 
 
@@ -2597,6 +2946,172 @@ def record_save_annotation(record_id):
     )
     flash("Annotation removed." if not annotation else "Document annotation saved.")
     return redirect(url_for("record_detail", record_id=record_id))
+
+
+@app.route("/record/<int:record_id>/attachments", methods=["POST"])
+@login_required
+def record_add_attachment(record_id):
+    record = db.session.get(Record, record_id)
+    if not record:
+        flash("Record not found.")
+        return redirect(url_for("search_records"))
+    user = get_current_user()
+    if not user:
+        flash("Please log in.")
+        return redirect(url_for("login"))
+    storage_err = _require_server_storage()
+    if storage_err:
+        flash(storage_err, "error")
+        return redirect(url_for("record_detail", record_id=record_id) + "#rd-supporting")
+    kind = (request.form.get("attachment_kind") or "Other").strip()
+    if kind not in ATTACHMENT_KINDS:
+        kind = "Other"
+    uploads = [f for f in request.files.getlist("attachment") if f and (f.filename or "").strip()]
+    if not uploads:
+        flash("Choose a file to attach.")
+        return redirect(url_for("record_detail", record_id=record_id) + "#rd-supporting")
+    if len(uploads) > MAX_ATTACHMENTS_PER_UPLOAD:
+        flash(f"Attach up to {MAX_ATTACHMENTS_PER_UPLOAD} files at a time.")
+        uploads = uploads[:MAX_ATTACHMENTS_PER_UPLOAD]
+    folder_rel = _place_certificate_in_client_folder(record)
+    support_rel = supporting_folder_rel(record)
+    saved = 0
+    skipped = 0
+    for file in uploads:
+        original = Path(file.filename).name
+        stored_name = _safe_attachment_filename(original, kind)
+        if not stored_name:
+            skipped += 1
+            continue
+        dest_rel = f"{support_rel}/{stored_name}"
+        dest = _upload_file_path(dest_rel, for_write=True)
+        if dest is None:
+            skipped += 1
+            continue
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            file.save(str(dest))
+            size = dest.stat().st_size if dest.is_file() else 0
+            if size <= 0 or size > MAX_UPLOAD_BYTES:
+                dest.unlink(missing_ok=True)
+                skipped += 1
+                continue
+            row = RecordAttachment(
+                record_id=record.id,
+                original_name=original[:255],
+                stored_path=dest_rel,
+                kind=kind,
+                size_bytes=size,
+                uploaded_by_id=user.id,
+            )
+            db.session.add(row)
+            saved += 1
+        except OSError as exc:
+            flash(describe_storage_error(exc, dest), "error")
+            skipped += 1
+    if saved:
+        db.session.commit()
+        _log_audit(
+            user.id,
+            "Add supporting document",
+            f"Record {record.id} · {saved} file(s) · {folder_rel}",
+        )
+        flash(f"{saved} file{'s' if saved != 1 else ''} attached.")
+    else:
+        db.session.rollback()
+    if skipped and not saved:
+        flash("Use a PDF or image under 25 MB.")
+    elif skipped:
+        flash(f"{skipped} file(s) skipped.")
+    return redirect(url_for("record_detail", record_id=record_id) + "#rd-supporting")
+
+
+@app.route("/record/<int:record_id>/attachments/<int:attachment_id>")
+@login_required
+def record_get_attachment(record_id, attachment_id):
+    record = db.session.get(Record, record_id)
+    if not record:
+        flash("Record not found.")
+        return redirect(url_for("search_records"))
+    row = db.session.get(RecordAttachment, attachment_id)
+    if not row or row.record_id != record.id:
+        flash("Supporting document not found.")
+        return redirect(url_for("record_detail", record_id=record_id))
+    folder_rel = client_folder_rel(record)
+    stored = _normalize_upload_relpath(row.stored_path)
+    if not stored.lower().startswith(folder_rel.lower() + "/"):
+        return ("", 404)
+    full = _upload_file_path(stored)
+    if full is None or not full.is_file():
+        flash("File not found.")
+        return redirect(url_for("record_detail", record_id=record_id) + "#rd-supporting")
+    as_download = (request.args.get("download") or "").strip() in ("1", "true", "yes")
+    resp = send_file(
+        full,
+        as_attachment=as_download,
+        download_name=row.original_name or full.name,
+        conditional=True,
+    )
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Cache-Control"] = "private, no-store"
+    return resp
+
+
+@app.route("/record/<int:record_id>/attachments/<int:attachment_id>/view")
+@login_required
+def record_view_attachment(record_id, attachment_id):
+    record = db.session.get(Record, record_id)
+    if not record:
+        flash("Record not found.")
+        return redirect(url_for("search_records"))
+    row = db.session.get(RecordAttachment, attachment_id)
+    if not row or row.record_id != record.id:
+        flash("Supporting document not found.")
+        return redirect(url_for("record_detail", record_id=record_id) + "#rd-supporting")
+    folder_rel = client_folder_rel(record)
+    stored = _normalize_upload_relpath(row.stored_path)
+    if not stored.lower().startswith(folder_rel.lower() + "/"):
+        return ("", 404)
+    full = _upload_file_path(stored)
+    if full is None or not full.is_file():
+        flash("File not found.")
+        return redirect(url_for("record_detail", record_id=record_id) + "#rd-supporting")
+    return render_template(
+        "attachment_view.html",
+        record=record,
+        attachment=row,
+        current_user=get_current_user(),
+        nav_active="search",
+    )
+
+
+@app.route("/record/<int:record_id>/attachments/<int:attachment_id>/delete", methods=["POST"])
+@login_required
+def record_delete_attachment(record_id, attachment_id):
+    record = db.session.get(Record, record_id)
+    if not record:
+        flash("Record not found.")
+        return redirect(url_for("search_records"))
+    user = get_current_user()
+    if not user:
+        flash("Please log in.")
+        return redirect(url_for("login"))
+    row = db.session.get(RecordAttachment, attachment_id)
+    if not row or row.record_id != record.id:
+        flash("Supporting document not found.")
+        return redirect(url_for("record_detail", record_id=record_id) + "#rd-supporting")
+    full = _upload_file_path(row.stored_path, for_write=True)
+    original = row.original_name
+    db.session.delete(row)
+    db.session.commit()
+    if full is not None:
+        try:
+            full.unlink(missing_ok=True)
+        except OSError:
+            pass
+    _log_audit(user.id, "Remove supporting document", f"Record {record.id} · {original}")
+    flash("File removed.")
+    return redirect(url_for("record_detail", record_id=record_id) + "#rd-supporting")
 
 
 @app.route("/record/<int:record_id>/log-print", methods=["POST"])
@@ -2697,6 +3212,7 @@ def request_print(record_id):
         nav_active="search",
         document_types=DOCUMENT_TYPES,
         has_pending=pending is not None,
+        **_supporting_template_vars(record),
     )
 
 
@@ -2735,6 +3251,7 @@ def request_edit(record_id):
         data=data,
         current_user=user,
         nav_active="search",
+        **_supporting_template_vars(record),
     )
 
 
@@ -3232,6 +3749,7 @@ def administration_delete_user(user_id):
 
     username = user.username
     role = (user.role or "").upper()
+    _delete_user_photo_file(user)
     db.session.delete(user)
     db.session.commit()
     _log_audit(admin.id if admin else None, "USER_DELETE", f"username={username} role={role}")
@@ -4053,6 +4571,23 @@ def record_edit(record_id):
         if not public_record_fields(submitted):
             flash("No data to save.")
             return redirect(url_for("record_edit", record_id=record_id))
+        missing = missing_required_review_fields(record.document_type, submitted)
+        if missing:
+            labels = ", ".join(metadata_display_label(key) for key in missing)
+            flash(f"Fill every required field before saving: {labels}.", "error")
+            display_registry_number = (_registry_number_from_submitted(submitted) or record.registry_number or "").strip()
+            _repair_record_image_path(record)
+            return render_template(
+                "record_edit.html",
+                record=record,
+                data=submitted,
+                display_registry_number=display_registry_number,
+                current_user=user,
+                nav_active="search",
+                document_types=DOCUMENT_TYPES,
+                annotation_form=annotation_form_defaults(submitted),
+                missing_fields=missing,
+            )
         updated_registry_number = _registry_number_from_submitted(submitted)
         updated_full_name = _full_name_from_data(record.document_type, submitted)
         updated_event_date = _event_date_from_data(record.document_type, submitted)
@@ -4104,6 +4639,7 @@ def record_edit(record_id):
             display_registry_number = (_registry_number_from_submitted(data) or "").strip()
     if not display_registry_number:
         display_registry_number = (record.registry_number or "").strip()
+    _repair_record_image_path(record)
     return render_template(
         "record_edit.html",
         record=record,
@@ -4202,7 +4738,17 @@ def record_delete(record_id):
         db.session.delete(req)
     for req in EditRequest.query.filter_by(record_id=record_id).all():
         db.session.delete(req)
+    for att in RecordAttachment.query.filter_by(record_id=record_id).all():
+        att_path = _upload_file_path(att.stored_path, for_write=True)
+        if att_path is not None and att_path.is_file():
+            try:
+                att_path.unlink()
+            except OSError:
+                pass
+        db.session.delete(att)
     db.session.flush()
+    folder_rel = client_folder_rel(record)
+    folder_path = _upload_file_path(folder_rel, for_write=True)
     # Optionally remove stored image file
     for path_attr in ("image_path", "image_front_path"):
         rel_path = getattr(record, path_attr, None) or ""
@@ -4213,6 +4759,8 @@ def record_delete(record_id):
                     full_path.unlink()
                 except OSError:
                     pass
+    if folder_path is not None and folder_path.is_dir():
+        shutil.rmtree(folder_path, ignore_errors=True)
     db.session.delete(record)
     db.session.commit()
     _log_audit(user.id, "RECORD_DELETE", f"record_id={record_id} type={doc_type}")
@@ -4284,6 +4832,8 @@ def serve_upload(path):
         return ("", 404)
     full = _upload_file_path(rel)
     if full is None or not full.is_file():
+        full = _file_matching_registry(rel)
+    if full is None or not full.is_file():
         return ("", 404)
     resp = send_file(full, as_attachment=False, conditional=True)
     resp.headers["X-Content-Type-Options"] = "nosniff"
@@ -4305,6 +4855,22 @@ def confirm(doc_type):
     user = get_current_user()
     if user and (user.role or "").upper() == "ADMIN":
         submitted = apply_annotation_to_data(submitted, annotation_from_form(request.form))
+
+    missing = missing_required_review_fields(doc_type, submitted)
+    if missing:
+        labels = ", ".join(metadata_display_label(key) for key in missing)
+        flash(f"Fill every required field before saving: {labels}.", "error")
+        return render_template(
+            f"form_{doc_type}.html",
+            doc_type=doc_type,
+            doc_label=DOCUMENT_TYPES[doc_type],
+            data=submitted,
+            image_filename=image_filename,
+            current_user=get_current_user(),
+            nav_active="form",
+            can_print=user_can_print_during_review(get_current_user()),
+            missing_fields=missing,
+        )
 
     registry_number = _registry_number_from_submitted(submitted)
     full_name = _full_name_from_data(doc_type, submitted)
@@ -4422,6 +4988,7 @@ def confirm(doc_type):
     )
     db.session.add(record)
     db.session.commit()
+    _place_certificate_in_client_folder(record)
     _consume_ocr_session()
 
     user = get_current_user()
@@ -4649,6 +5216,11 @@ def _migrate_users():
     if "last_login_at" not in existing:
         db.session.execute(db.text("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP"))
         db.session.commit()
+        existing.add("last_login_at")
+    if "photo_path" not in existing:
+        db.session.execute(db.text("ALTER TABLE users ADD COLUMN photo_path VARCHAR(256) DEFAULT '' NOT NULL"))
+        db.session.commit()
+        existing.add("photo_path")
     try:
         db.session.execute(
             db.text(

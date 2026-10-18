@@ -17,12 +17,10 @@ _PROC = None
 
 
 def _worker_thread_count() -> str:
-    """Use most cores in the OCR process; leave a couple for Flask and the browser."""
+    """Use most cores in the OCR process; leave one for Flask and the browser."""
     n = os.cpu_count() or 4
     if n <= 2:
         return "1"
-    if n <= 4:
-        return str(n - 1)
     return str(min(8, n - 1))
 
 

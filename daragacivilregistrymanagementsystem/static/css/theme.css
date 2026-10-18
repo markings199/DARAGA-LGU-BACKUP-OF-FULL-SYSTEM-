@@ -394,6 +394,18 @@
 [data-theme="dark"] .form-review-meta .form-meta-field {
   border-bottom-color: var(--border);
 }
+[data-theme="dark"] .review-required-hint {
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.45);
+  border-color: var(--border);
+}
+[data-theme="dark"] .review-required-banner,
+[data-theme="dark"] .form-meta-field.is-missing,
+[data-theme="dark"] .metadata-edit-field.is-missing {
+  color: #fed7aa;
+  background: rgba(154, 52, 18, 0.28);
+  border-color: #fb923c;
+}
 [data-theme="dark"] .ocr-loading {
   background: linear-gradient(180deg, #1a2b44 0%, #152238 100%);
   border-color: rgba(147, 197, 253, 0.28);
@@ -1399,6 +1411,61 @@ html[data-theme="dark"] body.page-archiving a.archiving-hero-btn:hover {
   border-color: var(--input-border);
   color: #fff;
 }
+[data-theme="dark"] body.page-record-detail .rd-supporting,
+[data-theme="dark"] body.page-request-edit .rd-supporting {
+  border-top-color: rgba(148, 163, 184, 0.2);
+}
+[data-theme="dark"] body.page-record-detail .rd-supporting-title,
+[data-theme="dark"] body.page-request-edit .rd-supporting-title {
+  color: #93c5fd;
+}
+[data-theme="dark"] body.page-record-detail .rd-supporting-empty,
+[data-theme="dark"] body.page-record-detail .rd-supporting-meta,
+[data-theme="dark"] body.page-record-detail .rd-supporting-folder,
+[data-theme="dark"] body.page-record-detail .rd-supporting-label,
+[data-theme="dark"] body.page-request-edit .rd-supporting-empty,
+[data-theme="dark"] body.page-request-edit .rd-supporting-meta,
+[data-theme="dark"] body.page-request-edit .rd-supporting-folder,
+[data-theme="dark"] body.page-request-edit .rd-supporting-label {
+  color: #94a3b8;
+}
+[data-theme="dark"] body.page-record-detail .rd-supporting-item,
+[data-theme="dark"] body.page-request-edit .rd-supporting-item {
+  background: rgba(15, 23, 42, 0.55);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+[data-theme="dark"] body.page-record-detail .rd-supporting-select,
+[data-theme="dark"] body.page-record-detail .rd-supporting-file-input,
+[data-theme="dark"] body.page-request-edit .rd-supporting-select,
+[data-theme="dark"] body.page-request-edit .rd-supporting-file-input {
+  background: var(--input-bg);
+  border-color: var(--input-border);
+  color: #e2e8f0;
+}
+[data-theme="dark"] body.page-record-detail .rd-supporting-name,
+[data-theme="dark"] body.page-request-edit .rd-supporting-name {
+  color: #f8fafc;
+}
+[data-theme="dark"] body.page-record-detail .rd-supporting-kind,
+[data-theme="dark"] body.page-request-edit .rd-supporting-kind {
+  background: rgba(37, 99, 235, 0.22);
+  color: #93c5fd;
+}
+[data-theme="dark"] body.page-record-detail .rd-supporting-remove,
+[data-theme="dark"] body.page-request-edit .rd-supporting-remove {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.35);
+  background: transparent;
+}
+[data-theme="dark"] body.page-attachment-view .att-view-bar {
+  background: #0f172a;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+}
+[data-theme="dark"] body.page-attachment-view .att-view-close {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.3);
+}
 
 /* Request edit — polished split layout (dark) */
 [data-theme="dark"] body.page-request-edit .req-edit-panel {
@@ -2266,6 +2333,12 @@ body.login-page::-webkit-scrollbar {
     outline: none !important;
     background: transparent !important;
     color: #000 !important;
+  }
+  .cert-pay-entry--fit {
+    display: inline-flex !important;
+    width: auto !important;
+    min-width: 1.45in !important;
+    white-space: nowrap !important;
   }
   .cert-line-table td,
   .cert-line-table th,

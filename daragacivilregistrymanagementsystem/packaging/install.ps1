@@ -88,8 +88,26 @@ if ($LASTEXITCODE -ne 0) {
 Write-Step "Office folders"
 New-Item -ItemType Directory -Force -Path "C:\CivilRegistryData" | Out-Null
 New-Item -ItemType Directory -Force -Path "C:\CivilRegistryBackups" | Out-Null
-foreach ($sub in @("uploads", "uploads\birth", "uploads\marriage", "uploads\death", "uploads\temp", "backups")) {
+foreach ($sub in @("uploads", "uploads\birth", "uploads\marriage", "uploads\death", "uploads\files", "uploads\avatars", "uploads\temp", "backups")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $AppDir $sub) | Out-Null
+}
+$sharedUploads = "C:\CivilRegistryData\uploads"
+New-Item -ItemType Directory -Force -Path $sharedUploads | Out-Null
+$localUploads = Join-Path $AppDir "uploads"
+if (Test-Path $localUploads) {
+    Copy-Item -Path (Join-Path $localUploads "*") -Destination $sharedUploads -Recurse -Force -ErrorAction SilentlyContinue
+}
+$settingsFile = Join-Path $AppDir "storage_settings.json"
+if (-not (Test-Path $settingsFile)) {
+    '{"data_root":"C:\\CivilRegistryData"}' | Set-Content -Path $settingsFile -Encoding UTF8
+} else {
+    try {
+        $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+        if (-not $settings.data_root) {
+            $settings | Add-Member -NotePropertyName data_root -NotePropertyValue "C:\CivilRegistryData" -Force
+            $settings | ConvertTo-Json | Set-Content -Path $settingsFile -Encoding UTF8
+        }
+    } catch { }
 }
 
 Write-Step "Configuration"

@@ -58,10 +58,19 @@ body.page-account .account-kicker {
   color: rgba(219, 234, 254, 0.78);
 }
 
+body.page-account .account-photo-form {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+}
 body.page-account .account-avatar {
+  position: relative;
   width: 88px;
   height: 88px;
-  margin: 0 0 14px;
+  margin: 0;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -70,6 +79,171 @@ body.page-account .account-avatar {
   color: #002080;
   background: #fff;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  overflow: hidden;
+}
+body.page-account .account-avatar--photo {
+  padding: 0;
+}
+body.page-account .account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+body.page-account .account-avatar-edit {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #002080;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+body.page-account .account-avatar-edit svg {
+  width: 13px;
+  height: 13px;
+}
+body.page-account .account-photo-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+body.page-account .account-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+body.page-account .account-photo-btn {
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+}
+body.page-account .account-photo-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+body.page-account .account-photo-hint {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: rgba(219, 234, 254, 0.72);
+}
+
+body.account-crop-open {
+  overflow: hidden;
+}
+.account-crop[hidden] {
+  display: none !important;
+}
+.account-crop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+.account-crop-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 22, 51, 0.62);
+}
+.account-crop-panel {
+  position: relative;
+  width: min(26rem, 100%);
+  padding: 18px 18px 16px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(6, 22, 51, 0.35);
+  border: 1px solid rgba(0, 32, 128, 0.12);
+}
+.account-crop-panel h2 {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: #002080;
+}
+.account-crop-lead {
+  margin: 6px 0 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(15, 23, 42, 0.64);
+}
+.account-crop-stage {
+  width: min(280px, 72vw);
+  height: min(280px, 72vw);
+  margin: 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+  background: #0b1220;
+  cursor: grab;
+  touch-action: none;
+  box-shadow: 0 0 0 3px #002080, 0 12px 28px rgba(0, 32, 128, 0.22);
+  user-select: none;
+}
+.account-crop-stage.is-dragging {
+  cursor: grabbing;
+}
+.account-crop-stage img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  max-height: none;
+  pointer-events: none;
+  user-select: none;
+}
+.account-crop-zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #002080;
+}
+.account-crop-zoom input {
+  flex: 1;
+  min-width: 0;
+  accent-color: #002080;
+}
+.account-crop-error {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #b91c1c;
+}
+.account-crop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+[data-theme="dark"] .account-crop-panel {
+  background: var(--surface, #1e293b);
+  border-color: var(--border);
+}
+[data-theme="dark"] .account-crop-panel h2,
+[data-theme="dark"] .account-crop-zoom {
+  color: #fff;
+}
+[data-theme="dark"] .account-crop-lead {
+  color: #cbd5e1;
 }
 
 body.page-account .account-username {
@@ -182,6 +356,18 @@ body.page-account .account-panel-ic {
 body.page-account .account-panel-ic svg {
   width: 18px;
   height: 18px;
+}
+body.page-account .account-panel-ic--photo {
+  padding: 0;
+  overflow: hidden;
+  background: #0f172a;
+  border-color: rgba(0, 32, 128, 0.18);
+}
+body.page-account .account-panel-ic--photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 body.page-account .account-panel-head h2 {
@@ -446,6 +632,10 @@ body.page-account .account-work-nums strong {
 [data-theme="dark"] body.page-account .account-panel-ic {
   color: #bfdbfe;
   background: rgba(37, 99, 235, 0.22);
+  border-color: rgba(96, 165, 250, 0.28);
+}
+[data-theme="dark"] body.page-account .account-panel-ic--photo {
+  background: #0f172a;
   border-color: rgba(96, 165, 250, 0.28);
 }
 

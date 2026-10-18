@@ -50,7 +50,7 @@ foreach ($file in $files) {
     $count++
 }
 
-foreach ($sub in @("uploads", "uploads\birth", "uploads\marriage", "uploads\death", "uploads\temp", "backups")) {
+foreach ($sub in @("uploads", "uploads\birth", "uploads\marriage", "uploads\death", "uploads\files", "uploads\temp", "backups")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $Stage $sub) | Out-Null
 }
 Set-Content -Path (Join-Path $Stage "uploads\.keep") -Value "Scans are stored here after install." -Encoding UTF8

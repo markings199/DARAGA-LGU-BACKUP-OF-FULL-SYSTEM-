@@ -10,7 +10,7 @@
   <td class="cert-pay-label">{{ label }}</td>
   <td class="cert-pay-colon">:</td>
   <td class="cert-pay-blank">
-    <span class="cert-line-rule cert-pay-entry">
+    <span class="cert-line-rule cert-pay-entry{% if field_key == 'Date Paid' %} cert-pay-entry--fit{% endif %}">
       {% if peso %}<span class="cert-peso" aria-hidden="true">&#8369;</span>{% endif %}
       <span
         class="cert-pay-value"

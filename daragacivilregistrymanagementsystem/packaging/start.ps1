@@ -13,6 +13,21 @@ if (-not (Test-Path $venvPython)) {
     exit 1
 }
 
+& $venvPython -c "import flask" 2>$null | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Flask is missing. Installing required packages now..." -ForegroundColor Yellow
+    Write-Host "This can take several minutes the first time. Keep this window open."
+    & $venvPython -m pip install --upgrade pip
+    & $venvPython -m pip install -r (Join-Path $AppDir "requirements.txt")
+    & $venvPython -c "import flask" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Packages did not install. Double-click Install.bat, wait until it finishes, then Start.bat again." -ForegroundColor Red
+        Read-Host "Press Enter to close"
+        exit 1
+    }
+    Write-Host "Packages installed."
+}
+
 $pgBin = Join-Path $env:USERPROFILE "scoop\apps\postgresql\current\bin"
 $pgData = Join-Path $env:USERPROFILE "scoop\apps\postgresql\current\data"
 $pgLog = Join-Path $env:TEMP "daraga-postgres.log"

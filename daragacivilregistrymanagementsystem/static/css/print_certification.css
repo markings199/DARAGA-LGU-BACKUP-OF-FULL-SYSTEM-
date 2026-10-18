@@ -851,7 +851,9 @@
   display: flex;
   align-items: flex-end;
   gap: 0.05in;
+  width: 1.35in;
   min-width: 1.35in;
+  max-width: 1.35in;
 }
 .cert-pay-entry .cert-peso {
   flex: 0 0 auto;
@@ -863,6 +865,23 @@
   flex: 1 1 auto;
   min-width: 0.85in;
   min-height: 1.15em;
+}
+.cert-pay-entry--fit {
+  display: inline-flex;
+  width: auto;
+  min-width: 1.45in;
+  max-width: none;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.cert-pay-entry--fit .cert-pay-value {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 1.15in;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .cert-line-table--issued {
   table-layout: auto;
@@ -1256,6 +1275,7 @@ td.cert-issued-upon {
   .record-detail-print-slot,
   .annotation-admin-form,
   .annotation-fields,
+  .rd-supporting,
   .no-print,
   .print-mode-picker,
   .print-panel,
@@ -1339,6 +1359,20 @@ td.cert-issued-upon {
     background: transparent !important;
     color: #000 !important;
     -webkit-text-stroke: 0 !important;
+  }
+  .cert-pay-entry--fit {
+    display: inline-flex !important;
+    width: auto !important;
+    min-width: 1.45in !important;
+    max-width: none !important;
+    white-space: nowrap !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+  }
+  .cert-pay-entry--fit .cert-pay-value {
+    white-space: nowrap !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
   }
   .cert-sheet::before,
   .cert-sheet::after {

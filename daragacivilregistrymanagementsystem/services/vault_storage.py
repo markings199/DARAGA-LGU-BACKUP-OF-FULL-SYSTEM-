@@ -12,9 +12,9 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 SETTINGS_FILENAME = "storage_settings.json"
-UPLOAD_SUBDIRS = ("temp", "birth", "marriage", "death")
+UPLOAD_SUBDIRS = ("temp", "birth", "marriage", "death", "files", "avatars")
 ALLOWED_IMAGE_EXTS = frozenset({".jpg", ".jpeg", ".png"})
-ALLOWED_UPLOAD_TOP = frozenset({"temp", "birth", "marriage", "death"})
+ALLOWED_UPLOAD_TOP = frozenset({"temp", "birth", "marriage", "death", "files", "avatars"})
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "data_root": "",

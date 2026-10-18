@@ -154,7 +154,7 @@
   body.page-scan-workflow .scan-workflow-stack { gap: 10px; }
   body.page-scan-workflow .scan-workflow-stack > .main-card.scanflow-form-card {
     padding: 0;
-    overflow: hidden;
+    overflow: visible;
     border-radius: 12px;
     background: #ffffff;
     border: 1px solid rgba(0, 32, 128, 0.14);
@@ -626,6 +626,9 @@
     border: 1px solid #e2eaf4;
     border-radius: 10px;
     background: #f8fafc;
+    overflow: visible;
+    height: auto;
+    max-height: none;
   }
   .scanflow-preview-head {
     display: flex;
@@ -662,6 +665,7 @@
     box-shadow: none;
     min-height: 140px;
     overflow: visible;
+    clip-path: none;
   }
   #scan-preview-viewer-wrap {
     position: relative;
@@ -950,19 +954,15 @@
     border-color: #e2e8f0;
     padding: 0;
     height: auto;
-    min-height: 0;
     max-height: none;
     overflow: visible;
-  }
-  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-pane.is-zoomed {
-    overflow: auto;
-    max-height: min(82vh, 920px);
+    clip-path: none;
   }
   body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-image,
   body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-image-wrap {
     display: block;
     width: 100%;
-    max-width: none;
+    max-width: 100%;
     height: auto;
     margin: 0;
   }
@@ -1454,12 +1454,13 @@
         <span class="scanflow-meta-chip">Server storage</span>
       </div>
     </div>
+    {% set _ocr_dt = (active_ocr.doc_type if active_ocr and active_ocr.doc_type else (scan_preview.doc_type if scan_preview else '')) %}
     <div class="scanflow-hero-rail" role="status" aria-live="polite">
       <div class="scanflow-step">
         <span class="scanflow-step-lbl">State</span>
         <span class="scanflow-step-val">
           <svg class="scanflow-state-check" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-          <span id="workflow-state">{% if active_ocr %}OCR PROCESSING{% elif scan_preview %}READY{% else %}—{% endif %}</span>
+          <span id="workflow-state">{% if active_ocr %}OCR PROCESSING{% elif scan_preview and _ocr_dt in ['birth', 'marriage', 'death'] %}READY{% elif scan_preview %}IDENTIFYING{% else %}—{% endif %}</span>
         </span>
       </div>
       <span class="scanflow-rail-sep" aria-hidden="true"></span>
@@ -1467,7 +1468,7 @@
         <span class="scanflow-step-lbl">Next</span>
         <span class="scanflow-step-val">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-9v12c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h12c1.1 0 2 .9 2 2zm-2 0H5v12h12V4z"/></svg>
-          <span id="workflow-next">{% if active_ocr %}Please wait{% elif scan_preview %}Click OCR{% else %}Scan{% endif %}</span>
+          <span id="workflow-next">{% if active_ocr %}Please wait{% elif scan_preview and _ocr_dt in ['birth', 'marriage', 'death'] %}Click OCR{% elif scan_preview %}Identify type{% else %}Scan{% endif %}</span>
         </span>
       </div>
     </div>
@@ -1523,7 +1524,6 @@
           <label for="doc-type-status-text">Document type</label>
         </div>
         <div class="scanflow-field-control field">
-          {% set _ocr_dt = (active_ocr.doc_type if active_ocr and active_ocr.doc_type else (scan_preview.doc_type if scan_preview else '')) %}
           <input type="hidden" id="document_type" name="document_type" value="{% if _ocr_dt in ['birth', 'marriage', 'death'] %}{{ _ocr_dt }}{% else %}auto{% endif %}" />
           <div id="doc-type-status" class="scanflow-detect-status {% if _ocr_dt in ['birth', 'marriage', 'death'] %}is-ready{% else %}is-wait{% endif %}" role="status">
             <span class="scanflow-detect-dot" aria-hidden="true"></span>
@@ -1606,10 +1606,10 @@
       <div class="scanflow-actions-primary">
         <p class="scanflow-ocr-hint app-note app-note--quiet" role="note">
           <span class="app-note-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M11 12h1v4h1"/></svg></span>
-          <span class="app-note-text" id="scan-source-hint-text">Choose a capture source, add the document, then run OCR.</span>
+          <span class="app-note-text" id="scan-source-hint-text">Choose a capture source and add the document. Run OCR after the type is identified.</span>
         </p>
         <div class="scanflow-ocr-btns">
-          <button type="submit" class="btn btn-primary btn-scanflow-primary{% if active_ocr %} is-running{% endif %}" id="btn-ocr"{% if active_ocr or not scan_preview %} disabled{% endif %}>
+          <button type="submit" class="btn btn-primary btn-scanflow-primary{% if active_ocr %} is-running{% endif %}" id="btn-ocr"{% if active_ocr or not scan_preview or _ocr_dt not in ['birth', 'marriage', 'death'] %} disabled{% endif %} title="{% if active_ocr %}OCR is running{% elif not scan_preview %}Add a document first{% elif _ocr_dt not in ['birth', 'marriage', 'death'] %}Wait until the document type is identified{% else %}Run OCR{% endif %}">
             <svg class="btn-ocr-idle-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
             <span class="btn-ocr-spin" aria-hidden="true"></span>
             <span class="btn-ocr-label">{% if active_ocr %}Running OCR…{% else %}Run OCR{% endif %}</span>
@@ -1688,7 +1688,7 @@
 </div>
 <script type="application/json" id="ocr-field-guides" data-align-url="{{ url_for('api_ocr_field_guides') }}">{{ ocr_field_guides|default({})|tojson }}</script>
 
-<script src="{{ url_for('static', filename='js/document-viewer.js') }}?v=preview-old-1" defer></script>
+<script src="{{ url_for('static', filename='js/document-viewer.js') }}?v=preview-original-1" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   var fileInput = document.getElementById('image');
@@ -1717,8 +1717,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (scannerRadio) scannerRadio.checked = source === 'scanner';
     if (scanSourceHint) {
       scanSourceHint.textContent = source === 'scanner'
-        ? 'Detect the scanner once, then Scan from printer. Run OCR after the preview is ready.'
-        : 'Choose an image file, then run OCR.';
+        ? 'Detect the scanner, scan a page, then wait until the document type is identified before Run OCR.'
+        : 'Choose an image file, then wait until the document type is identified before Run OCR.';
     }
     try { sessionStorage.setItem(SCAN_SOURCE_STORE, source); } catch (e) {}
     if (source === 'scanner' && window.DaragaScanner && typeof window.DaragaScanner.sync === 'function') {
@@ -1738,7 +1738,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function syncStateCheckIcon() {
     if (!stateCheck) return;
     var t = document.getElementById('workflow-state').textContent.trim();
-    stateCheck.hidden = (t === '—' || t === '' || t === 'OCR PROCESSING');
+    stateCheck.hidden = (t === '—' || t === '' || t === 'OCR PROCESSING' || t === 'IDENTIFYING' || t === 'CHOOSE TYPE');
   }
 
   function setPreviewFilename(name) {
@@ -1842,8 +1842,8 @@ document.addEventListener('DOMContentLoaded', function() {
       btnOcr.classList.remove('is-running');
       var ocrLbl2 = btnOcr.querySelector('.btn-ocr-label');
       if (ocrLbl2) ocrLbl2.textContent = 'Run OCR';
-      btnOcr.disabled = !hasScanDocument();
     }
+    syncOcrReady();
     setCancelOcrVisible(hasScanDocument());
     if (ocrLoading) {
       ocrLoading.classList.remove('is-on');
@@ -1874,16 +1874,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (imageUrl && imageUrl.indexOf('blob:') === 0) {
       scanPreviewBlobUrl = imageUrl;
     }
-    img.onload = function() {
-      reapplyScanPreviewZoom();
-    };
-    img.src = imageUrl;
     empty.hidden = true;
     wrap.hidden = false;
+    img.onload = function() {
+      reapplyScanPreviewZoom();
+      window.setTimeout(reapplyScanPreviewZoom, 80);
+    };
+    img.src = imageUrl;
     if (filenameHint) setPreviewFilename(filenameHint);
     if (filenameHint) setUploadFileLabel(filenameHint);
     setCancelOcrVisible(true);
     reapplyScanPreviewZoom();
+    window.setTimeout(reapplyScanPreviewZoom, 80);
   }
 
   function clearScanPreview() {
@@ -1927,15 +1929,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
   syncStateCheckIcon();
 
-  function markReadyForOcr() {
-    document.getElementById('workflow-state').textContent = 'READY';
-    document.getElementById('workflow-next').textContent = 'Click OCR';
-    if (btnOcr && !btnOcr.classList.contains('is-running')) {
-      btnOcr.disabled = false;
-    }
-    syncStateCheckIcon();
-  }
-
   var typeManual = false;
   var detectSeq = 0;
   var TYPE_LABELS = {
@@ -1943,6 +1936,40 @@ document.addEventListener('DOMContentLoaded', function() {
     marriage: 'Marriage certificate',
     death: 'Death certificate'
   };
+
+  function identifiedDocType() {
+    var hidden = document.getElementById('document_type');
+    var v = hidden ? String(hidden.value || '').trim().toLowerCase() : '';
+    return TYPE_LABELS[v] ? v : '';
+  }
+
+  function syncOcrReady() {
+    var running = !!(document.body.classList.contains('ocr-busy') || (btnOcr && btnOcr.classList.contains('is-running')));
+    var hasDoc = hasScanDocument();
+    var typed = !!identifiedDocType();
+    if (btnOcr && !running) {
+      btnOcr.disabled = !(hasDoc && typed);
+      btnOcr.title = !hasDoc
+        ? 'Add a document first'
+        : (typed ? 'Run OCR' : 'Wait until the document type is identified');
+    }
+    if (!running) {
+      var stateEl = document.getElementById('workflow-state');
+      var nextEl = document.getElementById('workflow-next');
+      if (hasDoc && typed) {
+        if (stateEl) stateEl.textContent = 'READY';
+        if (nextEl) nextEl.textContent = 'Click OCR';
+      } else if (hasDoc) {
+        if (stateEl) stateEl.textContent = 'IDENTIFYING';
+        if (nextEl) nextEl.textContent = 'Identify type';
+      }
+    }
+    syncStateCheckIcon();
+  }
+
+  function markReadyForOcr() {
+    syncOcrReady();
+  }
 
   function setDocTypeStatus(state, text) {
     var box = document.getElementById('doc-type-status');
@@ -1963,6 +1990,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setDocTypeStatus('is-wait', 'Identified automatically from the certificate');
     var wrap = document.getElementById('doc-type-change-wrap');
     if (wrap) wrap.hidden = true;
+    syncOcrReady();
   }
 
   function applyDetectedType(type, label) {
@@ -1975,6 +2003,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (window.DaragaOcrTargets && typeof window.DaragaOcrTargets.setType === "function") {
       window.DaragaOcrTargets.setType();
     }
+    syncOcrReady();
   }
 
   function showDetectFallback() {
@@ -1983,6 +2012,11 @@ document.addEventListener('DOMContentLoaded', function() {
     setDocTypeStatus('is-fail', 'Could not identify — choose the type below');
     var wrap = document.getElementById('doc-type-change-wrap');
     if (wrap) wrap.hidden = false;
+    var nextEl = document.getElementById('workflow-next');
+    var stateEl = document.getElementById('workflow-state');
+    if (stateEl) stateEl.textContent = 'CHOOSE TYPE';
+    if (nextEl) nextEl.textContent = 'Select type';
+    syncOcrReady();
   }
 
   function detectDocumentType() {
@@ -1998,6 +2032,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     var seq = ++detectSeq;
     setDocTypeStatus('is-busy', 'Identifying document type…');
+    syncOcrReady();
     fetch('{{ url_for("api_detect_document_type") }}', {
       method: 'POST',
       body: fd,
@@ -2008,7 +2043,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (seq !== detectSeq || typeManual) return;
         if (data.image_filename) {
           document.getElementById('image_filename').value = data.image_filename;
-          if (data.image_url) showScanPreview(data.image_url, data.original_name || data.image_filename);
           if (!(fileInput && fileInput.files && fileInput.files.length)) {
             setUploadFileLabel(data.original_name || data.image_filename);
           }
@@ -2026,6 +2060,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   window.DaragaDocType = { apply: applyDetectedType, reset: resetDocType };
+  window.DaragaOcrButton = { sync: syncOcrReady };
 
   var docTypeChangeBtn = document.getElementById('doc-type-change-btn');
   if (docTypeChangeBtn) {
@@ -2263,6 +2298,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!(this.files && this.files.length)) return;
     var file = this.files[0];
     setUploadFileLabel(file.name);
+    showScanPreview(URL.createObjectURL(file), file.name);
     var fd = new FormData();
     fd.append('image', file);
     var dt = document.getElementById('document_type');
@@ -2280,9 +2316,6 @@ document.addEventListener('DOMContentLoaded', function() {
           document.getElementById('image_filename').value = data.image_filename;
         }
         fileInput.value = '';
-        if (data.image_url) {
-          showScanPreview(data.image_url, data.original_name || file.name || data.image_filename);
-        }
         markReadyForOcr();
         detectDocumentType();
       })
@@ -2304,6 +2337,16 @@ document.addEventListener('DOMContentLoaded', function() {
           tone: "warning",
           title: "Please check",
           message: "Scan from the printer, or choose an image first.",
+        });
+      }
+      return false;
+    }
+    if (!identifiedDocType()) {
+      if (window.DaragaToast && window.DaragaToast.show) {
+        window.DaragaToast.show({
+          tone: "warning",
+          title: "Identify document type first",
+          message: "Wait until the type is identified, or use Wrong type? to choose Birth, Marriage, or Death.",
         });
       }
       return false;
@@ -2347,6 +2390,11 @@ document.addEventListener('DOMContentLoaded', function() {
       syncStateCheckIcon();
     });
   }
+
+  if (hasScanDocument() && !identifiedDocType() && !(btnOcr && btnOcr.classList.contains('is-running'))) {
+    detectDocumentType();
+  }
+  syncOcrReady();
 
 });
 </script>

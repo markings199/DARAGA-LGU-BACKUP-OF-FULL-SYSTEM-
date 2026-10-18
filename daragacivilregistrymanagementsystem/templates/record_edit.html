@@ -91,7 +91,7 @@
     <span class="pill pill-state">Next: <strong>Save</strong></span>
   </div>
 
-  <form method="post" action="{{ url_for('record_edit', record_id=record.id) }}" class="civil-form record-edit-form">
+  <form method="post" action="{{ url_for('record_edit', record_id=record.id) }}" class="civil-form record-edit-form" data-required-review="1" novalidate>
     <div class="scan-workflow-grid form-review-page-grid">
       <div class="main-card scan-workflow-preview-card">
         <h2 class="section-title">Original certificate</h2>
@@ -112,14 +112,24 @@
 
       <div class="main-card record-edit-form-col">
         <h2 class="section-title">Edit record data</h2>
+        {% if missing_fields is defined and missing_fields %}
+        <p class="review-required-banner" role="alert">Fill every required field marked in red before saving.</p>
+        {% else %}
+        <p class="review-required-hint">Fields marked <span class="field-required-mark" aria-hidden="true">*</span> must be filled before save. Remarks stay optional.</p>
+        {% endif %}
         {% for key, val in public_record_fields(data).items() %}
           {% if not (record.document_type == 'death' and key == 'Name of Mother') %}
-          <div class="metadata-edit-field">
-            <label class="metadata-edit-label" {% if key not in SEX_FIELD_KEYS %}for="edit_{{ loop.index }}"{% endif %}>{{ metadata_display_label(key) }}</label>
+          {% set _required = is_required_review_field(record.document_type, key) %}
+          {% set _missing = missing_fields is defined and key in missing_fields %}
+          <div class="metadata-edit-field{% if _required %} is-required{% endif %}{% if _missing %} is-missing{% endif %}" {% if _required %}data-review-required="1"{% endif %}>
+            <label class="metadata-edit-label" {% if key not in SEX_FIELD_KEYS %}for="edit_{{ loop.index }}"{% endif %}>
+              {{ metadata_display_label(key) }}
+              {% if _required %}<span class="field-required-mark" title="Required" aria-hidden="true">*</span>{% endif %}
+            </label>
             {% if key in SEX_FIELD_KEYS %}
-              <div class="sex-radios" role="radiogroup" aria-label="{{ metadata_display_label(key) }}">
+              <div class="sex-radios" role="radiogroup" aria-label="{{ metadata_display_label(key) }}"{% if _required %} aria-required="true"{% endif %}>
                 <label class="sex-radio">
-                  <input type="radio" name="{{ key }}" value="Male" {% if sex_choice(val) == 'Male' %}checked{% endif %} />
+                  <input type="radio" name="{{ key }}" value="Male" {% if sex_choice(val) == 'Male' %}checked{% endif %}{% if _required %} required{% endif %} />
                   <span class="sex-radio-ui">Male</span>
                 </label>
                 <label class="sex-radio">
@@ -129,12 +139,12 @@
               </div>
             {% elif key in DATE_FIELD_KEYS %}
               {% set iso = date_input_value(val) %}
-              <input class="metadata-edit-input" id="edit_{{ loop.index }}" name="{{ key }}" value="{{ iso }}" type="date" autocomplete="off" />
+              <input class="metadata-edit-input" id="edit_{{ loop.index }}" name="{{ key }}" value="{{ iso }}" type="date" autocomplete="off"{% if _required %} required{% endif %} />
               {% if val and not iso %}
                 <p class="date-ocr-hint">OCR text: {{ val }} — choose a date above</p>
               {% endif %}
             {% else %}
-              <input class="metadata-edit-input" id="edit_{{ loop.index }}" name="{{ key }}" value="{{ val or '' }}" type="text" autocomplete="off" />
+              <input class="metadata-edit-input" id="edit_{{ loop.index }}" name="{{ key }}" value="{{ val or '' }}" type="text" autocomplete="off"{% if _required %} required{% endif %} />
             {% endif %}
           </div>
           {% endif %}

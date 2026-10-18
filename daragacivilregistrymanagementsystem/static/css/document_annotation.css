@@ -2,9 +2,9 @@
 .scan-preview-viewer-inner .document-viewer-image-wrap {
   position: relative;
   display: block;
-  width: auto;
-  max-width: none;
-  container-type: inline-size;
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
 }
 
 .print-original-wrap {

@@ -610,6 +610,9 @@ def is_helper_token(text: str) -> bool:
     nt = norm_text(raw)
     if "(" in raw or ")" in raw:
         return True
+    # "AGE 31" / "31AGE" is the write-in, not the printed header.
+    if re.search(r"\d", nt) and "AGE" in nt:
+        return False
     for hw in HELPER_WORDS:
         if hw in nt:
             return True
@@ -880,13 +883,26 @@ def extract_date_candidates(tokens):
 def parse_named_date(date_str):
     if not date_str:
         return None
-    text = norm_text(date_str)
+    parsed = parse_date_from_string(date_str)
+    text = norm_text(parsed or date_str)
     parts = text.split()
     if len(parts) >= 3:
         day, month, year = parts[0], normalize_month_word(parts[1]), parts[2]
         if re.fullmatch(r"\d{1,2}", day) and month in MONTHS and re.fullmatch(r"\d{4}", year):
             try:
                 return datetime.strptime(f"{int(day):02d} {month} {year}", "%d %B %Y")
+            except Exception:
+                pass
+    m = re.search(r"\b(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})\b", str(date_str))
+    if m:
+        a, b, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        try:
+            if a > 12:
+                return datetime(year, b, a)
+            return datetime(year, a, b)
+        except Exception:
+            try:
+                return datetime(year, b, a)
             except Exception:
                 return None
     return None
@@ -900,9 +916,69 @@ def compute_age_from_dates(dob_str, marriage_date_str):
     age = mar_dt.year - dob_dt.year
     if (mar_dt.month, mar_dt.day) < (dob_dt.month, dob_dt.day):
         age -= 1
-    if 0 <= age <= 120:
+    if 12 <= age <= 99:
         return str(age)
     return ""
+
+
+_BIRTH_YEAR_RE = re.compile(r"\b((?:19|20)\d{2})\b")
+_AGE_DIGIT_MAP = str.maketrans({
+    "O": "0", "Q": "0", "D": "0",
+    "I": "1", "L": "1", "|": "1", "!": "1",
+    "Z": "2",
+    "S": "5",
+    "B": "8",
+    "G": "6",
+})
+
+
+def _is_plausible_marriage_age(val) -> bool:
+    try:
+        n = int(val)
+    except (TypeError, ValueError):
+        return False
+    return 12 <= n <= 99
+
+
+def _parse_age_value(text: str) -> str:
+    """Read Form 97 item 2b Age, including OCR digit confusions (3I→31, 2B→28)."""
+    if not text:
+        return ""
+    nt = norm_text(text)
+    nt = re.sub(r"\b(?:AGE|YEARS?|YRS|YO|Y/O)\b", " ", nt)
+    if _BIRTH_YEAR_RE.search(nt) and not re.fullmatch(r"\d{1,3}", nt):
+        nt = _BIRTH_YEAR_RE.sub(" ", nt)
+    nt = re.sub(r"\s+", " ", nt).strip()
+    if not nt:
+        return ""
+    if re.fullmatch(r"\d{1,3}", nt):
+        return nt if _is_plausible_marriage_age(nt) else ""
+    compact = re.sub(r"[^A-Z0-9]", "", nt)
+    if 1 <= len(compact) <= 3:
+        mapped = compact.translate(_AGE_DIGIT_MAP)
+        if re.fullmatch(r"\d{1,3}", mapped) and _is_plausible_marriage_age(mapped):
+            return str(int(mapped))
+    hits = []
+    for m in re.finditer(r"(?<!\d)(\d{1,3})(?!\d)", nt):
+        if _is_plausible_marriage_age(m.group(1)):
+            hits.append(int(m.group(1)))
+    if hits:
+        typical = [v for v in hits if 14 <= v <= 80]
+        return str((typical or hits)[-1])
+    return ""
+
+
+def _is_birth_year_token(text: str) -> bool:
+    nt = norm_text(text or "")
+    if _BIRTH_YEAR_RE.search(nt):
+        return True
+    mapped = re.sub(r"[^A-Z0-9]", "", nt).translate(_AGE_DIGIT_MAP)
+    return bool(re.fullmatch(r"(?:19|20)\d{2}", mapped))
+
+
+def _small_age(text: str):
+    parsed = _parse_age_value(text)
+    return [int(parsed)] if parsed else []
 
 
 def _age_from_tokens(tokens, dob_text="") -> str:
@@ -915,95 +991,228 @@ def _age_from_tokens(tokens, dob_text="") -> str:
     span = max(max_x - min_x, 1.0)
     hits = []
     for it in tokens:
-        nt = norm_text(it["text"])
-        if re.search(r"\b(?:19|20)\d{2}\b", nt) and not re.fullmatch(r"\d{1,3}", nt):
+        parsed = _parse_age_value(it["text"])
+        if not parsed:
             continue
-        for m in re.finditer(r"(?<!\d)(\d{1,3})(?!\d)", nt):
-            token = m.group(1)
-            val = int(token)
-            if token in dob_parts or val > 120:
-                continue
-            rel = (it["cx"] - min_x) / span
-            if 12 <= val <= 90:
-                hits.append((0 if rel >= 0.55 else 1, -rel, -it.get("score", 0), val))
-            elif 0 <= val <= 120:
-                hits.append((2, -rel, -it.get("score", 0), val))
+        val = int(parsed)
+        rel = (it["cx"] - min_x) / span
+        # Birth day/year live on the left of the row; Age is the right-hand cell.
+        if parsed in dob_parts and rel < 0.62:
+            continue
+        if 14 <= val <= 90:
+            hits.append((0 if rel >= 0.58 else 1, -rel, -it.get("score", 0), val))
+        elif 12 <= val <= 99:
+            hits.append((2, -rel, -it.get("score", 0), val))
     if not hits:
         return ""
     hits.sort()
     return str(hits[0][3])
 
 
-_BIRTH_YEAR_RE = re.compile(r"\b((?:19|20)\d{2})\b")
-
-
-def _small_age(text: str):
-    hits = []
-    nt = norm_text(text)
-    if _BIRTH_YEAR_RE.search(nt) and not re.fullmatch(r"\d{1,3}", nt):
-        nt = _BIRTH_YEAR_RE.sub(" ", nt)
-    for m in re.finditer(r"(?<!\d)(\d{1,3})(?!\d)", nt):
-        val = int(m.group(1))
-        if 1 <= val <= 120:
-            hits.append(val)
-    return hits
-
-
-def extract_form97_ages(items, img_w, img_h, split_x=None, dob_label=None):
+def extract_form97_ages(items, img_w, img_h, split_x=None, dob_label=None, img=None):
     """
     Form 97 item 2: Day / Month / Year / Age for husband, then the same for wife.
-    Age is the small number immediately to the right of each birth year.
+    Age is the small number immediately to the right of each birth year — including
+    when the scan includes the full Municipal Form 97 header.
     """
-    y1 = img_h * 0.155
-    y2 = img_h * 0.225
+    mid = split_x if split_x else img_w * 0.52
+    y1 = img_h * 0.12
+    y2 = img_h * 0.32
     if dob_label:
-        y1 = min(y1, dob_label["y1"] - img_h * 0.02)
-        y2 = max(y2, dob_label["y2"] + img_h * 0.10)
-    y1 = max(img_h * 0.12, y1)
-    y2 = min(img_h * 0.28, y2)
-    band = tokens_in_region(items, img_w * 0.14, img_w * 0.995, y1, y2, min_score=0.12)
+        y1 = min(y1, dob_label["y1"] - img_h * 0.03)
+        y2 = max(y2, dob_label["y2"] + img_h * 0.12)
+    y1 = max(img_h * 0.08, y1)
+    y2 = min(img_h * 0.42, y2)
+    # Wife Age sits at ~93% of page width; never clip to working_xmax here.
+    band = tokens_in_region(items, img_w * 0.12, img_w * 0.999, y1, y2, min_score=0.05)
     ordered = sorted(band, key=lambda it: (it["cx"], it["x1"]))
-    years = []
-    for it in ordered:
-        if _BIRTH_YEAR_RE.search(norm_text(it["text"])):
-            years.append(it)
+    years = [it for it in ordered if _is_birth_year_token(it["text"])]
+    hus_years = [it for it in years if it["cx"] < mid]
+    wife_years = [it for it in years if it["cx"] >= mid]
 
-    def age_after_year(year_it):
+    def age_after_year(year_it, x_limit):
         same = _small_age(year_it["text"])
         if same:
             return str(same[-1])
-        x_min = year_it["x2"] - img_w * 0.012
-        x_max = year_it["cx"] + img_w * 0.16
+        x_min = year_it["x2"] - img_w * 0.01
+        x_max = min(x_limit, year_it["cx"] + img_w * 0.22)
         hits = []
         for it in ordered:
             if it is year_it:
                 continue
             if it["cx"] < x_min or it["cx"] > x_max:
                 continue
-            if _BIRTH_YEAR_RE.search(norm_text(it["text"])):
+            if _is_birth_year_token(it["text"]):
                 continue
-            for val in _small_age(it["text"]):
-                hits.append((it["cx"], val))
+            parsed = _parse_age_value(it["text"])
+            if parsed:
+                hits.append((it["cx"], int(parsed)))
         if not hits:
             return ""
         hits.sort()
         return str(hits[0][1])
 
-    hus = age_after_year(years[0]) if years else ""
-    wife = age_after_year(years[1]) if len(years) >= 2 else ""
-    if wife and hus and wife == hus and len(years) >= 2:
-        # Do not copy the husband age; keep searching farther right of the wife year.
-        x_min = years[1]["cx"] + img_w * 0.04
+    def age_in_half(half_tokens):
+        return _age_from_tokens(half_tokens)
+
+    wife_limit = wife_years[0]["x1"] - 8 if wife_years else (img_w * 0.999)
+    hus = age_after_year(hus_years[-1], max(wife_limit, hus_years[-1]["x2"] + img_w * 0.14)) if hus_years else ""
+    wife = age_after_year(wife_years[-1], img_w * 0.999) if wife_years else ""
+    if not hus:
+        hus = age_in_half([it for it in ordered if it["cx"] < mid])
+    if not wife:
+        wife = age_in_half([it for it in ordered if it["cx"] >= mid])
+
+    def age_near_printed_header(min_x, max_x):
+        headers = [
+            it for it in ordered
+            if min_x <= it["cx"] <= max_x
+            and re.fullmatch(r"(?:2B\.?)?AGE", norm_text(it["text"]))
+        ]
+        hits = []
+        for hdr in headers:
+            for it in ordered:
+                if it is hdr:
+                    continue
+                if abs(it["cy"] - hdr["cy"]) > img_h * 0.035:
+                    continue
+                if it["cx"] < hdr["x1"] - img_w * 0.01:
+                    continue
+                if it["cx"] > hdr["x2"] + img_w * 0.06:
+                    continue
+                parsed = _parse_age_value(it["text"])
+                if parsed:
+                    hits.append((abs(it["cx"] - hdr["cx"]), int(parsed)))
+        if not hits:
+            return ""
+        hits.sort()
+        return str(hits[0][1])
+
+    if not hus:
+        hus = age_near_printed_header(img_w * 0.35, mid)
+    if not wife:
+        wife = age_near_printed_header(mid, img_w * 0.999)
+
+    if wife and hus and wife == hus:
+        x_min = (wife_years[-1]["cx"] + img_w * 0.04) if wife_years else (mid + img_w * 0.08)
         extra = []
         for it in ordered:
             if it["cx"] < x_min:
                 continue
             extra.extend(_small_age(it["text"]))
         extra = [v for v in extra if str(v) != hus]
-        if extra:
-            wife = str(extra[0])
-        else:
-            wife = ""
+        wife = str(extra[0]) if extra else ""
+    if img is not None:
+        crop_h, crop_w = read_form97_age_crops(img, items, img_w, img_h, split_x, dob_label)
+        hus = hus or crop_h
+        wife = wife or crop_w
+    return hus, wife
+
+
+def _prepare_digit_crop(bgr):
+    """Upscale a tiny Age cell so Paddle can read 31 / 28 that vanish on the full page."""
+    if bgr is None or bgr.size == 0:
+        return None
+    pad = 16
+    canvas = cv2.copyMakeBorder(
+        bgr, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(255, 255, 255)
+    )
+    h, w = canvas.shape[:2]
+    scale = min(6.0, max(3.2, 260.0 / max(min(h, w), 1)))
+    out = cv2.resize(
+        canvas, (max(32, int(w * scale)), max(32, int(h * scale))),
+        interpolation=cv2.INTER_CUBIC,
+    )
+    gray = cv2.cvtColor(out, cv2.COLOR_BGR2GRAY)
+    gray = cv2.convertScaleAbs(gray, alpha=1.40, beta=12)
+    try:
+        clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+        gray = clahe.apply(gray)
+    except Exception:
+        pass
+    return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
+
+def ocr_crop_text(img, box) -> str:
+    h, w = img.shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in box]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    if x2 - x1 < 10 or y2 - y1 < 10:
+        return ""
+    crop = _prepare_digit_crop(img[y1:y2, x1:x2])
+    if crop is None:
+        return ""
+    try:
+        pages = run_ocr_on_image(crop, max_side=960)
+    except Exception:
+        return ""
+    parts = []
+    for page in pages or []:
+        for text in page.get("rec_texts") or []:
+            if text:
+                parts.append(str(text))
+    return " ".join(parts).strip()
+
+
+def _dob_row_bounds(items, img_w, img_h, dob_label=None):
+    y1 = img_h * 0.12
+    y2 = img_h * 0.32
+    if dob_label:
+        y1 = min(y1, dob_label["y1"] - img_h * 0.02)
+        y2 = max(y2, dob_label["y2"] + img_h * 0.08)
+    y1 = max(img_h * 0.08, y1)
+    y2 = min(img_h * 0.42, y2)
+    band = tokens_in_region(items, img_w * 0.12, img_w * 0.999, y1, y2, min_score=0.05)
+    years = [it for it in sorted(band, key=lambda it: it["cx"]) if _is_birth_year_token(it["text"])]
+    return y1, y2, years
+
+
+def read_form97_age_crops(img, items, img_w, img_h, split_x=None, dob_label=None):
+    """
+    Full-page OCR is capped at ~720px, so Form 97 Age digits are often never detected.
+    Re-read the cell to the right of each birth year from the original image.
+    """
+    if img is None:
+        return "", ""
+    mid = split_x if split_x else img_w * 0.52
+    y1, y2, years = _dob_row_bounds(items, img_w, img_h, dob_label)
+    hus_years = [it for it in years if it["cx"] < mid]
+    wife_years = [it for it in years if it["cx"] >= mid]
+    row_y1 = int(min((it["y1"] for it in years), default=y1) - img_h * 0.012)
+    row_y2 = int(max((it["y2"] for it in years), default=y2) + img_h * 0.012)
+
+    def age_right_of(year_it, x_limit):
+        right = max(year_it["x2"] + img_w * 0.12, min(x_limit, year_it["x2"] + img_w * 0.16))
+        boxes = [
+            (
+                year_it["x2"] + img_w * 0.002,
+                year_it["y1"] - img_h * 0.012,
+                right,
+                year_it["y2"] + img_h * 0.012,
+            ),
+            (
+                year_it["x1"],
+                year_it["y1"] - img_h * 0.010,
+                right,
+                year_it["y2"] + img_h * 0.010,
+            ),
+        ]
+        for box in boxes:
+            if box[2] <= box[0] + 8:
+                continue
+            parsed = _parse_age_value(ocr_crop_text(img, box))
+            if parsed:
+                return parsed
+        return ""
+
+    wife_x1 = wife_years[0]["x1"] - 8 if wife_years else (img_w - 2)
+    hus = age_right_of(hus_years[-1], wife_x1) if hus_years else ""
+    wife = age_right_of(wife_years[-1], img_w - 2) if wife_years else ""
+    if not hus:
+        hus = _parse_age_value(ocr_crop_text(img, (img_w * 0.40, row_y1, img_w * 0.54, row_y2)))
+    if not wife:
+        wife = _parse_age_value(ocr_crop_text(img, (img_w * 0.86, row_y1, img_w * 0.995, row_y2)))
     return hus, wife
 
 
@@ -1012,10 +1221,12 @@ def extract_dob_and_age(side_tokens, marriage_date_text=""):
     date_candidates = extract_date_candidates(side_tokens)
     dob = date_candidates[0]["text"] if date_candidates else ""
     handwritten = _age_from_tokens(side_tokens, dob)
-    if handwritten:
+    if handwritten and handwritten not in set(norm_text(dob).split()):
         return dob, handwritten
     computed_age = compute_age_from_dates(dob, marriage_date_text)
-    return dob, computed_age
+    if computed_age:
+        return dob, computed_age
+    return dob, handwritten
 
 
 _PLACE_FORM_TAIL = {
@@ -1214,10 +1425,62 @@ def extract_registry_number(items, img_w, img_h, working_xmax):
 
 
 def extract_date_of_registration(items, img_w, img_h, marriage_date_text=""):
-    """Header date, usually to the right of the registry number."""
+    """
+    Form 97 puts Date of Registration in item 22 (bottom right), not in the header.
+    Item 21 Received-by date is the fallback.
+    """
+    marriage_norm = parse_date_from_string(marriage_date_text)
+
+    def first_date(region, skip_marriage=True):
+        found = []
+        seen = set()
+        for cand in extract_date_candidates(region):
+            parsed = parse_date_from_string(cand["text"])
+            if not parsed or parsed in seen:
+                continue
+            if skip_marriage and marriage_norm and parsed == marriage_norm:
+                continue
+            seen.add(parsed)
+            found.append(parsed)
+        return found[0] if found else ""
+
+    registered = find_best_label(
+        items,
+        patterns=["REGISTERED AT THE OFFICE", "REGISTERED AT THE", "22. REGISTERED", "REGISTERED"],
+        x_min=img_w * 0.35, x_max=img_w * 0.99,
+        y_min=img_h * 0.62, y_max=img_h * 0.92,
+        min_score=0.12,
+        forbidden=["DATE OF MARRIAGE", "DATE OF BIRTH"],
+    )
+    if registered:
+        got = first_date(tokens_in_region(
+            items, max(img_w * 0.40, registered["x1"] - 20), img_w * 0.99,
+            registered["y1"], min(img_h * 0.92, registered["y2"] + img_h * 0.08),
+            min_score=0.12,
+        ))
+        if got:
+            return got
+
+    received = find_best_label(
+        items,
+        patterns=["RECEIVED BY", "21. RECEIVED", "RECEIVED"],
+        x_min=0, x_max=img_w * 0.55,
+        y_min=img_h * 0.62, y_max=img_h * 0.92,
+        min_score=0.12,
+        forbidden=["DATE OF MARRIAGE", "DATE OF BIRTH"],
+    )
+    if received:
+        got = first_date(tokens_in_region(
+            items, received["x1"] - 10, min(img_w * 0.55, received["x2"] + img_w * 0.35),
+            received["y1"], min(img_h * 0.92, received["y2"] + img_h * 0.08),
+            min_score=0.12,
+        ))
+        if got:
+            return got
+
     label = find_best_label(
         items,
-        patterns=["DATE OF REGISTRATION", "DATE RECEIVED", "RECEIVED IN THIS OFFICE", "RECEIVED"],
+        patterns=["DATE OF REGISTRATION", "DATE RECEIVED", "RECEIVED IN THIS OFFICE"],
         x_min=img_w * 0.20, x_max=img_w * 0.99,
         y_min=0, y_max=img_h * 0.30,
         min_score=0.12,
@@ -1230,23 +1493,11 @@ def extract_date_of_registration(items, img_w, img_h, marriage_date_text=""):
             label["y1"] - 16, label["y2"] + 70, min_score=0.12
         ))
     regions.append(tokens_in_region(items, img_w * 0.42, img_w * 0.99, 0, img_h * 0.22, min_score=0.18))
-    found = []
-    seen = set()
-    marriage_norm = parse_date_from_string(marriage_date_text)
     for region in regions:
-        for cand in extract_date_candidates(region):
-            parsed = parse_date_from_string(cand["text"])
-            if not parsed or parsed in seen:
-                continue
-            seen.add(parsed)
-            found.append(parsed)
-    if not found:
-        return ""
-    if marriage_norm:
-        others = [d for d in found if d != marriage_norm]
-        if others:
-            return others[0]
-    return found[0]
+        got = first_date(region)
+        if got:
+            return got
+    return ""
 
 
 def extract_parent_pair(items, label, working_xmax, split_x, stop_label=None):
@@ -1677,11 +1928,13 @@ def extract_marriage_data(img_path: str) -> Dict[str, Any]:
         data["wife"]["Name"] = w
 
     if dob_label:
+        # Age is the last cell of each half — read past working_xmax so wife Age is kept.
         band_tokens = extract_band_tokens(
-            items, dob_label, working_xmax,
-            next_label=pob_label, extra_bottom=48, extra_top=10, min_score=0.15
+            items, dob_label, img_w * 0.999,
+            next_label=pob_label, extra_bottom=56, extra_top=12, min_score=0.08
         )
-        left, right = split_left_right(band_tokens, split_x, dob_label["x2"])
+        age_split = (split_x or img_w * 0.52) + img_w * 0.02
+        left, right = split_left_right(band_tokens, age_split, dob_label["x2"])
         h_dob, h_age = extract_dob_and_age(left, marriage_date_text)
         w_dob, w_age = extract_dob_and_age(right, marriage_date_text)
         if h_dob:
@@ -1693,7 +1946,7 @@ def extract_marriage_data(img_path: str) -> Dict[str, Any]:
         if w_age:
             data["wife"]["Age"] = w_age
 
-    box_h_age, box_w_age = extract_form97_ages(items, img_w, img_h, split_x, dob_label)
+    box_h_age, box_w_age = extract_form97_ages(items, img_w, img_h, split_x, dob_label, img=img)
     if box_h_age:
         data["husband"]["Age"] = box_h_age
     if box_w_age:
@@ -1704,6 +1957,14 @@ def extract_marriage_data(img_path: str) -> Dict[str, Any]:
             data["wife"]["Age"] = computed
         else:
             data["wife"]["Age"] = ""
+    if not data["husband"].get("Age"):
+        data["husband"]["Age"] = compute_age_from_dates(
+            data["husband"].get("Date of Birth") or "", marriage_date_text
+        )
+    if not data["wife"].get("Age"):
+        data["wife"]["Age"] = compute_age_from_dates(
+            data["wife"].get("Date of Birth") or "", marriage_date_text
+        )
 
     h, w = extract_two_side_band(items, pob_label, working_xmax, split_x, next_label=sex_label, banned={"PLACE OF BIRTH"}, extra_bottom=28)
     if h:
@@ -1817,7 +2078,7 @@ def extract_marriage_data(img_path: str) -> Dict[str, Any]:
                 out[k] = parsed
             continue
         if k in {"Husband Age", "Wife Age"}:
-            parsed = _age_from_tokens(
+            parsed = _parse_age_value(v) or _age_from_tokens(
                 [{"text": v, "x1": 0, "x2": 10, "cx": 10, "score": 1.0}]
             )
             if not parsed:
@@ -1833,6 +2094,14 @@ def extract_marriage_data(img_path: str) -> Dict[str, Any]:
         out["Wife Age"] = linked_w
     elif (out.get("Wife Age") or "").strip() == (out.get("Husband Age") or "").strip():
         out["Wife Age"] = ""
+    if not (out.get("Husband Age") or "").strip():
+        out["Husband Age"] = compute_age_from_dates(
+            data["husband"].get("Date of Birth") or "", marriage_date_text
+        )
+    if not (out.get("Wife Age") or "").strip():
+        out["Wife Age"] = compute_age_from_dates(
+            data["wife"].get("Date of Birth") or "", marriage_date_text
+        )
     ordered_fields = [
         "Registry Number",
         "Date of Registration",

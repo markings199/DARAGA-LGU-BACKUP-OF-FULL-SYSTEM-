@@ -32,9 +32,16 @@ class OCREngineNotFoundError(Exception):
     pass
 
 
-# Longest side sent to the recognizer. Certificate scans are often 2000px+;
-# running the full resolution on CPU is the main reason OCR felt stuck.
-_OCR_MAX_SIDE = 960
+def _ocr_max_side() -> int:
+    """Longest side sent to PaddleOCR. 720 keeps printed form text readable and targets ~10–15s on CPU."""
+    try:
+        value = int(os.environ.get("OCR_MAX_SIDE") or "720")
+    except ValueError:
+        value = 720
+    return max(560, min(960, value))
+
+
+_OCR_MAX_SIDE = _ocr_max_side()
 
 _OCR_INSTANCE = None
 _OCR_WARMED = False
@@ -109,65 +116,76 @@ def get_ocr():
         cpu_threads = max(1, min(8, int(os.environ.get("OCR_CPU_THREADS") or "4")))
     except ValueError:
         cpu_threads = 4
-    ocr_kwargs = dict(
+    max_side = _ocr_max_side()
+    use_gpu = False
+    try:
+        import paddle
+
+        use_gpu = bool(paddle.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0)
+    except Exception:
+        use_gpu = False
+    # PaddleOCR 2.7 (this office install) uses det_limit_side_len / rec_batch_num / use_angle_cls.
+    # PaddleOCR 3.x uses the text_* names. Try 2.7 first so MKLDNN and the size cap actually apply.
+    kwargs_v2 = dict(
+        lang="en",
+        ocr_version="PP-OCRv4",
+        use_angle_cls=False,
+        use_gpu=use_gpu,
+        enable_mkldnn=not use_gpu,
+        cpu_threads=cpu_threads,
+        det_limit_side_len=max_side,
+        det_limit_type="max",
+        rec_batch_num=8,
+        drop_score=0.45,
+        show_log=False,
+    )
+    kwargs_v3 = dict(
         lang="en",
         ocr_version="PP-OCRv4",
         use_textline_orientation=False,
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
-        text_det_limit_side_len=_OCR_MAX_SIDE,
+        text_det_limit_side_len=max_side,
         text_det_limit_type="max",
-        text_recognition_batch_size=48,
+        text_recognition_batch_size=16,
         cpu_threads=cpu_threads,
-        enable_mkldnn=True,
+        enable_mkldnn=not use_gpu,
         show_log=False,
     )
-    try:
-        import paddle
-
-        if paddle.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0:
-            ocr_kwargs["device"] = "gpu:0"
-    except Exception:
-        pass
+    if use_gpu:
+        kwargs_v3["device"] = "gpu:0"
+    last_error = None
     try:
         with _quiet_stdio():
-            try:
-                _OCR_INSTANCE = PaddleOCR(**ocr_kwargs)
-            except (TypeError, ValueError):
-                ocr_kwargs.pop("enable_mkldnn", None)
-                ocr_kwargs.pop("show_log", None)
-                ocr_kwargs.pop("device", None)
+            for kwargs in (kwargs_v2, kwargs_v3):
                 try:
-                    _OCR_INSTANCE = PaddleOCR(**ocr_kwargs)
-                except (TypeError, ValueError):
-                    ocr_kwargs.pop("cpu_threads", None)
-                    ocr_kwargs.pop("ocr_version", None)
-                    ocr_kwargs.pop("show_log", None)
-                    ocr_kwargs.pop("device", None)
-                    try:
-                        _OCR_INSTANCE = PaddleOCR(**ocr_kwargs)
-                    except TypeError:
-                        _OCR_INSTANCE = PaddleOCR(
-                            lang="en",
-                            use_textline_orientation=False,
-                            use_doc_orientation_classify=False,
-                            use_doc_unwarping=False,
-                        )
+                    _OCR_INSTANCE = PaddleOCR(**kwargs)
+                    return _OCR_INSTANCE
+                except (TypeError, ValueError) as exc:
+                    last_error = exc
+                    continue
+            _OCR_INSTANCE = PaddleOCR(lang="en", use_angle_cls=False, show_log=False)
     except Exception as exc:
         raise OCREngineNotFoundError(
             "Failed to initialize PaddleOCR engine. Ensure 'paddlepaddle' is installed and compatible "
             "with this Python version."
-        ) from exc
+        ) from (exc if last_error is None else last_error)
     return _OCR_INSTANCE
 
 
 def warmup_ocr() -> None:
-    """Compile CPU kernels once so the first real certificate scan is not the slow one."""
+    """Compile CPU kernels at the real scan size so the first certificate is not the slow one."""
     global _OCR_WARMED
     if _OCR_WARMED:
         return
-    img = np.full((48, 240, 3), 255, dtype=np.uint8)
-    cv2.putText(img, "OCR", (20, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+    side = _ocr_max_side()
+    height = max(360, int(side * 0.72))
+    img = np.full((height, side, 3), 255, dtype=np.uint8)
+    cv2.rectangle(img, (24, 24), (side - 24, height - 24), (0, 0, 0), 2)
+    for i, line in enumerate(
+        ("CERTIFICATE OF LIVE BIRTH", "Registry No. 2024-000123", "JUAN DELA CRUZ")
+    ):
+        cv2.putText(img, line, (40, 80 + i * 48), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
     with _quiet_stdio():
         run_ocr_on_image(img)
     _OCR_WARMED = True
@@ -198,7 +216,7 @@ def _normalize_ocr_pages(raw):
 
 
 def _resize_for_ocr(img, max_side=None):
-    limit = int(max_side or _OCR_MAX_SIDE)
+    limit = int(max_side or _ocr_max_side())
     h, w = img.shape[:2]
     longest = max(h, w)
     if longest <= limit:
@@ -206,6 +224,10 @@ def _resize_for_ocr(img, max_side=None):
     scale = limit / float(longest)
     new_w = max(32, int(round(w * scale)))
     new_h = max(32, int(round(h * scale)))
+    new_w -= new_w % 32
+    new_h -= new_h % 32
+    new_w = max(32, new_w)
+    new_h = max(32, new_h)
     resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
     return resized, scale
 

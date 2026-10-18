@@ -8,7 +8,7 @@
   {% set review_title = 'Review Marriage Certificate' %}
   {% include '_form_review_hero.html' %}
 
-  <form method="post" action="{{ url_for('confirm', doc_type='marriage') }}">
+  <form method="post" action="{{ url_for('confirm', doc_type='marriage') }}" data-required-review="1" novalidate>
     <input type="hidden" name="image_filename" value="{{ image_filename }}" />
 
     <div class="scan-workflow-grid form-review-page-grid">
@@ -87,6 +87,7 @@
             data-app-confirm
             data-confirm-title="Cancel review"
             data-confirm-message="This auto-filled form will be closed. Unsaved changes will be lost."
+            formnovalidate
             data-confirm-ok="Cancel review"
             data-confirm-cancel="Keep review"
           >

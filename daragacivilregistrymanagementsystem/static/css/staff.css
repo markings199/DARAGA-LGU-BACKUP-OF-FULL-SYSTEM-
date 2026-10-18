@@ -201,6 +201,10 @@ body.page-staff-requests .staff-requests-table .doc-type-short {
   font-weight: 800;
   white-space: nowrap;
 }
+body.page-staff-requests .staff-requests-table .print-format-badge {
+  margin-left: 4px;
+  vertical-align: middle;
+}
 body.page-staff-requests .staff-requests-table .col-reason,
 body.page-staff-requests .staff-requests-table .col-reject {
   max-width: 18rem;
@@ -572,12 +576,58 @@ body.page-record-detail .record-detail-page-grid .form-review-meta {
 }
 body.page-form-review .form-review-page-grid .form-review-preview,
 body.page-record-detail .record-detail-page-grid .form-review-preview {
-  overflow: visible;
+  overflow: visible !important;
+  max-height: none;
+  height: auto;
+  align-self: start;
 }
 body.page-form-review .form-review-page-grid .form-review-meta,
 body.page-record-detail .record-detail-page-grid .form-review-meta {
   overflow: hidden;
 }
+.field-required-mark {
+  color: #c2410c;
+  font-weight: 800;
+  margin-left: 2px;
+}
+.review-required-hint,
+.review-required-banner {
+  margin: 8px 12px 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+.review-required-hint {
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+.review-required-banner {
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  font-weight: 650;
+}
+.form-meta-field.is-missing,
+.metadata-edit-field.is-missing {
+  border-radius: 8px;
+  outline: 2px solid #f97316;
+  outline-offset: 2px;
+  background: #fff7ed;
+}
+.form-meta-field.is-missing input,
+.metadata-edit-field.is-missing input,
+.form-meta-field.is-missing .sex-radios,
+.metadata-edit-field.is-missing .sex-radios {
+  border-color: #ea580c;
+}
+body.page-record-edit .record-edit-form-col .review-required-hint,
+body.page-record-edit .record-edit-form-col .review-required-banner {
+  grid-column: 1 / -1;
+  margin: 0 0 10px;
+}
+
 @media (max-width: 720px) {
   body.page-form-review .form-review-hero-main,
   body.page-record-detail .form-review-hero-main {
@@ -857,6 +907,245 @@ body.page-record-detail .rd-code-form + .rd-code-form {
 body.page-record-detail .record-detail-preview .scan-preview-viewer-inner {
   margin: 0 12px 12px;
   border-radius: 12px;
+}
+body.page-record-detail .rd-supporting,
+body.page-request-edit .rd-supporting {
+  margin: 0 12px 12px;
+  padding: 12px 0 4px;
+  border-top: 1px solid rgba(0, 32, 128, 0.12);
+  background: transparent;
+}
+body.page-record-detail .rd-supporting-head,
+body.page-request-edit .rd-supporting-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin: 0 0 8px;
+}
+body.page-record-detail .rd-supporting-title,
+body.page-request-edit .rd-supporting-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #002080;
+}
+body.page-record-detail .rd-supporting-folder,
+body.page-request-edit .rd-supporting-folder {
+  margin: 0;
+  max-width: min(100%, 28rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #64748b;
+  font-family: ui-monospace, Consolas, monospace;
+}
+body.page-record-detail .rd-supporting-empty,
+body.page-request-edit .rd-supporting-empty {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+body.page-record-detail .rd-supporting-list,
+body.page-request-edit .rd-supporting-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+body.page-record-detail .rd-supporting-item,
+body.page-request-edit .rd-supporting-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid rgba(0, 32, 128, 0.08);
+}
+body.page-record-detail .rd-supporting-file,
+body.page-request-edit .rd-supporting-file {
+  min-width: 0;
+  flex: 1 1 200px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: baseline;
+}
+body.page-record-detail .rd-supporting-kind,
+body.page-request-edit .rd-supporting-kind {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #e8eef8;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #1d4ed8;
+  white-space: nowrap;
+}
+body.page-record-detail .rd-supporting-name,
+body.page-request-edit .rd-supporting-name {
+  grid-column: 2;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.page-record-detail .rd-supporting-meta,
+body.page-request-edit .rd-supporting-meta {
+  grid-column: 2;
+  font-size: 0.68rem;
+  color: #64748b;
+}
+body.page-record-detail .rd-supporting-actions,
+body.page-request-edit .rd-supporting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+body.page-record-detail .rd-supporting-actions form,
+body.page-request-edit .rd-supporting-actions form {
+  margin: 0;
+}
+body.page-record-detail .rd-supporting-form,
+body.page-request-edit .rd-supporting-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+body.page-record-detail .rd-supporting-label,
+body.page-request-edit .rd-supporting-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #475569;
+}
+body.page-record-detail .rd-supporting-select,
+body.page-record-detail .rd-supporting-file-input,
+body.page-request-edit .rd-supporting-select,
+body.page-request-edit .rd-supporting-file-input {
+  min-height: 34px;
+  padding: 4px 8px;
+  border: 1px solid #c7d4e8;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.8rem;
+}
+body.page-record-detail .rd-supporting-select,
+body.page-request-edit .rd-supporting-select {
+  min-width: 9.5rem;
+}
+body.page-record-detail .rd-supporting-file-input,
+body.page-request-edit .rd-supporting-file-input {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+body.page-record-detail .rd-supporting-form .btn-sm,
+body.page-request-edit .rd-supporting-form .btn-sm {
+  min-height: 34px;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+body.page-record-detail .rd-supporting-remove,
+body.page-request-edit .rd-supporting-remove {
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fff;
+}
+
+body.page-attachment-view .main {
+  max-width: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: calc(100vh - var(--topbar-height, 64px));
+}
+body.page-attachment-view .att-view-bar {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #002080;
+  color: #fff;
+}
+body.page-attachment-view .att-view-bar-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+body.page-attachment-view .att-view-kind {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #bfdbfe;
+}
+body.page-attachment-view .att-view-name {
+  font-size: 0.86rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.page-attachment-view .att-view-bar .btn {
+  flex-shrink: 0;
+}
+body.page-attachment-view .att-view-close {
+  background: #fff;
+  color: #002080;
+  border-color: #fff;
+  font-weight: 800;
+}
+body.page-attachment-view .att-view-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f172a;
+  overflow: auto;
+}
+body.page-attachment-view .att-view-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+body.page-attachment-view .att-view-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+body.page-attachment-view .att-view-fallback {
+  margin: 0;
+  padding: 24px;
+  color: #e2e8f0;
+  font-size: 0.9rem;
 }
 
 body.page-archiving .archive-sections .table-wrap.archive-table-scroll,

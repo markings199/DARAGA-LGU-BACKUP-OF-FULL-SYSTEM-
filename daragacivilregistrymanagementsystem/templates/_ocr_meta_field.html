@@ -3,16 +3,21 @@
 {% set src = source.get(key, 'layout') %}
 {% set iso = date_input_value(val) if key in DATE_FIELD_KEYS else '' %}
 {% set _shown = display_label if display_label is defined and display_label else metadata_display_label(key) %}
-<div class="form-meta-field">
+{% set _required = doc_type is defined and is_required_review_field(doc_type, key) %}
+{% set _missing = missing_fields is defined and key in missing_fields %}
+<div class="form-meta-field{% if _required %} is-required{% endif %}{% if _missing %} is-missing{% endif %}" {% if _required %}data-review-required="1"{% endif %}>
   <div class="form-meta-field-head">
-    <span class="confirm-item-label">{% if field_id is defined and field_id %}<label for="{{ field_id }}">{{ _shown }}</label>{% else %}{{ _shown }}{% endif %}</span>
+    <span class="confirm-item-label">
+      {% if field_id is defined and field_id %}<label for="{{ field_id }}">{{ _shown }}</label>{% else %}{{ _shown }}{% endif %}
+      {% if _required %}<span class="field-required-mark" title="Required" aria-hidden="true">*</span>{% endif %}
+    </span>
     <span class="ocr-conf ocr-conf-{{ conf|lower }}">{{ conf }}{% if src == 'template' %} · template{% endif %}</span>
   </div>
   <div class="confirm-item-value">
     {% if key in SEX_FIELD_KEYS %}
-      <div class="sex-radios" role="radiogroup" aria-label="{{ metadata_display_label(key) }}"{% if field_id is defined and field_id %} id="{{ field_id }}"{% endif %}>
+      <div class="sex-radios" role="radiogroup" aria-label="{{ metadata_display_label(key) }}"{% if field_id is defined and field_id %} id="{{ field_id }}"{% endif %}{% if _required %} aria-required="true"{% endif %}>
         <label class="sex-radio">
-          <input type="radio" name="{{ key }}" value="Male" {% if sex_choice(val) == 'Male' %}checked{% endif %} />
+          <input type="radio" name="{{ key }}" value="Male" {% if sex_choice(val) == 'Male' %}checked{% endif %}{% if _required %} required{% endif %} />
           <span class="sex-radio-ui">Male</span>
         </label>
         <label class="sex-radio">
@@ -21,12 +26,12 @@
         </label>
       </div>
     {% elif key in DATE_FIELD_KEYS %}
-      <input {% if field_id is defined and field_id %}id="{{ field_id }}" {% endif %}name="{{ key }}" value="{{ iso }}" type="date" autocomplete="off" />
+      <input {% if field_id is defined and field_id %}id="{{ field_id }}" {% endif %}name="{{ key }}" value="{{ iso }}" type="date" autocomplete="off"{% if _required %} required{% endif %} />
       {% if val and not iso %}
         <p class="date-ocr-hint">OCR text: {{ val }} — choose a date above</p>
       {% endif %}
     {% else %}
-      <input {% if field_id is defined and field_id %}id="{{ field_id }}" {% endif %}name="{{ key }}" value="{{ val }}" type="text" autocomplete="off" />
+      <input {% if field_id is defined and field_id %}id="{{ field_id }}" {% endif %}name="{{ key }}" value="{{ val }}" type="text" autocomplete="off"{% if _required %} required{% endif %} />
     {% endif %}
   </div>
 </div>

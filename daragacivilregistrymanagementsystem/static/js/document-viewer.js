@@ -45,10 +45,27 @@
     img.style.userSelect = "none";
     img.style.webkitUserDrag = "none";
 
+    function paneIsVisible() {
+      if (!pane.getClientRects || !pane.getClientRects().length) return false;
+      var host = section.closest("[hidden]");
+      if (host && host.hidden) return false;
+      return true;
+    }
+
     function applyZoom() {
-      var baseW = getPaneContentWidth(pane);
+      if (!paneIsVisible()) {
+        if (!section.__dvRetry) {
+          section.__dvRetry = window.setTimeout(function () {
+            section.__dvRetry = 0;
+            applyZoom();
+          }, 60);
+        }
+        return;
+      }
+      var baseW = Math.max(getPaneContentWidth(pane), Math.floor(pane.getBoundingClientRect().width) || 0);
       var displayW;
       var displayH = null;
+      var useFluidWidth = false;
       if (fitMode === "contain") {
         /* Fit the full certificate inside the pane at 100% — no scrolling needed. */
         var baseH = getPaneContentHeight(pane);
@@ -56,6 +73,9 @@
         var nh = img.naturalHeight || 0;
         var availW = Math.max(1, baseW - 2);
         var availH = Math.max(1, baseH - 2);
+        if (availH < 120) {
+          availH = Math.max(360, Math.floor(window.innerHeight * 0.72) - 24);
+        }
         if (nw > 0 && nh > 0 && availH > 1) {
           var fit = Math.min(availW / nw, availH / nh);
           if (!isFinite(fit) || fit <= 0) fit = availW / nw;
@@ -71,19 +91,21 @@
         pane.style.overflowX = scale <= 1.01 ? "hidden" : "auto";
         pane.style.overflowY = scale <= 1.01 ? "hidden" : "auto";
       } else if (fitMode === "fill") {
-        /* Full width; pane grows with the page so the whole certificate is visible (no inner scroll). */
-        displayW = Math.max(1, Math.round(baseW * scale));
+        /* Full width; pane grows with the page so the whole certificate is visible. */
         pane.style.display = "block";
         pane.style.alignItems = "";
         pane.style.justifyContent = "";
+        pane.style.clipPath = "none";
         if (scale <= 1.01) {
-          pane.style.overflow = "visible";
-          pane.style.overflowX = "visible";
-          pane.style.overflowY = "visible";
-          pane.style.height = "auto";
-          pane.style.maxHeight = "none";
-          pane.style.minHeight = "0";
+          useFluidWidth = true;
+          pane.style.setProperty("overflow", "visible", "important");
+          pane.style.setProperty("overflow-x", "visible", "important");
+          pane.style.setProperty("overflow-y", "visible", "important");
+          pane.style.setProperty("height", "auto", "important");
+          pane.style.setProperty("max-height", "none", "important");
+          pane.style.setProperty("clip-path", "none", "important");
         } else {
+          displayW = Math.max(1, Math.round(Math.max(baseW, 32) * scale));
           pane.style.overflow = "auto";
           pane.style.overflowX = "auto";
           pane.style.overflowY = "auto";
@@ -91,8 +113,8 @@
           pane.style.maxHeight = "min(82vh, 920px)";
         }
       } else {
-        /* Width-fill inside a fixed pane (scan workflow / default). */
-        displayW = Math.max(1, Math.round(baseW * scale));
+        /* Width-fill inside a fixed pane. */
+        displayW = Math.max(1, Math.round(Math.max(baseW, 32) * scale));
         pane.style.display = "";
         pane.style.alignItems = "";
         pane.style.justifyContent = "";
@@ -100,23 +122,32 @@
         pane.style.overflowX = "auto";
         pane.style.overflowY = "auto";
       }
-      img.style.width = displayW + "px";
-      img.style.maxWidth = scale <= 1.01 ? "100%" : "none";
-      img.style.minWidth = "0";
       img.style.objectFit = "contain";
       img.style.objectPosition = "top center";
-      if (displayH != null) {
-        img.style.height = displayH + "px";
-      } else {
-        img.style.height = "auto";
-      }
-      wrap.style.width = displayW + "px";
-      wrap.style.maxWidth = scale <= 1.01 ? "100%" : "none";
+      img.style.minWidth = "0";
       wrap.style.minWidth = "0";
-      wrap.style.height = displayH != null ? displayH + "px" : "auto";
       wrap.style.transform = "none";
       wrap.style.marginLeft = "0";
       wrap.style.marginRight = "0";
+      if (useFluidWidth) {
+        img.style.width = "100%";
+        img.style.maxWidth = "100%";
+        img.style.height = "auto";
+        wrap.style.width = "100%";
+        wrap.style.maxWidth = "100%";
+        wrap.style.height = "auto";
+      } else {
+        img.style.width = displayW + "px";
+        img.style.maxWidth = "none";
+        if (displayH != null) {
+          img.style.height = displayH + "px";
+        } else {
+          img.style.height = "auto";
+        }
+        wrap.style.width = displayW + "px";
+        wrap.style.maxWidth = "none";
+        wrap.style.height = displayH != null ? displayH + "px" : "auto";
+      }
       pane.classList.toggle("is-zoomed", scale > 1.01);
       if (valueEl) valueEl.textContent = Math.round(scale * 100) + "%";
       if (zoomOutBtn) zoomOutBtn.disabled = scale <= minScale;
@@ -258,9 +289,18 @@
         reapplyAfterLayout();
       });
       ro.observe(pane);
+      ro.observe(section);
       if (section.parentElement) ro.observe(section.parentElement);
     } else {
       window.addEventListener("resize", reapplyAfterLayout);
+    }
+
+    var host = section.parentElement;
+    if (host && typeof MutationObserver !== "undefined") {
+      var mo = new MutationObserver(function () {
+        reapplyAfterLayout();
+      });
+      mo.observe(host, { attributes: true, attributeFilter: ["hidden", "style", "class"] });
     }
   }
 

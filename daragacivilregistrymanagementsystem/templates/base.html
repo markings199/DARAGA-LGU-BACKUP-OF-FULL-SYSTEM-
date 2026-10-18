@@ -248,6 +248,17 @@
         justify-content: center;
         flex-shrink: 0;
         box-shadow: 0 0 0 2px rgba(244, 196, 49, 0.45);
+        overflow: hidden;
+      }
+      .topbar-user-avatar--photo {
+        background: #0f172a;
+        padding: 0;
+      }
+      .topbar-user-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
       }
       .topbar-user-meta {
         display: flex;
@@ -514,18 +525,17 @@
         color: #1f3556;
         margin: 0;
       }
-      /* Full-width certificate; pane grows so the whole page stays visible (no inner scroll). */
       .scan-preview-viewer-inner .document-viewer-pane {
         background: #d8e2ee;
         border: 1px solid #c8d5e7;
         border-radius: 12px;
+        width: 100%;
         height: auto;
-        min-height: 0;
         max-height: none;
         overflow: visible;
-        width: 100%;
         box-sizing: border-box;
         padding: 0;
+        clip-path: none;
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
         touch-action: pan-x pan-y;
@@ -543,8 +553,7 @@
       .scan-preview-viewer-inner .document-viewer-image-wrap {
         display: block;
         width: 100%;
-        max-width: none;
-        min-height: 0;
+        max-width: 100%;
         margin: 0;
         line-height: 0;
         font-size: 0;
@@ -554,8 +563,8 @@
         display: block;
         margin: 0;
         width: 100%;
+        max-width: 100%;
         height: auto;
-        max-width: none;
         object-fit: contain;
         object-position: top center;
         border-radius: 0;
@@ -749,15 +758,10 @@
       }
       body.page-form-review .form-review-preview .scan-preview-viewer-inner .document-viewer-pane,
       body.page-record-detail .form-review-preview .scan-preview-viewer-inner .document-viewer-pane {
-        min-height: 0;
         height: auto;
         max-height: none;
         overflow: visible;
-      }
-      body.page-form-review .form-review-preview .scan-preview-viewer-inner .document-viewer-pane.is-zoomed,
-      body.page-record-detail .form-review-preview .scan-preview-viewer-inner .document-viewer-pane.is-zoomed {
-        overflow: auto;
-        max-height: min(82vh, 920px);
+        clip-path: none;
       }
       .form-review-meta .form-meta-scroll {
         background: transparent;
@@ -933,16 +937,16 @@
         }
       }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}?v=reason-pop-1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/staff.css') }}?v=reason-pop-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}?v=print-table-match-edit-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/staff.css') }}?v=preview-uncut-2" />
     {% block extra_head %}{% endblock %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}?v=capture-source-1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/document_annotation.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}?v=required-review-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/document_annotation.css') }}?v=preview-uncut-2" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/notifications.css') }}?v=reason-pop-1" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/flash.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/page_transition.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/logout_motion.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout_fit.css') }}?v=preview-old-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout_fit.css') }}?v=preview-fill-1" />
     {% block after_theme %}{% endblock %}
   </head>
   <body class="{% block body_class %}{% endblock %}">
@@ -1017,7 +1021,14 @@
         </div>
         {% if current_user %}
           <a class="topbar-user" href="{{ url_for('account') }}" title="My account">
-            <span class="topbar-user-avatar" aria-hidden="true">{{ (current_user.username or 'U')[:1]|upper }}</span>
+            {% set _photo = user_photo_url(current_user) %}
+            <span class="topbar-user-avatar{% if _photo %} topbar-user-avatar--photo{% endif %}" aria-hidden="true">
+              {% if _photo %}
+                <img src="{{ _photo }}" alt="" />
+              {% else %}
+                {{ (current_user.username or 'U')[:1]|upper }}
+              {% endif %}
+            </span>
             <span class="topbar-user-meta">
               <span class="topbar-user-name">{{ current_user.username }}</span>
               <span class="topbar-user-role">{{ (current_user.role or 'USER')|upper }}</span>
@@ -1121,10 +1132,11 @@
       <script src="{{ url_for('static', filename='js/logout_motion.js') }}"></script>
     {% endif %}
     <script src="{{ url_for('static', filename='js/flash.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/review_required.js') }}?v=required-review-1"></script>
     <script src="{{ url_for('static', filename='js/app_confirm.js') }}"></script>
     <script src="{{ url_for('static', filename='js/document_annotation.js') }}"></script>
     {% if current_user %}
-      <script src="{{ url_for('static', filename='js/ocr_job.js') }}?v=capture-source-1"></script>
+      <script src="{{ url_for('static', filename='js/ocr_job.js') }}?v=ocr-type-first-1"></script>
       <script src="{{ url_for('static', filename='js/ocr_preview_targets.js') }}?v=no-doc-targets-2"></script>
       <script src="{{ url_for('static', filename='js/notifications.js') }}?v=reason-pop-1"></script>
     {% endif %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}{{ attachment.original_name or 'Supporting document' }}{% endblock %}
+{% block body_class %}page-attachment-view{% endblock %}
+
+{% block content %}
+  {% set ext = (attachment.original_name or attachment.stored_path or '')|lower %}
+  {% set is_image = ext.endswith('.jpg') or ext.endswith('.jpeg') or ext.endswith('.png') or ext.endswith('.webp') or ext.endswith('.gif') %}
+  {% set is_pdf = ext.endswith('.pdf') %}
+  {% set file_url = url_for('record_get_attachment', record_id=record.id, attachment_id=attachment.id) %}
+  {% set back_url = url_for('record_detail', record_id=record.id) ~ '#rd-supporting' %}
+
+  <div class="att-view-bar no-print">
+    <a class="btn btn-secondary att-view-close" href="{{ back_url }}">Close</a>
+    <div class="att-view-bar-copy">
+      <span class="att-view-kind">{{ attachment.kind or 'Document' }}</span>
+      <span class="att-view-name" title="{{ attachment.original_name }}">{{ attachment.original_name or 'Supporting document' }}</span>
+    </div>
+    <a class="btn btn-secondary" href="{{ url_for('record_get_attachment', record_id=record.id, attachment_id=attachment.id, download=1) }}">Download</a>
+  </div>
+
+  <div class="att-view-stage">
+    {% if is_image %}
+      <img class="att-view-image" src="{{ file_url }}" alt="{{ attachment.original_name or 'Supporting document' }}" />
+    {% elif is_pdf %}
+      <iframe class="att-view-frame" src="{{ file_url }}" title="{{ attachment.original_name or 'PDF' }}"></iframe>
+    {% else %}
+      <p class="att-view-fallback">This file type cannot be previewed. Use Download.</p>
+    {% endif %}
+  </div>
+{% endblock %}

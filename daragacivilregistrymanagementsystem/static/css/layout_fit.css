@@ -62,25 +62,15 @@ svg {
 .document-viewer-image,
 .scan-preview-viewer-inner .document-viewer-image {
   max-width: 100%;
+  width: 100%;
   height: auto;
 }
 
 .table-wrap,
-.auto-backup-table-wrap,
-.staff-print-table-wrap {
+.auto-backup-table-wrap {
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-}
-
-body.page-staff-requests .staff-print-requests-table {
-  min-width: 0;
-  width: 100%;
-}
-
-body.page-staff-requests .staff-print-requests-table th,
-body.page-staff-requests .staff-print-requests-table td {
-  white-space: nowrap;
 }
 
 body.page-administration .history-table {
@@ -164,6 +154,31 @@ body.page-account .account-page {
   .main {
     padding: 8px 12px 14px;
   }
+}
+
+/* Old full-width preview: the scan fills the pane. Do not clip the page. */
+.scan-preview-viewer-inner,
+.scanflow-preview-shell,
+.form-review-preview,
+.main-card.scan-workflow-preview-card {
+  overflow: visible;
+  clip-path: none;
+}
+
+.scan-preview-viewer-inner .document-viewer-pane:not(.is-zoomed) {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  clip-path: none !important;
+}
+
+.scan-preview-viewer-inner .document-viewer-image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  object-position: top center;
 }
 
 @media (max-width: 860px) {

@@ -4,7 +4,7 @@
 {% block body_class %}page-request-edit page-request-print{% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/print_certification.css') }}?v=print-light-1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/print_certification.css') }}?v=date-paid-fit-2" />
 {% endblock %}
 
 {% block content %}
@@ -52,6 +52,7 @@
           <p class="scan-preview-empty req-edit-empty">No image on file for this record.</p>
         {% endif %}
       </div>
+      {% include '_record_supporting_documents.html' %}
     </section>
 
     <section class="req-edit-panel req-edit-panel--form" aria-labelledby="req-print-form-title">

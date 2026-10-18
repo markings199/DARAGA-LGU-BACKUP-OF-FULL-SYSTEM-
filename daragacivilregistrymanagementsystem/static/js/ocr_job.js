@@ -240,10 +240,16 @@
     var btnOcr = document.getElementById("btn-ocr");
     document.body.classList.remove("ocr-busy");
     if (btnOcr) {
-      btnOcr.disabled = false;
       btnOcr.classList.remove("is-running");
       var ocrLbl = btnOcr.querySelector(".btn-ocr-label");
       if (ocrLbl) ocrLbl.textContent = "Run OCR";
+      if (window.DaragaOcrButton && typeof window.DaragaOcrButton.sync === "function") {
+        window.DaragaOcrButton.sync();
+      } else {
+        var dt = document.getElementById("document_type");
+        var typed = dt && /^(birth|marriage|death)$/.test(String(dt.value || "").trim().toLowerCase());
+        btnOcr.disabled = !typed;
+      }
     }
     setCancelVisible(scanDocumentPresent());
     if (ocrLoading) {

@@ -23,7 +23,7 @@ _TITLE_REASONS = {
     "death": "Certificate of Death",
 }
 
-_TEMPLATE_CACHE: Optional[Dict[str, np.ndarray]] = None
+_TEMPLATE_CACHE: Optional[Dict[str, List[np.ndarray]]] = None
 
 
 def _pages_to_text(pages: Optional[List[dict]]) -> str:
@@ -63,29 +63,50 @@ def _crop_frac(gray: np.ndarray, y0: float, y1: float, x0: float = 0.0, x1: floa
     return gray[ya:yb, xa:xb]
 
 
-def _load_official_page(key: str) -> Optional[np.ndarray]:
-    for name in (f"{key}.jpg", f"{key}.png", f"{key}.jpeg"):
-        path = TITLE_TEMPLATE_DIR / "source" / name
-        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+def _iter_official_pages(key: str) -> List[np.ndarray]:
+    pages: List[np.ndarray] = []
+    src = TITLE_TEMPLATE_DIR / "source"
+    if src.is_dir():
+        for path in sorted(src.glob(f"{key}*")):
+            if path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+                continue
+            img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+            if img is not None:
+                pages.append(img)
+    png = TITLE_TEMPLATE_DIR / f"{key}.png"
+    if png.exists():
+        img = cv2.imread(str(png), cv2.IMREAD_GRAYSCALE)
         if img is not None:
-            return img
-    return cv2.imread(str(TITLE_TEMPLATE_DIR / f"{key}.png"), cv2.IMREAD_GRAYSCALE)
+            pages.append(img)
+    return pages
 
 
-def _load_templates() -> Dict[str, np.ndarray]:
+def _title_crops_from_page(page: np.ndarray) -> List[np.ndarray]:
+    if page.shape[0] >= 700:
+        return [
+            _crop_frac(page, 0.048, 0.095, 0.18, 0.82),
+            _crop_frac(page, 0.040, 0.110, 0.12, 0.88),
+            _crop_frac(page, 0.048, 0.095, 0.48, 0.86),
+        ]
+    return [
+        _crop_frac(page, 0.22, 0.58, 0.10, 0.90),
+        _crop_frac(page, 0.22, 0.58, 0.45, 0.92),
+    ]
+
+
+def _load_templates() -> Dict[str, List[np.ndarray]]:
+    """Crops of the large printed title: CERTIFICATE OF LIVE BIRTH / MARRIAGE / DEATH."""
     global _TEMPLATE_CACHE
     if _TEMPLATE_CACHE is not None:
         return _TEMPLATE_CACHE
-    titles: Dict[str, np.ndarray] = {}
+    packed: Dict[str, List[np.ndarray]] = {}
     for key in _DOC_KEYS:
-        page = _load_official_page(key)
-        if page is None:
-            continue
-        if page.shape[0] >= 700:
-            titles[key] = _crop_frac(page, 0.045, 0.135, 0.12, 0.88)
-        else:
-            titles[key] = _crop_frac(page, 0.22, 0.72, 0.12, 0.90)
-    _TEMPLATE_CACHE = titles
+        crops: List[np.ndarray] = []
+        for page in _iter_official_pages(key):
+            crops.extend(_title_crops_from_page(page))
+        if crops:
+            packed[key] = crops
+    _TEMPLATE_CACHE = packed
     return _TEMPLATE_CACHE
 
 
@@ -133,29 +154,48 @@ def match_title_templates(img) -> Dict[str, Any]:
         "reason": "Title did not match a known certificate",
         "scores": {},
     }
-    titles = _load_templates()
-    if not titles:
+    templates = _load_templates()
+    if not templates:
         empty["reason"] = "Title templates are missing"
         return empty
 
     gray = _as_gray(img)
-    top = _resize_width(_crop_frac(gray, 0.0, 0.20, 0.0, 1.0), 520)
-    title_scores = {
-        key: _score(top, tpl, (0.68, 0.74, 0.80)) for key, tpl in titles.items()
-    }
-    hit = _pick(title_scores, 0.48, 0.04)
+    h, w = gray.shape[:2]
+    if max(h, w) > 1400:
+        scale = 1400.0 / float(max(h, w))
+        gray = cv2.resize(
+            gray,
+            (max(80, int(round(w * scale))), max(80, int(round(h * scale)))),
+            interpolation=cv2.INTER_AREA,
+        )
+        h, w = gray.shape[:2]
+
+    bands = [
+        _resize_width(_crop_frac(gray, 0.0, 0.20, 0.0, 1.0), 480),
+        _resize_width(_crop_frac(gray, 0.03, 0.12, 0.10, 0.90), 480),
+    ]
+    if h < 900:
+        bands.append(_resize_width(_crop_frac(gray, 0.0, 0.65, 0.0, 1.0), 480))
+
+    scales = (0.55, 0.65, 0.75, 0.85)
+    scores = {key: -1.0 for key in templates}
+    for band in bands:
+        for key, crops in templates.items():
+            for crop in crops:
+                scores[key] = max(scores[key], _score(band, crop, scales))
+
+    hit = _pick(scores, 0.55, 0.08)
     if hit:
         doc_type, best_score, _margin = hit
-        confidence = "high" if best_score >= 0.58 else "medium"
         return {
             "doc_type": doc_type,
             "label": document_type_label(doc_type),
-            "confidence": confidence,
+            "confidence": "high" if best_score >= 0.68 else "medium",
             "reason": _TITLE_REASONS[doc_type],
-            "scores": {k: round(v, 3) for k, v in title_scores.items()},
+            "scores": {k: round(v, 3) for k, v in scores.items()},
         }
 
-    empty["scores"] = {k: round(v, 3) for k, v in title_scores.items()}
+    empty["scores"] = {k: round(v, 3) for k, v in scores.items()}
     return empty
 
 
@@ -163,16 +203,16 @@ def _ocr_title_band(img) -> Dict[str, Any]:
     from ocr.shared import run_ocr_on_image
 
     height, width = img.shape[:2]
-    y2 = max(48, int(height * 0.20))
+    y2 = max(48, int(height * 0.16))
     crop = img[0:y2, 0:width]
-    if crop.shape[1] > 560:
-        scale = 560.0 / float(crop.shape[1])
+    if crop.shape[1] > 400:
+        scale = 400.0 / float(crop.shape[1])
         crop = cv2.resize(
             crop,
-            (560, max(40, int(round(crop.shape[0] * scale)))),
+            (400, max(40, int(round(crop.shape[0] * scale)))),
             interpolation=cv2.INTER_AREA,
         )
-    pages = run_ocr_on_image(crop, max_side=560)
+    pages = run_ocr_on_image(crop, max_side=400)
     header_text = _pages_to_text(pages)
     detail = detect_document_type_detail(header_text, header_only=True)
     if not detail.get("doc_type"):

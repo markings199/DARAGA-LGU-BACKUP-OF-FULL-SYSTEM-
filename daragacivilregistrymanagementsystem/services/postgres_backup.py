@@ -15,6 +15,7 @@ from models import (
     PrintLog,
     PrintRequest,
     Record,
+    RecordAttachment,
     User,
     db,
 )
@@ -22,6 +23,7 @@ from models import (
 MODELS = (
     User,
     Record,
+    RecordAttachment,
     EditRequest,
     PrintRequest,
     AuditLog,
@@ -80,11 +82,22 @@ def dump_period_records_json(dest: Path, records: list[Any]) -> None:
     rows = []
     for row in records:
         rows.append({col.name: _jsonable(getattr(row, col.name)) for col in Record.__table__.columns})
+    record_ids = [row.id for row in records if getattr(row, "id", None) is not None]
+    attachments = []
+    if record_ids:
+        for att in (
+            RecordAttachment.query.filter(RecordAttachment.record_id.in_(record_ids))
+            .order_by(RecordAttachment.id)
+            .all()
+        ):
+            attachments.append(
+                {col.name: _jsonable(getattr(att, col.name)) for col in RecordAttachment.__table__.columns}
+            )
     payload = {
         "format": "daraga-postgres-json",
         "version": 1,
         "scope": "period",
-        "tables": {"records": rows},
+        "tables": {"records": rows, "record_attachments": attachments},
     }
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
@@ -176,6 +189,15 @@ def _prepare_tables_for_restore(tables: dict[str, Any]) -> dict[str, list[dict[s
             cleaned_prints.append(row)
     prepared["print_requests"] = cleaned_prints
 
+    cleaned_atts = []
+    for row in prepared.get("record_attachments") or []:
+        uid = _as_int_id(row.get("uploaded_by_id"))
+        if uid is not None and uid not in user_ids:
+            row["uploaded_by_id"] = None
+        if _as_int_id(row.get("record_id")) in record_ids:
+            cleaned_atts.append(row)
+    prepared["record_attachments"] = cleaned_atts
+
     return prepared
 
 
@@ -215,6 +237,16 @@ def _sanitize_orphaned_foreign_keys() -> None:
         WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = print_requests.requested_by_id)
            OR NOT EXISTS (SELECT 1 FROM records r WHERE r.id = print_requests.record_id)
         """,
+        """
+        UPDATE record_attachments
+        SET uploaded_by_id = NULL
+        WHERE uploaded_by_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = record_attachments.uploaded_by_id)
+        """,
+        """
+        DELETE FROM record_attachments
+        WHERE NOT EXISTS (SELECT 1 FROM records r WHERE r.id = record_attachments.record_id)
+        """,
     )
     for sql in statements:
         db.session.execute(db.text(sql))
@@ -245,8 +277,25 @@ def restore_period_documents_from_json(src: Path) -> int:
                         continue
                     setattr(existing, name, value)
             loaded += 1
+        att_columns = {col.name: col for col in RecordAttachment.__table__.columns}
+        for raw in tables.get("record_attachments") or []:
+            kwargs = {}
+            for name, col in att_columns.items():
+                if name not in raw:
+                    continue
+                kwargs[name] = _parse_value(raw[name], col)
+            aid = _as_int_id(kwargs.get("id"))
+            existing = db.session.get(RecordAttachment, aid) if aid is not None else None
+            if existing is None:
+                db.session.add(RecordAttachment(**kwargs))
+            else:
+                for name, value in kwargs.items():
+                    if name == "id":
+                        continue
+                    setattr(existing, name, value)
         if dialect == "postgresql":
             _reset_postgres_identity("records")
+            _reset_postgres_identity("record_attachments")
         db.session.commit()
         return loaded
     except Exception:

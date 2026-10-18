@@ -36,63 +36,48 @@
 
   <div class="main-card staff-requests-card">
     {% if requests_list %}
-      <div class="staff-table-wrap staff-print-table-wrap">
-        <table class="table staff-requests-table staff-print-requests-table">
+      <div class="staff-table-wrap">
+        <table class="table staff-requests-table">
           <thead>
             <tr>
-              <th class="col-id">ID</th>
-              <th class="col-registry">Registry</th>
-              <th class="col-type">Type</th>
-              <th class="col-print-format">Print</th>
-              <th class="col-requested">Requested</th>
-              <th class="col-status">Status</th>
-              <th class="col-print-status">Print status</th>
-              <th class="col-reason">Reason</th>
-              <th class="col-reject">Reject note</th>
-              <th class="col-code">Code</th>
-              <th class="col-actions">Actions</th>
+              <th>ID</th>
+              <th>Registry</th>
+              <th>Type</th>
+              <th>Requested at</th>
+              <th>Status</th>
+              <th>Reason</th>
+              <th>Rejection reason</th>
+              <th>Code</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {% for req in requests_list %}
               <tr>
-                <td class="col-id">{{ req.id }}</td>
-                <td class="col-registry">{{ req.record.registry_number or '—' if req.record else '—' }}</td>
-                <td class="col-type">
+                <td>{{ req.id }}</td>
+                <td>{{ req.record.registry_number or '—' if req.record else '—' }}</td>
+                <td>
                   {% if req.record %}
-                    <span class="doc-type-short doc-type-short--{{ req.record.document_type }}">{{ req.record.document_type | capitalize }}</span>
+                    <span class="doc-type-short">{{ document_types.get(req.record.document_type, req.record.document_type) }}</span>
+                    {% if req.print_format %}
+                      <span
+                        class="print-format-badge print-format-badge--{{ normalize_print_format(req.print_format) }}"
+                        title="{{ print_format_label(req.print_format, req.record.document_type) }}"
+                      >{{ print_format_short_label(req.print_format, req.record.document_type) }}</span>
+                    {% endif %}
                   {% else %}
                     —
                   {% endif %}
                 </td>
-                <td class="col-print-format">
-                  {% if req.record %}
-                    <span
-                      class="print-format-badge print-format-badge--{{ normalize_print_format(req.print_format) }}"
-                      title="{{ print_format_label(req.print_format, req.record.document_type) }}"
-                    >{{ print_format_short_label(req.print_format, req.record.document_type) }}</span>
-                  {% else %}
-                    —
+                <td>{{ req.requested_at.strftime('%Y-%m-%d %H:%M') if req.requested_at else '—' }}</td>
+                <td>
+                  <span class="status-badge status-{{ req.status|lower }}">{{ req.status }}</span>
+                  {% if req.used_at %}
+                    <span class="staff-print-done-time" title="Printed {{ req.used_at.strftime('%Y-%m-%d %H:%M') }}">Printed</span>
                   {% endif %}
                 </td>
-                <td class="col-requested">{{ req.requested_at.strftime('%Y-%m-%d %H:%M') if req.requested_at else '—' }}</td>
-                <td class="col-status"><span class="status-badge status-{{ req.status|lower }}">{{ req.status }}</span></td>
-                <td class="col-print-status">
-                  {% if req.status == 'APPROVED' and not req.used_at %}
-                    <span class="staff-print-ready-badge">Enter code to print</span>
-                  {% elif req.used_at %}
-                    <span class="staff-print-done">
-                      <span class="staff-print-done-label">Printed</span>
-                      <span class="staff-print-done-time">{{ req.used_at.strftime('%Y-%m-%d %H:%M') }}</span>
-                    </span>
-                  {% elif req.status == 'PENDING' %}
-                    <span class="staff-print-pending-label">Awaiting admin</span>
-                  {% else %}
-                    —
-                  {% endif %}
-                </td>
-                <td class="col-reason cell-reason">{% set text = req.reason %}{% set note_kind = 'reason' %}{% include '_expandable_text.html' %}</td>
-                <td class="col-reject cell-reject">{% set text = req.rejection_reason %}{% set note_kind = 'rejection' %}{% include '_expandable_text.html' %}</td>
+                <td class="col-reason">{% set text = req.reason %}{% set note_kind = 'reason' %}{% include '_expandable_text.html' %}</td>
+                <td class="col-reject">{% set text = req.rejection_reason %}{% set note_kind = 'rejection' %}{% include '_expandable_text.html' %}</td>
                 <td class="code-cell">
                   {% if req.status == 'APPROVED' and req.approval_code and req.used_at %}
                     <span class="code-used-chip">Used</span>
@@ -102,8 +87,8 @@
                     —
                   {% endif %}
                 </td>
-                <td class="col-actions cell-actions">
-                  {% if req.record and req.status == 'APPROVED' and req.approval_code and not req.used_at %}
+                <td>
+                  {% if req.status == 'APPROVED' and req.approval_code and not req.used_at and req.record %}
                     <form method="post" action="{{ url_for('record_verify_print_code', record_id=req.record_id) }}" class="unlock-form">
                       <input type="hidden" name="next" value="{% if request_doc_type %}{{ url_for('my_print_requests', doc_type=request_doc_type) }}{% else %}{{ url_for('my_print_requests') }}{% endif %}" />
                       <label class="sr-only" for="staff_print_code_{{ req.id }}">5-digit print code</label>
@@ -122,7 +107,7 @@
                       />
                       <button type="submit" class="btn btn-primary btn-unlock">Unlock</button>
                     </form>
-                  {% elif req.record %}
+                  {% elif req.used_at and req.record %}
                     <a href="{{ url_for('record_detail', record_id=req.record_id) }}" class="btn btn-secondary btn-view-record">View record</a>
                   {% else %}
                     —
