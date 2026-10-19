@@ -18,6 +18,7 @@
         --brand-blue: #002080;
         --brand-blue-2: #001a66;
         --brand-green: #008a3a;
+        --header-grad: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
         --main-bg: #f0f4f8;
         --surface: #ffffff;
         --surface-2: #f8fafc;
@@ -238,7 +239,7 @@
         width: 32px;
         height: 32px;
         border-radius: 50%;
-        background: linear-gradient(180deg, #1d4ed8 0%, #002080 100%);
+        background: linear-gradient(180deg, #1d4ed8 0%, var(--brand-blue) 100%);
         color: #fff;
         font-size: 0.78rem;
         font-weight: 800;
@@ -327,7 +328,7 @@
         border-radius: 0 10px 10px 0;
         background: transparent;
         border: none;
-        border-left: 3px solid #002080;
+        border-left: 3px solid var(--brand-blue);
         box-shadow: none;
       }
       .sidebar-brand-text { min-width: 0; }
@@ -344,7 +345,7 @@
         margin: 0;
         font-size: 0.98rem;
         font-weight: 900;
-        color: #002080;
+        color: var(--brand-blue);
         letter-spacing: -0.03em;
         line-height: 1.15;
       }
@@ -359,7 +360,7 @@
         font-weight: 800;
         letter-spacing: 0.06em;
         text-transform: uppercase;
-        color: #002080;
+        color: var(--brand-blue);
         background: rgba(0, 32, 128, 0.07);
         border: 1px solid rgba(0, 32, 128, 0.14);
         line-height: 1.2;
@@ -416,10 +417,10 @@
         stroke-linejoin: round;
       }
       .sidebar-nav .nav-label { flex: 1 1 auto; min-width: 0; }
-      .sidebar-nav a:hover { color: var(--sidebar-link-hover, #002080); background: var(--sidebar-link-hover-bg, rgba(0, 32, 128, 0.08)); }
+      .sidebar-nav a:hover { color: var(--sidebar-link-hover, var(--brand-blue)); background: var(--sidebar-link-hover-bg, rgba(0, 32, 128, 0.08)); }
       .sidebar-nav a.active {
         color: #ffffff;
-        background: #002080;
+        background: var(--brand-blue);
         border-left: none;
         padding-left: 10px;
         box-shadow: none;
@@ -438,7 +439,7 @@
         padding: 8px 10px;
         border: 1px solid var(--sidebar-logout-border, #b6c9e0);
         border-radius: 8px;
-        color: var(--sidebar-logout-text, #002080);
+        color: var(--sidebar-logout-text, var(--brand-blue));
         background: var(--sidebar-logout-bg, #ffffff);
         text-decoration: none;
         text-align: center;
@@ -454,7 +455,7 @@
         stroke-linecap: round;
         stroke-linejoin: round;
       }
-      .sidebar-footer .btn-logout:hover { background: #eef4fc; border-color: #002080; }
+      .sidebar-footer .btn-logout:hover { background: #eef4fc; border-color: var(--brand-blue); }
       .main { flex: 1 1 auto; background: transparent; padding: 14px 18px 20px; overflow: auto; max-width: var(--content-max); min-width: 0; min-height: 0; }
       .main-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: var(--shadow-sm); }
       .page-header { margin: 0 0 14px; padding: 14px 18px; border-radius: 14px; border: 1px solid var(--border); background: var(--page-header-bg, linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)); }
@@ -544,7 +545,7 @@
         cursor: grab;
         touch-action: none;
         overflow: auto;
-        max-height: min(82vh, 920px);
+        max-height: min(78vh, 880px);
       }
       .scan-preview-viewer-inner .document-viewer-pane.is-panning {
         cursor: grabbing;
@@ -661,11 +662,11 @@
         content:"";display:inline-block;width:1.05em;text-align:left;
         animation:ocr-load-dots 1.2s steps(4,end) infinite;
       }
-      .ocr-loading-percent{font-size:0.75rem;font-weight:800;color:#002080;min-width:2.6rem;text-align:right;font-variant-numeric:tabular-nums}
+      .ocr-loading-percent{font-size:0.75rem;font-weight:800;color:var(--brand-blue);min-width:2.6rem;text-align:right;font-variant-numeric:tabular-nums}
       .ocr-loading-track{width:100%;height:6px;border-radius:999px;background:#dce4f0;overflow:hidden;border:none}
       .ocr-loading-fill{
         position:relative;width:1%;height:100%;min-height:6px;overflow:hidden;border-radius:999px;
-        background:linear-gradient(90deg,#002080 0%,#1d4ed8 48%,#0b6b38 100%);
+        background:linear-gradient(90deg,var(--brand-blue) 0%,#1d4ed8 48%,#0b6b38 100%);
         background-size:200% 100%;
         transition:width 0.45s cubic-bezier(0.22,1,0.36,1);
         animation:ocr-load-fill-shift 2.4s ease-in-out infinite;
@@ -697,7 +698,7 @@
       .form-review-card-head {
         margin: 0 0 12px;
         padding: 10px 14px;
-        background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+        background: var(--header-grad);
       }
       .form-review-meta .form-review-card-head {
         display: flex;
@@ -787,7 +788,7 @@
         grid-column: 1 / -1;
         font-size: 0.72rem;
         font-weight: 800;
-        color: #002080;
+        color: var(--brand-blue);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         margin: 12px 0 4px;
@@ -904,7 +905,7 @@
       .form-review-meta .confirm-item-value input:not([type="radio"]):focus {
         outline: none;
         background: #fff;
-        border-color: #002080;
+        border-color: var(--brand-blue);
         box-shadow: 0 0 0 2px rgba(0, 32, 128, 0.12);
       }
       .form-review-meta .confirm-item-value input:not([type="radio"])::placeholder {
@@ -937,16 +938,16 @@
         }
       }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}?v=print-table-match-edit-1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/staff.css') }}?v=preview-uncut-2" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}?v=reason-view-2" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/staff.css') }}?v=annotation-compact-1" />
     {% block extra_head %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}?v=required-review-1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/document_annotation.css') }}?v=preview-uncut-2" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/notifications.css') }}?v=reason-pop-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/document_annotation.css') }}?v=annotation-compact-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/notifications.css') }}?v=reason-portal-1" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/flash.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/page_transition.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/logout_motion.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout_fit.css') }}?v=preview-fill-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout_fit.css') }}?v=doc-zoom-out-6" />
     {% block after_theme %}{% endblock %}
   </head>
   <body class="{% block body_class %}{% endblock %}">
@@ -1139,6 +1140,7 @@
       <script src="{{ url_for('static', filename='js/ocr_job.js') }}?v=ocr-type-first-1"></script>
       <script src="{{ url_for('static', filename='js/ocr_preview_targets.js') }}?v=no-doc-targets-2"></script>
       <script src="{{ url_for('static', filename='js/notifications.js') }}?v=reason-pop-1"></script>
+      <script src="{{ url_for('static', filename='js/note_fold.js') }}?v=reason-portal-1"></script>
     {% endif %}
   </body>
 </html>

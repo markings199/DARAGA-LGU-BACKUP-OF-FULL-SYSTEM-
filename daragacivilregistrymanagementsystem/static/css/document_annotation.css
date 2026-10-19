@@ -101,8 +101,8 @@
 }
 
 .annotation-fields {
-  margin-top: 10px;
-  padding: 0 0 10px;
+  margin-top: 8px;
+  padding: 0 0 6px;
   border: 1px solid rgba(0, 32, 128, 0.16);
   border-radius: 10px;
   background: #fff;
@@ -113,16 +113,16 @@
 .annotation-fields-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 0 0 8px;
-  padding: 7px 12px;
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 5px 10px;
+  background: var(--header-grad);
 }
 
 .annotation-fields-head-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -134,8 +134,8 @@
 }
 
 .annotation-fields-head-icon svg {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
 }
 
 .annotation-fields-head-copy {
@@ -145,29 +145,30 @@
 
 .annotation-fields-title {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: 0.8rem;
   font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.15;
   color: #ffffff;
 }
 
 .annotation-fields-kicker {
   margin: 1px 0 0;
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  line-height: 1.25;
+  line-height: 1.2;
   color: #93c5fd;
 }
 
 .annotation-fields-badge {
   flex-shrink: 0;
   margin-left: auto;
-  padding: 4px 9px;
+  padding: 2px 8px;
   border-radius: 999px;
-  font-size: 0.62rem;
+  font-size: 0.56rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -177,19 +178,19 @@
 }
 
 .annotation-fields-help {
-  margin: 0 12px 8px;
-  padding: 6px 10px;
-  font-size: 0.74rem;
-  line-height: 1.35;
+  margin: 0 10px 6px;
+  padding: 4px 8px;
+  font-size: 0.68rem;
+  line-height: 1.3;
   color: #475569;
   background: #f8fafc;
   border: 1px solid rgba(0, 32, 128, 0.1);
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .annotation-fields-section {
-  margin: 0 12px 8px;
-  padding: 8px 10px 2px;
+  margin: 0 10px 6px;
+  padding: 5px 8px 0;
   border: 1px solid rgba(0, 32, 128, 0.1);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.78);
@@ -200,30 +201,30 @@
 }
 
 .annotation-fields-section-label {
-  margin: 0 0 4px;
-  font-size: 0.64rem;
+  margin: 0 0 3px;
+  font-size: 0.6rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #002080;
+  color: var(--brand-blue);
 }
 
 .annotation-fields .field-grid {
-  gap: 8px 10px;
+  gap: 4px 8px;
 }
 
 .annotation-fields .annotation-fields-field {
-  margin-bottom: 8px;
+  margin-bottom: 5px;
 }
 
 .annotation-fields .annotation-fields-field:last-child {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .annotation-fields .annotation-fields-field label {
   display: block;
-  margin: 0 0 3px;
-  font-size: 0.75rem;
+  margin: 0 0 2px;
+  font-size: 0.64rem;
   font-weight: 800;
   color: #1e3a67;
 }
@@ -238,10 +239,10 @@
 .annotation-fields textarea {
   width: 100%;
   box-sizing: border-box;
-  min-height: 34px;
-  padding: 6px 9px;
-  font-size: 0.82rem;
-  border-radius: 8px;
+  min-height: 26px;
+  padding: 3px 8px;
+  font-size: 0.78rem;
+  border-radius: 6px;
   border: 1px solid #c5d4e8;
   background: #fff;
   color: #0f172a;
@@ -251,15 +252,15 @@
 .annotation-fields input[type="text"]:focus,
 .annotation-fields textarea:focus {
   outline: none;
-  border-color: #002080;
+  border-color: var(--brand-blue);
   box-shadow: 0 0 0 3px rgba(0, 32, 128, 0.12);
 }
 
 .annotation-text-area {
-  min-height: 4.6rem;
+  min-height: 3.1rem;
   font-family: "Times New Roman", Times, serif;
-  font-size: 0.86rem;
-  line-height: 1.4;
+  font-size: 0.8rem;
+  line-height: 1.3;
   text-transform: uppercase;
   letter-spacing: 0.01em;
   resize: vertical;
@@ -269,50 +270,50 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
-  margin: 6px 0 2px;
+  gap: 4px 8px;
+  margin: 4px 0 1px;
 }
 
 .btn-annotation-fill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border-radius: 8px;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
   border: 1px solid rgba(0, 32, 128, 0.22);
   background: linear-gradient(180deg, #f4f7ff 0%, #e4ecfb 100%);
-  color: #002080;
-  font-size: 0.74rem;
+  color: var(--brand-blue);
+  font-size: 0.68rem;
   font-weight: 800;
   cursor: pointer;
 }
 
 .btn-annotation-fill svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 .btn-annotation-fill:hover {
   background: linear-gradient(180deg, #ffffff 0%, #dce6f8 100%);
-  border-color: #002080;
+  border-color: var(--brand-blue);
 }
 
 .annotation-fields-hint {
-  font-size: 0.72rem;
-  line-height: 1.4;
+  font-size: 0.66rem;
+  line-height: 1.3;
   color: #64748b;
-  padding: 4px 0 0;
+  padding: 2px 0 0;
 }
 
 .annotation-admin-form {
-  margin: 0 0 14px;
+  margin: 0 0 8px;
 }
 
 .annotation-admin-form .button-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 @media (max-width: 720px) {

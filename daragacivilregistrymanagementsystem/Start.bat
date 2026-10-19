@@ -40,13 +40,23 @@ if errorlevel 1 (
     echo.
 )
 
-set "PG_BIN=%USERPROFILE%\scoop\apps\postgresql\current\bin"
-set "PG_DATA=%USERPROFILE%\scoop\apps\postgresql\current\data"
 set "PG_LOG=%TEMP%\daraga-postgres.log"
-if exist "%PG_BIN%\pg_ctl.exe" set "PATH=%PG_BIN%;%PATH%"
+set "PG_BIN="
+if exist "%USERPROFILE%\scoop\apps\postgresql\current\bin\pg_isready.exe" (
+    set "PG_BIN=%USERPROFILE%\scoop\apps\postgresql\current\bin"
+    set "PG_DATA=%USERPROFILE%\scoop\apps\postgresql\current\data"
+)
+if not defined PG_BIN if exist "C:\Program Files\PostgreSQL\17\bin\pg_isready.exe" set "PG_BIN=C:\Program Files\PostgreSQL\17\bin"
+if not defined PG_BIN if exist "C:\Program Files\PostgreSQL\16\bin\pg_isready.exe" set "PG_BIN=C:\Program Files\PostgreSQL\16\bin"
+if not defined PG_BIN if exist "C:\Program Files\PostgreSQL\15\bin\pg_isready.exe" set "PG_BIN=C:\Program Files\PostgreSQL\15\bin"
+if not defined PG_BIN if exist "C:\Program Files\PostgreSQL\14\bin\pg_isready.exe" set "PG_BIN=C:\Program Files\PostgreSQL\14\bin"
+if defined PG_BIN set "PATH=%PG_BIN%;%PATH%"
+if exist "%PG_BIN%\pg_ctl.exe" if not defined PG_DATA if exist "%PG_BIN%\..\data\postgresql.conf" set "PG_DATA=%PG_BIN%\..\data"
+set "PG_READY=pg_isready.exe"
+if defined PG_BIN if exist "%PG_BIN%\pg_isready.exe" set "PG_READY=%PG_BIN%\pg_isready.exe"
 
 echo Checking PostgreSQL...
-"%PG_BIN%\pg_isready.exe" -h 127.0.0.1 -p 5432 >nul 2>&1
+"%PG_READY%" -h 127.0.0.1 -p 5432 >nul 2>&1
 if not errorlevel 1 (
     echo PostgreSQL is ready.
     goto pg_ready
@@ -70,7 +80,7 @@ if exist "%PG_BIN%\pg_ctl.exe" if exist "%PG_DATA%\postgresql.conf" (
 
 set /a _pgwait=0
 :wait_pg
-"%PG_BIN%\pg_isready.exe" -h 127.0.0.1 -p 5432 >nul 2>&1
+"%PG_READY%" -h 127.0.0.1 -p 5432 >nul 2>&1
 if not errorlevel 1 (
     echo PostgreSQL is ready.
     goto pg_ready

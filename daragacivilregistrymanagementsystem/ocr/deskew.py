@@ -82,10 +82,24 @@ def _median_angle(angles: list[float]) -> float:
     return float(angles[len(angles) // 2])
 
 
+def _working_gray(gray, max_side: int = 1100):
+    height, width = gray.shape[:2]
+    longest = max(height, width)
+    if longest <= max_side:
+        return gray, 1.0
+    scale = max_side / float(longest)
+    small = cv2.resize(
+        gray,
+        (max(32, int(round(width * scale))), max(32, int(round(height * scale)))),
+        interpolation=cv2.INTER_AREA,
+    )
+    return small, scale
+
+
 def _hough_skew_angle(gray) -> float:
     height, width = gray.shape
     longest = max(height, width)
-    scale = 1400.0 / longest if longest > 1400 else 1.0
+    scale = 1100.0 / longest if longest > 1100 else 1.0
     small = (
         cv2.resize(gray, (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_AREA)
         if scale < 1
@@ -384,45 +398,12 @@ def straighten_document_file(path: str | os.PathLike) -> bool:
         return False
     img, changed = _exif_upright(src, img)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    angle = _measure_skew(gray)
-    height, width = gray.shape
-    quad = _page_quad(gray)
-    needs_warp = _quad_is_crooked(quad, width, height)
-    if abs(angle) < MIN_SKEW and not needs_warp:
-        trimmed, did_trim = _trim_scanner_margins(img)
-        if not did_trim and not changed:
-            return False
-        if did_trim:
-            img = trimmed
-            changed = True
-        elif not changed:
-            return False
-    else:
-        if abs(angle) >= MIN_SKEW:
-            img = _rotate_keep_quality(img, angle)
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            changed = True
-        height, width = gray.shape
-        quad = _page_quad(gray)
-        if _quad_is_crooked(quad, width, height):
-            top_y = float(min(quad[0][1], quad[1][1], quad[2][1], quad[3][1]))
-            if top_y <= 0.05 * height:
-                warped = _warp_quad(img, quad)
-                if warped is not None:
-                    img = warped
-                    changed = True
-        trimmed, did_trim = _trim_scanner_margins(img)
-        if did_trim:
-            img = trimmed
-            changed = True
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        angle = _measure_skew(gray)
-        if abs(angle) >= MIN_SKEW:
-            img = _rotate_keep_quality(img, angle)
-            trimmed, did_trim = _trim_scanner_margins(img)
-            if did_trim:
-                img = trimmed
-            changed = True
+    work, _work_scale = _working_gray(gray)
+    angle = _measure_skew(work)
+    if abs(angle) >= MIN_SKEW:
+        img = _rotate_keep_quality(img, angle)
+        changed = True
+    # Keep the full page. Do not warp or trim edges — certificates must stay complete.
     if not changed:
         return False
     tmp = src.with_name(src.stem + ".straight.tmp" + src.suffix)

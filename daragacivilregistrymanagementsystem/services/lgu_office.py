@@ -39,7 +39,10 @@ def lgu_data_unc() -> str:
 
 
 def default_backup_path_for_this_computer() -> str:
-    """On the LGU server, write to its disk. From another PC, use the office share."""
+    """Official archive: Daraga server disk, or the office share from any other PC."""
+    env = (os.environ.get("DARAGA_BACKUP_ROOT") or "").strip().strip('"')
+    if env:
+        return env
     if is_lgu_office_server():
         return str(LGU_LOCAL_BACKUP_DIR)
     return lgu_backup_unc()

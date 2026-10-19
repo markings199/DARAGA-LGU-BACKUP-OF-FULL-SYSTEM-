@@ -61,6 +61,7 @@ MONTH_NAMES = (
 JOB_DAILY = "auto_period_backup_daily"
 JOB_MONTHLY = "auto_period_backup_monthly"
 JOB_YEARLY = "auto_period_backup_yearly"
+JOB_FLUSH_LGU = "flush_pending_lgu_backups"
 # Allow late start after sleep / app restart so the day's backup still runs.
 MISFIRE_GRACE_SECONDS = 6 * 60 * 60
 
@@ -165,7 +166,7 @@ def auto_backup_dir(base_dir: Path) -> Path:
 
 
 def _is_workstation_backup_path(raw: str, base_dir: Path) -> bool:
-    """True when the path is this laptop/project folder or the Windows Downloads folder."""
+    """True when the path is this laptop/project folder — not the Daraga LGU server."""
     text = _norm_dest_text(raw)
     if not text:
         return True
@@ -175,6 +176,9 @@ def _is_workstation_backup_path(raw: str, base_dir: Path) -> bool:
         return True
     if text.endswith("\\downloads") or "\\downloads\\" in f"{text}\\":
         return True
+    lgu_disk = _norm_dest_text(str(LGU_LOCAL_BACKUP_DIR))
+    if text == lgu_disk or text.startswith(lgu_disk + "\\"):
+        return not is_lgu_office_server()
     try:
         resolved = Path(raw).resolve()
         home_downloads = (Path.home() / "Downloads").resolve()
@@ -189,9 +193,9 @@ def _is_workstation_backup_path(raw: str, base_dir: Path) -> bool:
 
 
 def office_backup_destination(base_dir: Path, raw: str = "") -> str:
-    """Always the Daraga LGU backup folder, never a staff laptop or this project's backups folder."""
+    """Always the Daraga LGU backup folder, never this PC's project folder or localhost disk."""
     env = env_backup_root()
-    if env:
+    if env and not _is_workstation_backup_path(env, base_dir):
         return env
     cleaned = clean_destination_path(raw)
     if cleaned and not _is_workstation_backup_path(cleaned, base_dir):
@@ -286,21 +290,54 @@ def _is_manual_backup_trigger(trigger: str) -> bool:
     return (trigger or "").strip().lower() in ("manual", "get_now")
 
 
+def _path_is_under(child: Path, parent: Path) -> bool:
+    try:
+        child_s = os.path.normcase(os.path.normpath(str(child)))
+        parent_s = os.path.normcase(os.path.normpath(str(parent)))
+        return child_s == parent_s or child_s.startswith(parent_s + os.sep)
+    except OSError:
+        return False
+
+
+def _official_write_dest(
+    base_dir: Path,
+    rel: str,
+    settings: Optional[dict[str, Any]] = None,
+    *,
+    wait: float = 2.0,
+) -> tuple[Path, bool]:
+    """Write on the Daraga LGU server when it is connected; otherwise a hold folder only."""
+    lgu, lgu_err = probe_daraga_official(base_dir, settings, wait=wait)
+    if lgu is not None and not lgu_err:
+        dest = lgu / relative_path_on_server(lgu, rel)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        return dest, True
+    dest = pending_lgu_root(base_dir) / Path(rel)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    return dest, False
+
+
 def _finish_official_backup(
     staging: Path,
     rel: str,
     base_dir: Path,
     settings: Optional[dict[str, Any]] = None,
 ) -> tuple[str, str]:
-    """Copy the zip onto the Daraga LGU server, then drop the local hold file."""
+    """Copy the zip onto the Daraga LGU server, then drop any local hold file."""
+    lgu, lgu_err = probe_daraga_official(base_dir, settings, wait=3.0)
+    if lgu is not None and not lgu_err and _path_is_under(staging, lgu):
+        return "ok", str(staging)
     status, extra = publish_backup_to_daraga(
         staging, rel, base_dir, settings=settings, retries=3
     )
     if status == "ok":
-        try:
-            staging.unlink(missing_ok=True)
-        except OSError:
-            pass
+        hold = pending_lgu_root(base_dir)
+        project = local_backup_root(base_dir)
+        if _path_is_under(staging, hold) or _path_is_under(staging, project):
+            try:
+                staging.unlink(missing_ok=True)
+            except OSError:
+                pass
     return status, extra
 
 
@@ -737,6 +774,11 @@ def sync_local_backups_to_server(base_dir: Path) -> tuple[int, int, Optional[str
         status, extra = copy_zip_to_server(path, rel, base_dir, force=True)
         if status == "ok":
             copied += 1
+            if _path_is_under(path, local):
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    pass
         elif status == "failed":
             failed += 1
     return copied, failed, None
@@ -792,6 +834,11 @@ def _normalize_settings(settings: dict[str, Any]) -> dict[str, Any]:
     dest = clean_destination_path(str(out.get("destination_path") or ""))
     if "\x00" in dest:
         dest = ""
+    app_dir = Path(__file__).resolve().parent.parent
+    if dest and _is_workstation_backup_path(dest, app_dir):
+        dest = default_backup_path_for_this_computer()
+    elif not dest:
+        dest = default_backup_path_for_this_computer()
     out["destination_path"] = dest[:1024]
     out["keep_local_copy"] = False
     out["daily_enabled"] = bool(out.get("daily_enabled", True))
@@ -1049,15 +1096,21 @@ def run_period_backup(
         return False, lgu_err, ""
     filename = period_filename(kind, period_key)
     rel = str((period_folder(Path("_root"), kind, now) / filename).relative_to(Path("_root"))).replace("\\", "/")
-    hold_root = pending_lgu_root(base_dir)
-    dest = hold_root / Path(rel)
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest, _on_lgu = _official_write_dest(base_dir, rel, settings_now, wait=wait)
     if _safe_exists(dest) and force:
         dest = unique_backup_path(dest)
-        try:
-            rel = str(dest.relative_to(hold_root)).replace("\\", "/")
-        except ValueError:
-            rel = dest.name
+        rel = dest.name
+        lgu_now, lgu_now_err = probe_daraga_official(base_dir, settings_now, wait=0.2)
+        if lgu_now is not None and not lgu_now_err:
+            try:
+                rel = str(dest.relative_to(lgu_now)).replace("\\", "/")
+            except ValueError:
+                rel = dest.name
+        else:
+            try:
+                rel = str(dest.relative_to(pending_lgu_root(base_dir))).replace("\\", "/")
+            except ValueError:
+                rel = dest.name
 
     try:
         if lgu is not None and not lgu_err:
@@ -1226,9 +1279,7 @@ def run_full_backup(
         return False, lgu_err, ""
     filename = full_backup_filename(str(settings_now.get("frequency") or "daily"), now)
     rel = f"Full/{filename}"
-    hold_root = pending_lgu_root(base_dir)
-    dest = hold_root / "Full" / filename
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest, _on_lgu = _official_write_dest(base_dir, rel, settings_now, wait=wait)
     if _safe_exists(dest) and force:
         dest = unique_backup_path(dest)
         rel = f"Full/{dest.name}"
@@ -1437,7 +1488,7 @@ def scheduled_backup_kind(settings: Optional[dict[str, Any]] = None) -> str:
 
 
 def prepare_lgu_office_backup(base_dir: Path) -> None:
-    """Point Auto at the Daraga LGU server folder and turn it on. Never use this laptop's Downloads or project folder."""
+    """Point Auto at the Daraga LGU server. Never switch official backups onto this PC."""
     settings = load_settings(base_dir)
     dest = clean_destination_path(str(settings.get("destination_path") or ""))
     office = office_backup_destination(base_dir, dest)
@@ -1455,15 +1506,21 @@ def prepare_lgu_office_backup(base_dir: Path) -> None:
         changed = True
     if changed:
         save_settings(base_dir, settings)
+        with _lgu_probe_lock:
+            _lgu_probe_cache["at"] = 0.0
+            _lgu_probe_cache["ok"] = False
+            _lgu_probe_cache["busy"] = False
     err = ensure_backup_dir_writable(Path(office))
     if err:
         if _is_share_offline_message(err):
             logger.info(
-                "Daraga LGU server is not on this network yet. Official backups wait until %s can be reached.",
-                lgu_backup_unc(),
+                "Daraga LGU server is not on this network yet. Scheduled backups wait, then save to %s.",
+                office,
             )
         else:
             logger.warning("Daraga LGU backup folder not writable: %s", err)
+    else:
+        logger.info("Official backups save on the Daraga LGU server: %s", office)
 
 
 def apply_schedule(app) -> None:
@@ -1477,9 +1534,30 @@ def apply_schedule(app) -> None:
     base_dir = _runtime["base_dir"]
     settings = load_settings(base_dir)
 
-    for job_id in (JOB_ID, JOB_DAILY, JOB_MONTHLY, JOB_YEARLY):
+    for job_id in (JOB_ID, JOB_DAILY, JOB_MONTHLY, JOB_YEARLY, JOB_FLUSH_LGU):
         if _scheduler.get_job(job_id):
             _scheduler.remove_job(job_id)
+
+    def _flush_pending():
+        with app.app_context():
+            copied, failed, err = sync_local_backups_to_server(base_dir)
+            if copied:
+                logger.info("Sent %s held backup(s) to the Daraga LGU server", copied)
+            if err:
+                logger.info("Daraga LGU server not ready for held backups: %s", err)
+            elif failed:
+                logger.warning("Could not send %s held backup(s) to Daraga", failed)
+
+    _scheduler.add_job(
+        _flush_pending,
+        "interval",
+        minutes=10,
+        id=JOB_FLUSH_LGU,
+        replace_existing=True,
+        misfire_grace_time=300,
+        coalesce=True,
+        max_instances=1,
+    )
 
     if not settings.get("enabled"):
         logger.info("Automatic backup is disabled.")

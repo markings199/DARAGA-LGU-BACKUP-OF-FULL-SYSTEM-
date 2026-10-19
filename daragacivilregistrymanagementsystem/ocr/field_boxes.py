@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 
 from ocr.person_name import WIDE_FML_NAME_KEYS
-from ocr.shared import run_ocr_on_image
+from ocr.shared import run_ocr_on_image, run_ocr_text_only
 from ocr.sex import sex_from_ocr_text
 
 _CAUSE_JUNK = (
@@ -135,23 +135,50 @@ def _norm_token(s: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", (s or "").upper())
 
 
-def _load_spec(doc_type: str) -> Optional[Dict[str, Any]]:
+def _list_box_paths(doc_type: str) -> List[Path]:
+    """Official map plus optional variants: birth_boxes_old.json, marriage_boxes_psa.json, ..."""
     key = (doc_type or "").strip().lower()
     if key not in _DOC_FILES:
-        return None
-    with _SPEC_LOCK:
-        path = TEMPLATE_DIR / _DOC_FILES[key]
-        if not path.exists():
-            return None
+        return []
+    seen: set[str] = set()
+    paths: List[Path] = []
+
+    def add(path: Path) -> None:
+        if not path.is_file():
+            return
         try:
-            mtime = path.stat().st_mtime
+            ident = str(path.resolve())
         except OSError:
-            mtime = 0.0
-        cached = _SPECS.get(key)
+            ident = str(path)
+        if ident in seen:
+            return
+        seen.add(ident)
+        paths.append(path)
+
+    add(TEMPLATE_DIR / _DOC_FILES[key])
+    for extra in sorted(TEMPLATE_DIR.glob(f"{key}_boxes_*.json")):
+        add(extra)
+    return paths
+
+
+def _load_spec_file(path: Path) -> Optional[Dict[str, Any]]:
+    try:
+        ident = str(path.resolve())
+    except OSError:
+        ident = str(path)
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    with _SPEC_LOCK:
+        cached = _SPECS.get(ident)
         if cached is not None and cached.get("_json_mtime") == mtime:
             return cached
-        spec = json.loads(path.read_text(encoding="utf-8"))
-        image_path = TEMPLATE_DIR / spec["image"]
+        try:
+            spec = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        image_path = TEMPLATE_DIR / str(spec.get("image") or "")
         img = None
         if cached is not None and cached.get("_path") == str(image_path):
             img = cached.get("_image")
@@ -162,9 +189,83 @@ def _load_spec(doc_type: str) -> Optional[Dict[str, Any]]:
             return None
         spec["_image"] = img
         spec["_path"] = str(image_path)
+        spec["_json_path"] = ident
         spec["_json_mtime"] = mtime
-        _SPECS[key] = spec
+        spec["_id"] = str(spec.get("id") or path.stem)
+        _SPECS[ident] = spec
         return spec
+
+
+def _load_spec(doc_type: str) -> Optional[Dict[str, Any]]:
+    paths = _list_box_paths(doc_type)
+    if not paths:
+        return None
+    return _load_spec_file(paths[0])
+
+
+def _ocr_blob(pages, items: Optional[List[Dict[str, Any]]]) -> str:
+    parts: List[str] = []
+    for page in pages or []:
+        for text in page.get("rec_texts") or []:
+            if text:
+                parts.append(str(text))
+    if not parts:
+        for it in items or []:
+            text = it.get("text")
+            if text:
+                parts.append(str(text))
+    return " ".join(parts).upper()
+
+
+def _label_score(spec: Dict[str, Any], blob: str) -> float:
+    phrases: List[str] = []
+    for field in spec.get("fields") or []:
+        printed = re.sub(r"\s+", " ", str(field.get("printed") or "").strip()).upper()
+        if len(printed) >= 4:
+            phrases.append(printed)
+        key = re.sub(r"\s+", " ", str(field.get("key") or "").strip()).upper()
+        if len(key) >= 4:
+            phrases.append(key)
+    if not phrases:
+        return 0.0
+    hits = sum(1 for phrase in phrases if phrase in blob)
+    return hits / float(len(phrases))
+
+
+def _choose_box_spec(
+    doc_type: str,
+    img,
+    items: Optional[List[Dict[str, Any]]],
+    pages,
+) -> Tuple[Optional[Dict[str, Any]], Optional[Any], Optional[Dict[str, str]]]:
+    """Pick the box map whose labels and write-in cells fit this scan best."""
+    specs = [spec for spec in (_load_spec_file(path) for path in _list_box_paths(doc_type)) if spec]
+    if not specs or img is None:
+        return None, None, None
+    if len(specs) == 1:
+        spec = specs[0]
+        return spec, _find_homography(img, spec), None
+    blob = _ocr_blob(pages, items)
+    sh, sw = img.shape[:2]
+    best_spec = specs[0]
+    best_h = _find_homography(img, best_spec)
+    best_filled: Optional[Dict[str, str]] = None
+    best_score = -1.0
+    for spec in specs:
+        homography = _find_homography(img, spec)
+        th, tw = spec["_image"].shape[:2]
+        filled: Dict[str, str] = {}
+        if items:
+            projected = _project_items_to_template(items, homography, sw, sh, tw, th)
+            filled = _fill_boxes(spec, projected)
+        nfill = sum(1 for value in filled.values() if str(value or "").strip())
+        score = (nfill * 2.0) + (_label_score(spec, blob) * 8.0) + (1.5 if homography is not None else 0.0)
+        if score > best_score:
+            best_score = score
+            best_spec = spec
+            best_h = homography
+            best_filled = filled or None
+    return best_spec, best_h, best_filled
 
 
 def _gray_max_side(gray: np.ndarray, max_side: int = 800) -> Tuple[np.ndarray, float]:
@@ -638,7 +739,7 @@ def _fill_boxes(spec: Dict[str, Any], items_template: List[Dict[str, Any]]) -> D
         elif kind == "age":
             raw = _text_in_box(
                 items_template, field["box"], tw, th,
-                min_score=0.08, pad_frac_x=0.45, pad_frac_y=0.85,
+                min_score=0.08, pad_frac_x=0.12, pad_frac_y=0.35,
             )
             value = _subtract_printed(raw, field.get("printed") or "")
             value = _clean_value(kind, value)
@@ -649,6 +750,134 @@ def _fill_boxes(spec: Dict[str, Any], items_template: List[Dict[str, Any]]) -> D
         if value and key not in out:
             out[key] = value
     return _compose_party_full_names(out)
+
+
+_REFINE_KEYS = {
+    "birth": (
+        "Registry Number",
+        "Name of Child",
+        "Date of Birth",
+        "Place of Birth",
+        "Name of Mother",
+        "Name of Father",
+        "Date of Registration",
+    ),
+    "death": (
+        "Registry Number",
+        "Name of Deceased",
+        "Date of Death",
+        "Age",
+        "Place of Death",
+        "Cause of Death",
+        "Name of Mother",
+        "Date of Registration",
+    ),
+    "marriage": (
+        "Registry Number",
+        "Husband First",
+        "Husband Middle",
+        "Husband Last",
+        "Wife First",
+        "Wife Middle",
+        "Wife Last",
+        "Husband Age",
+        "Wife Age",
+        "Date of Marriage",
+        "Place of Marriage",
+        "Date of Registration",
+    ),
+}
+
+
+def _template_box_crop(img, box, homography, tw: int, th: int):
+    """Crop a write-in box from the original scan (high-res) using form alignment."""
+    if img is None or not box or len(box) < 4:
+        return None
+    x0, y0, x1, y1 = [float(v) for v in box[:4]]
+    pad_x = max(0.004, (x1 - x0) * 0.06)
+    pad_y = max(0.004, (y1 - y0) * 0.12)
+    pts = np.array(
+        [
+            [(x0 - pad_x) * tw, (y0 - pad_y) * th],
+            [(x1 + pad_x) * tw, (y0 - pad_y) * th],
+            [(x1 + pad_x) * tw, (y1 + pad_y) * th],
+            [(x0 - pad_x) * tw, (y1 + pad_y) * th],
+        ],
+        dtype=np.float32,
+    ).reshape(-1, 1, 2)
+    sh, sw = img.shape[:2]
+    if homography is not None:
+        try:
+            inv = np.linalg.inv(homography)
+            pts = cv2.perspectiveTransform(pts, inv)
+        except (cv2.error, np.linalg.LinAlgError):
+            pts[:, 0, 0] *= sw / float(max(tw, 1))
+            pts[:, 0, 1] *= sh / float(max(th, 1))
+    else:
+        pts[:, 0, 0] *= sw / float(max(tw, 1))
+        pts[:, 0, 1] *= sh / float(max(th, 1))
+    xs = pts[:, 0, 0]
+    ys = pts[:, 0, 1]
+    x_a = max(0, int(np.floor(float(np.min(xs)))))
+    y_a = max(0, int(np.floor(float(np.min(ys)))))
+    x_b = min(sw, int(np.ceil(float(np.max(xs)))))
+    y_b = min(sh, int(np.ceil(float(np.max(ys)))))
+    if x_b - x_a < 12 or y_b - y_a < 10:
+        return None
+    crop = img[y_a:y_b, x_a:x_b]
+    if crop is None or crop.size == 0:
+        return None
+    longest = max(crop.shape[:2])
+    if longest < 220:
+        scale = 220.0 / float(longest)
+        crop = cv2.resize(
+            crop,
+            (max(32, int(round(crop.shape[1] * scale))), max(32, int(round(crop.shape[0] * scale)))),
+            interpolation=cv2.INTER_CUBIC,
+        )
+    return crop
+
+
+def _refine_empty_boxes_hires(img, spec: Dict[str, Any], homography, filled: Dict[str, str], doc_type: str) -> Dict[str, str]:
+    """Re-read blank important boxes from the original scan. Recognition-only, not a second full page."""
+    key_set = set(_REFINE_KEYS.get((doc_type or "").strip().lower()) or ())
+    if not key_set or img is None:
+        return filled
+    template = spec.get("_image")
+    if template is None:
+        return filled
+    th, tw = template.shape[:2]
+    refined = 0
+    for field in spec.get("fields") or []:
+        if refined >= 5:
+            break
+        key = field.get("key") or ""
+        if key not in key_set:
+            continue
+        if key == "Cause of Death" and (filled.get("Cause of Death") or "").strip():
+            continue
+        if (filled.get(key) or "").strip():
+            continue
+        crop = _template_box_crop(img, field.get("box"), homography, tw, th)
+        if crop is None:
+            continue
+        try:
+            raw = run_ocr_text_only(crop, max_side=480)
+        except Exception:
+            continue
+        kind = field.get("kind") or "text"
+        if kind == "name":
+            value = _subtract_printed(raw, field.get("printed") or "")
+            value = _clean_value(kind, value)
+        elif kind == "sex":
+            value = sex_from_ocr_text(raw)
+        else:
+            value = _subtract_printed(raw, field.get("printed") or "")
+            value = _clean_value(kind, value)
+        if value:
+            filled[key] = value
+            refined += 1
+    return _compose_party_full_names(filled)
 
 
 def _compose_party_full_names(out: Dict[str, str]) -> Dict[str, str]:
@@ -755,26 +984,26 @@ def extract_field_boxes(
     Pass `items` or `pages` from the main extractor to avoid a second PaddleOCR call.
     Coordinates on items/pages must match `img`.
     """
-    spec = _load_spec(doc_type)
-    if spec is None or img is None:
+    if img is None:
         return {}
+    sh, sw = img.shape[:2]
+    if items is None and pages is not None:
+        items = _items_from_pages(pages, sw, sh)
+    spec, homography, picked = _choose_box_spec(doc_type, img, items, pages)
+    if spec is None:
+        return {}
+    if picked:
+        return picked
     template = spec["_image"]
     th, tw = template.shape[:2]
-    sh, sw = img.shape[:2]
-    homography = _find_homography(img, spec)
-
     if items is None:
-        if pages is not None:
-            items = _items_from_pages(pages, sw, sh)
+        if homography is not None:
+            aligned = cv2.warpPerspective(img, homography, (tw, th))
         else:
-            # Fallback only: one page OCR on the aligned image.
-            if homography is not None:
-                aligned = cv2.warpPerspective(img, homography, (tw, th))
-            else:
-                aligned = cv2.resize(img, (tw, th), interpolation=cv2.INTER_AREA)
-            pages = run_ocr_on_image(aligned)
-            items_template = _items_from_pages(pages, tw, th)
-            return _fill_boxes(spec, items_template)
+            aligned = cv2.resize(img, (tw, th), interpolation=cv2.INTER_AREA)
+        pages = run_ocr_on_image(aligned)
+        items_template = _items_from_pages(pages, tw, th)
+        return _fill_boxes(spec, items_template)
 
     items_template = _project_items_to_template(items, homography, sw, sh, tw, th)
     return _fill_boxes(spec, items_template)

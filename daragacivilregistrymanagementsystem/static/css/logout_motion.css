@@ -9,7 +9,7 @@
   color: #fff;
   background:
     linear-gradient(180deg, rgba(0, 138, 58, 0.14) 0%, transparent 28%),
-    linear-gradient(160deg, #061633 0%, #0a2148 55%, #002080 100%);
+    linear-gradient(160deg, #061633 0%, #0a2148 55%, var(--brand-blue) 100%);
   clip-path: inset(0 0 100% 0);
   pointer-events: none;
   visibility: hidden;

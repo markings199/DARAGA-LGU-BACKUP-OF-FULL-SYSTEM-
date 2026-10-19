@@ -60,6 +60,7 @@ def set_below_normal_priority() -> None:
 
 def run_worker(in_q, out_q) -> None:
     # Do not inherit Flask's 2-thread cap; this process exists to run OCR quickly.
+    os.environ.setdefault("OCR_MAX_SIDE", "800")
     limit_ocr_cpu_env(force=True, worker=True)
     try:
         import cv2
@@ -111,7 +112,10 @@ def run_worker(in_q, out_q) -> None:
                 if not (result.get("doc_type") or "").strip():
                     if not engine_ready:
                         get_ocr()
-                        warmup_ocr()
+                        try:
+                            warmup_ocr()
+                        except Exception:
+                            pass
                         engine_ready = True
                     result = detect_from_image(path, ocr_fallback=True)
                 out_q.put(
@@ -135,7 +139,10 @@ def run_worker(in_q, out_q) -> None:
                     }
                 )
                 get_ocr()
-                warmup_ocr()
+                try:
+                    warmup_ocr()
+                except Exception:
+                    pass
                 engine_ready = True
             if doc_type not in ("birth", "marriage", "death"):
                 out_q.put(
@@ -308,10 +315,24 @@ def stop_ocr_worker() -> None:
         except Exception:
             pass
     if proc is not None and proc.is_alive():
-        proc.join(timeout=0.4)
+        try:
+            proc.join(timeout=0.2)
+        except (KeyboardInterrupt, OSError):
+            pass
         if proc.is_alive():
-            proc.terminate()
-            proc.join(timeout=1.0)
+            try:
+                proc.terminate()
+            except (KeyboardInterrupt, OSError):
+                pass
+            try:
+                proc.join(timeout=0.4)
+            except (KeyboardInterrupt, OSError):
+                pass
+        if proc.is_alive():
+            try:
+                proc.kill()
+            except (AttributeError, KeyboardInterrupt, OSError):
+                pass
 
 
 def get_result(timeout: float = 0.35) -> Optional[dict]:

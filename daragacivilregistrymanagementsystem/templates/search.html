@@ -141,25 +141,32 @@
             <p>Run a search to see results here.</p>
           </div>
         {% elif results %}
-          <div class="table-wrap">
-            <table class="table">
+          <div class="table-wrap search-results-table-wrap">
+            <table class="table search-results-table">
+              <colgroup>
+                <col class="search-col-registry">
+                <col class="search-col-name">
+                <col class="search-col-type">
+                <col class="search-col-date">
+                <col class="search-col-action">
+              </colgroup>
               <thead>
                 <tr>
-                  <th>Registry No.</th>
-                  <th>Name</th>
-                  <th>Document type</th>
-                  <th>Date</th>
-                  <th></th>
+                  <th class="search-col-registry" scope="col">Registry No.</th>
+                  <th class="search-col-name" scope="col">Name</th>
+                  <th class="search-col-type" scope="col">Document type</th>
+                  <th class="search-col-date" scope="col">Date</th>
+                  <th class="search-col-action" scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {% for r in results %}
                   <tr>
-                    <td>{{ r.registry_number or '—' }}</td>
-                    <td>{{ r.full_name or '—' }}</td>
-                    <td>{{ document_types.get(r.document_type, r.document_type) }}</td>
-                    <td>{{ r.event_date or '—' }}</td>
-                    <td><a href="{{ url_for('record_detail', record_id=r.id) }}" class="btn btn-secondary btn-sm">View</a></td>
+                    <td class="search-col-registry">{{ r.registry_number or '—' }}</td>
+                    <td class="search-col-name">{{ r.full_name or '—' }}</td>
+                    <td class="search-col-type">{{ document_types.get(r.document_type, r.document_type) }}</td>
+                    <td class="search-col-date">{{ r.event_date or '—' }}</td>
+                    <td class="search-col-action"><a href="{{ url_for('record_detail', record_id=r.id) }}" class="btn btn-secondary btn-sm">View</a></td>
                   </tr>
                 {% endfor %}
               </tbody>

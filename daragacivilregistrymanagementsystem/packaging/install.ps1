@@ -1,4 +1,4 @@
-﻿# Install Daraga Civil Registry on this computer (Python venv, packages, database).
+# Install Daraga Civil Registry on this computer (Python venv, packages, database).
 $ErrorActionPreference = "Stop"
 $AppDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $AppDir
@@ -116,6 +116,31 @@ $example = Join-Path $AppDir ".env.example"
 if (-not (Test-Path $envFile) -and (Test-Path $example)) {
     Copy-Item $example $envFile
     Write-Host "Created .env from .env.example. Edit it if your PostgreSQL password is not postgres."
+}
+function Set-EnvKey([string]$Path, [string]$Key, [string]$Value) {
+    if (-not (Test-Path $Path)) { return }
+    $lines = Get-Content $Path
+    $found = $false
+    $out = foreach ($line in $lines) {
+        if ($line -match ("^\s*" + [regex]::Escape($Key) + "\s*=")) {
+            $found = $true
+            if ($line -match "^\s*$Key\s*=\s*$" -or $line -match "SECRET_KEY=change-this-secret-key") {
+                "$Key=$Value"
+            } else {
+                $line
+            }
+        } else {
+            $line
+        }
+    }
+    if (-not $found) { $out += "$Key=$Value" }
+    $out | Set-Content -Path $Path -Encoding UTF8
+}
+if (Test-Path $envFile) {
+    Set-EnvKey $envFile "DARAGA_DATA_ROOT" "C:\CivilRegistryData"
+    Set-EnvKey $envFile "DARAGA_BACKUP_ROOT" "C:\CivilRegistryBackups"
+    $secret = -join ((1..40) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
+    Set-EnvKey $envFile "SECRET_KEY" $secret
 }
 
 Write-Step "Creating database and default users"

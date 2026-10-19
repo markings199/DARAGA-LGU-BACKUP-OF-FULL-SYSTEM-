@@ -48,27 +48,27 @@
   {% if tab == 'dashboard' %}
     <div class="admin-dashboard">
       <div class="admin-stats-row">
-        <a href="{{ url_for('administration', tab='edit_requests') }}" class="admin-stat-card admin-stat-card-link">
+        <a href="{{ url_for('administration', tab='edit_requests') }}" class="admin-stat-card admin-stat-card-link {% if pending_count %}is-attention{% else %}is-ok{% endif %}">
           <span class="admin-stat-label"><span class="admin-stat-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 000-1.42l-2.34-2.34a1.003 1.003 0 00-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/></svg></span> Pending edit requests</span>
           <span class="admin-stat-value">{{ pending_count }}</span>
           <span class="admin-stat-sub">{% if pending_count == 0 %}No pending approvals{% else %}{{ pending_count }} awaiting review{% endif %}</span>
         </a>
-        <a href="{{ url_for('administration', tab='print_requests') }}" class="admin-stat-card admin-stat-card-link">
+        <a href="{{ url_for('administration', tab='print_requests') }}" class="admin-stat-card admin-stat-card-link {% if pending_print_count %}is-attention{% else %}is-ok{% endif %}">
           <span class="admin-stat-label"><span class="admin-stat-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg></span> Pending print requests</span>
           <span class="admin-stat-value">{{ pending_print_count }}</span>
           <span class="admin-stat-sub">{% if pending_print_count == 0 %}No print approvals waiting{% else %}{{ pending_print_count }} awaiting review{% endif %}</span>
         </a>
-        <div class="admin-stat-card">
+        <div class="admin-stat-card is-records">
           <span class="admin-stat-label"><span class="admin-stat-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg></span> Total records</span>
           <span class="admin-stat-value">{{ total_records }}</span>
           <span class="admin-stat-sub">Birth {{ birth_count }} - Marriage {{ marriage_count }} - Death {{ death_count }}</span>
         </div>
-        <a href="{{ url_for('administration', tab='users') }}" class="admin-stat-card admin-stat-card-link">
+        <a href="{{ url_for('administration', tab='users') }}" class="admin-stat-card admin-stat-card-link is-users">
           <span class="admin-stat-label"><span class="admin-stat-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></span> Users</span>
           <span class="admin-stat-value">{{ users_count }}</span>
           <span class="admin-stat-sub">{{ staff_count }} staff · {{ admin_users_count }} admin</span>
         </a>
-        <a href="{{ url_for('administration', tab='audit') }}" class="admin-stat-card admin-stat-card-link">
+        <a href="{{ url_for('administration', tab='audit') }}" class="admin-stat-card admin-stat-card-link is-audit">
           <span class="admin-stat-label"><span class="admin-stat-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg></span> Audit log</span>
           <span class="admin-stat-value">{{ audit_recent_count }}</span>
           <span class="admin-stat-sub">{{ audit_recent_count }} entries in the log</span>
@@ -86,12 +86,19 @@
               <p class="admin-graph-subtitle">Documents scanned · Birth · Marriage · Death</p>
             </div>
             <label class="admin-graph-year-label" for="admin-graph-year">Year
-              <select id="admin-graph-year" class="admin-graph-year-select" aria-label="Filter scanned documents by year">
-                {% for y in _scan_years.get('year_list') or [] %}
-                <option value="{{ y }}" {% if y == _scan_default %}selected{% endif %}>{{ y }}</option>
-                {% endfor %}
-                <option value="all">All years</option>
-              </select>
+              <input
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]{4}"
+                maxlength="4"
+                id="admin-graph-year"
+                class="admin-graph-year-select"
+                value="{{ _scan_default or '' }}"
+                placeholder="YYYY"
+                autocomplete="off"
+                spellcheck="false"
+                aria-label="Type a four-digit year"
+              >
             </label>
           </div>
           <div class="admin-graph-grid">
@@ -163,14 +170,14 @@
           Quick actions &amp; management
         </h3>
         <div class="admin-qa-grid">
-          <a href="{{ url_for('administration', tab='edit_requests') }}" class="admin-qa-card">
+          <a href="{{ url_for('administration', tab='edit_requests') }}" class="admin-qa-card{% if pending_count %} has-pending{% endif %}">
             <span class="admin-qa-ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 000-1.42l-2.34-2.34a1.003 1.003 0 00-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/></svg></span>
             <span class="admin-qa-copy">
               <span class="admin-qa-title">Edit requests</span>
               <span class="admin-qa-meta">{{ pending_count }} pending · approve or reject record changes</span>
             </span>
           </a>
-          <a href="{{ url_for('administration', tab='print_requests') }}" class="admin-qa-card">
+          <a href="{{ url_for('administration', tab='print_requests') }}" class="admin-qa-card{% if pending_print_count %} has-pending{% endif %}">
             <span class="admin-qa-ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg></span>
             <span class="admin-qa-copy">
               <span class="admin-qa-title">Print requests</span>
@@ -396,13 +403,15 @@
                   <td class="col-record">{{ req.record.registry_number or '—' if req.record else '—' }}</td>
                   <td class="col-type">
                     {% if req.record %}
-                      <span class="doc-type-short doc-type-short--{{ req.record.document_type }}">{{ req.record.document_type | capitalize }}</span>
-                      {% if req.print_format %}
-                        <span
-                          class="print-format-badge print-format-badge--{{ normalize_print_format(req.print_format) }}"
-                          title="{{ print_format_label(req.print_format, req.record.document_type) }}"
-                        >{{ print_format_short_label(req.print_format, req.record.document_type) }}</span>
-                      {% endif %}
+                      <div class="type-cell">
+                        <span class="doc-type-short doc-type-short--{{ req.record.document_type }}">{{ req.record.document_type | capitalize }}</span>
+                        {% if req.print_format %}
+                          <span
+                            class="print-format-badge print-format-badge--{{ normalize_print_format(req.print_format) }}"
+                            title="{{ print_format_label(req.print_format, req.record.document_type) }}"
+                          >{{ print_format_short_label(req.print_format, req.record.document_type) }}</span>
+                        {% endif %}
+                      </div>
                     {% else %}
                       —
                     {% endif %}
@@ -537,9 +546,7 @@
     <div class="admin-section main-card">
       <h2 class="section-title">Users</h2>
       <p class="section-desc">
-        Create office accounts and assign a role: <strong>Administrator</strong> (this page, approvals, backups) or <strong>Staff</strong> (encoding, search, requests).
-        Username is the login name (for example encoder1) — it is not the same as Role. <code>Staff</code> and <code>staff</code> count as the same username.
-        Passwords are issued once — they cannot be viewed later. If someone forgets theirs, set a new password from the account row.
+        Add an office account as <strong>Administrator</strong> or <strong>Staff</strong>. Usernames are unique and not case-sensitive. Temporary passwords are shown once; reset from the account row if needed.
       </p>
 
       <div class="admin-user-create-card">
@@ -760,39 +767,19 @@
     }
     var years = payload.years || {};
     var allCounts = payload.all || { birth: 0, marriage: 0, death: 0 };
-    var graphSelect = document.getElementById('admin-graph-year');
+    var graphYear = document.getElementById('admin-graph-year');
     var animToken = 0;
     var nowYear = String((payload.default_year || new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila', year: 'numeric' })));
+    var appliedYear = nowYear;
 
-    function yearChoices() {
-      var y = parseInt(nowYear, 10) || new Date().getFullYear();
-      var past = [];
-      Object.keys(years).forEach(function (key) {
-        var c = years[key] || {};
-        var total = n(c.birth) + n(c.marriage) + n(c.death);
-        if (total > 0 && parseInt(key, 10) < y) past.push(key);
-      });
-      past.sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
-      var list = past.slice();
-      for (var i = 0; i <= 15; i++) list.push(String(y + i));
-      return list;
-    }
-    function fillYearSelect(select, selected) {
-      if (!select) return;
-      var current = selected || select.value || nowYear;
-      select.innerHTML = '';
-      yearChoices().forEach(function (y) {
-        var opt = document.createElement('option');
-        opt.value = y;
-        opt.textContent = y;
-        if (String(y) === String(current)) opt.selected = true;
-        select.appendChild(opt);
-      });
-      var all = document.createElement('option');
-      all.value = 'all';
-      all.textContent = 'All years';
-      if (current === 'all') all.selected = true;
-      select.appendChild(all);
+    function parseTypedYear(raw) {
+      var t = String(raw || '').replace(/[^\d]/g, '');
+      if (graphYear && t !== graphYear.value) graphYear.value = t;
+      if (!t) return 'all';
+      if (t.length < 4) return null;
+      var y = parseInt(t.slice(0, 4), 10);
+      if (y < 1900 || y > 2100) return null;
+      return String(y);
     }
 
     function countsFor(year) {
@@ -894,15 +881,27 @@
       if (bdT) bdT.textContent = String(total);
       if (bdF) bdF.textContent = 'Birth ' + birth + ' - Marriage ' + marriage + ' - Death ' + death;
       paintGraph(birth, marriage, death, animate);
-      if (graphSelect && graphSelect.value !== year) graphSelect.value = year;
+      appliedYear = year;
+      if (graphYear && year !== 'all' && graphYear.value !== year) graphYear.value = year;
     }
-    function onChange(ev) {
-      applyYear(ev.target.value, true);
+    function onYearTyped() {
+      var year = parseTypedYear(graphYear && graphYear.value);
+      if (year === null || year === appliedYear) return;
+      applyYear(year, true);
     }
     var initial = payload.default_year || nowYear;
-    fillYearSelect(graphSelect, initial);
-    if (graphSelect) graphSelect.addEventListener('change', onChange);
-    applyYear((graphSelect && graphSelect.value) || initial, true);
+    if (graphYear) {
+      graphYear.value = String(initial);
+      graphYear.addEventListener('input', onYearTyped);
+      graphYear.addEventListener('change', onYearTyped);
+      graphYear.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          onYearTyped();
+        }
+      });
+    }
+    applyYear(initial, true);
   })();
 </script>
 {% endblock %}

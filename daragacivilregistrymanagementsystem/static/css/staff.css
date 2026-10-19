@@ -9,8 +9,8 @@ body.page-staff-requests .main {
 }
 
 body.page-staff-requests .staff-requests-shell {
-  --staff-blue: #002080;
-  --staff-green: #008a3a;
+  --staff-blue: var(--brand-blue);
+  --staff-green: var(--brand-green);
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -33,7 +33,7 @@ body.page-staff-requests .staff-page-header {
   padding: 10px 14px;
   border-radius: 12px;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  background: var(--header-grad);
   border: 1px solid rgba(0, 32, 128, 0.22);
   box-shadow: 0 6px 20px rgba(0, 32, 128, 0.16);
 }
@@ -147,7 +147,7 @@ body.page-staff-requests .staff-requests-table thead th {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #fff;
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  background: var(--header-grad);
   border-bottom: none;
   padding: 5px 8px;
   white-space: nowrap;
@@ -191,18 +191,34 @@ body.page-staff-requests .staff-requests-table .status-badge.status-rejected {
   background: #fee2e2;
   color: #991b1b;
 }
+body.page-staff-requests .staff-requests-table .col-type {
+  min-width: 16.25rem;
+  width: 16.25rem;
+  vertical-align: middle;
+}
+body.page-staff-requests .staff-requests-table .type-cell {
+  display: grid;
+  grid-template-columns: 10.5rem 5.35rem;
+  align-items: center;
+  column-gap: 8px;
+}
 body.page-staff-requests .staff-requests-table .doc-type-short {
   display: inline-block;
+  justify-self: start;
+  max-width: 100%;
   padding: 1px 5px;
   border-radius: 5px;
   background: #e8eefc;
-  color: #002080;
+  color: var(--brand-blue);
   font-size: 0.65rem;
   font-weight: 800;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 body.page-staff-requests .staff-requests-table .print-format-badge {
-  margin-left: 4px;
+  margin-left: 0;
+  justify-self: start;
   vertical-align: middle;
 }
 body.page-staff-requests .staff-requests-table .col-reason,
@@ -226,7 +242,7 @@ body.page-staff-requests .code-cell-stack {
 body.page-staff-requests .approval-code-display {
   font-size: 1rem;
   letter-spacing: 0.14em;
-  color: #002080;
+  color: var(--brand-blue);
   font-weight: 900;
   line-height: 1.2;
 }
@@ -279,9 +295,9 @@ body.page-staff-requests .unlock-code-input {
   font-variant-numeric: tabular-nums;
 }
 body.page-staff-requests .unlock-code-input:focus {
-  outline: 2px solid #002080;
+  outline: 2px solid var(--brand-blue);
   outline-offset: 1px;
-  border-color: #002080;
+  border-color: var(--brand-blue);
 }
 body.page-staff-requests .btn-unlock,
 body.page-staff-requests .btn-view-record {
@@ -324,7 +340,7 @@ body.page-staff-requests .staff-print-requests-table thead th {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #fff;
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  background: var(--header-grad);
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   padding: 5px 8px;
   white-space: nowrap;
@@ -380,7 +396,7 @@ body.page-staff-requests .staff-print-requests-table .col-actions {
 body.page-staff-requests .staff-print-requests-table .doc-type-short {
   font-size: 0.65rem;
   font-weight: 800;
-  color: #002080;
+  color: var(--brand-blue);
   white-space: nowrap;
   padding: 1px 5px;
   border-radius: 5px;
@@ -473,7 +489,7 @@ body.page-record-detail .form-review-hero {
   margin: 0 0 8px;
   border-radius: 10px;
   overflow: hidden;
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  background: var(--header-grad);
   border: 1px solid rgba(0, 32, 128, 0.28);
   box-shadow: 0 3px 12px rgba(0, 32, 128, 0.14);
 }
@@ -756,7 +772,7 @@ body.page-record-detail .rd-meta-annotation-label {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #002080;
+  color: var(--brand-blue);
   margin-bottom: 8px;
 }
 body.page-record-detail .rd-meta-annotation .doc-annotation-stamp {
@@ -790,11 +806,11 @@ body.page-record-detail .rd-meta-annotation .doc-annotation-title {
   letter-spacing: 0.02em;
 }
 body.page-record-detail .annotation-admin-form {
-  margin: 4px 14px 0;
-  padding-top: 4px;
+  margin: 4px 10px 0;
+  padding-top: 2px;
 }
 body.page-record-detail .annotation-admin-actions {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 body.page-record-detail .record-detail-toolbar {
   margin: 8px 12px 0;
@@ -832,7 +848,7 @@ body.page-record-detail .rd-code-card-title {
   margin: 0 0 4px;
   font-size: 0.88rem;
   font-weight: 800;
-  color: #002080;
+  color: var(--brand-blue);
 }
 body.page-record-detail .rd-code-card-hint {
   margin: 0 0 10px;
@@ -865,7 +881,7 @@ body.page-record-detail .approval-code-display {
   font-weight: 800;
   letter-spacing: 0.12em;
   line-height: 1.2;
-  color: #002080;
+  color: var(--brand-blue);
   font-variant-numeric: tabular-nums;
 }
 body.page-record-detail .rd-code-label {
@@ -898,7 +914,7 @@ body.page-record-detail .rd-code-input {
 }
 body.page-record-detail .rd-code-input:focus {
   outline: none;
-  border-color: #002080;
+  border-color: var(--brand-blue);
   box-shadow: 0 0 0 3px rgba(0, 32, 128, 0.12);
 }
 body.page-record-detail .rd-code-form + .rd-code-form {
@@ -930,7 +946,7 @@ body.page-request-edit .rd-supporting-title {
   font-size: 0.82rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: #002080;
+  color: var(--brand-blue);
 }
 body.page-record-detail .rd-supporting-folder,
 body.page-request-edit .rd-supporting-folder {
@@ -1088,7 +1104,7 @@ body.page-attachment-view .att-view-bar {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  background: #002080;
+  background: var(--brand-blue);
   color: #fff;
 }
 body.page-attachment-view .att-view-bar-copy {
@@ -1117,7 +1133,7 @@ body.page-attachment-view .att-view-bar .btn {
 }
 body.page-attachment-view .att-view-close {
   background: #fff;
-  color: #002080;
+  color: var(--brand-blue);
   border-color: #fff;
   font-weight: 800;
 }
@@ -1182,7 +1198,7 @@ body.page-request-edit .req-edit-hero {
   margin: 0 0 10px;
   border-radius: 12px;
   overflow: hidden;
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 58%, #2563eb 100%);
+  background: var(--header-grad);
   border: 1px solid rgba(0, 32, 128, 0.28);
   box-shadow: 0 4px 14px rgba(0, 32, 128, 0.14);
 }
@@ -1306,7 +1322,7 @@ body.page-request-edit .req-edit-panel-head-ic {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #002080;
+  color: var(--brand-blue);
   background: #e8eefc;
   border: 1px solid rgba(0, 32, 128, 0.14);
 }
@@ -1507,7 +1523,7 @@ body.page-request-edit .request-edit-form textarea:focus,
 body.page-request-edit .request-edit-form input[type="text"]:focus {
   outline: none;
   background: #ffffff;
-  border-color: #002080;
+  border-color: var(--brand-blue);
   box-shadow: 0 0 0 3px rgba(0, 32, 128, 0.14);
 }
 body.page-request-edit .request-edit-actions {

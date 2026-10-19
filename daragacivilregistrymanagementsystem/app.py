@@ -3746,12 +3746,22 @@ def administration_delete_user(user_id):
     AuditLog.query.filter_by(user_id=user.id).update(
         {AuditLog.user_id: None}, synchronize_session=False
     )
+    RecordAttachment.query.filter_by(uploaded_by_id=user.id).update(
+        {RecordAttachment.uploaded_by_id: owner_id}, synchronize_session=False
+    )
+    NotificationRead.query.filter_by(user_id=user.id).delete(synchronize_session=False)
 
     username = user.username
     role = (user.role or "").upper()
     _delete_user_photo_file(user)
     db.session.delete(user)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Could not delete user %s", username)
+        flash(f'Could not delete "{username}". Related records are still linked to this account.', "error")
+        return redirect(url_for("administration", tab="users"))
     _log_audit(admin.id if admin else None, "USER_DELETE", f"username={username} role={role}")
     flash(f'User "{username}" was deleted. Their history was kept under your account.', "success")
     return redirect(url_for("administration", tab="users"))
@@ -5413,7 +5423,22 @@ if __name__ == "__main__":
     except Exception:
         pass
     try:
-        app.run(host=_host, port=_port, debug=_flask_debug, use_reloader=_use_reloader, threaded=True)
+        if _flask_debug:
+            app.run(host=_host, port=_port, debug=_flask_debug, use_reloader=_use_reloader, threaded=True)
+        else:
+            try:
+                from waitress import serve
+
+                serve(
+                    app,
+                    host=_host,
+                    port=_port,
+                    threads=8,
+                    channel_timeout=3600,
+                    ident="DaragaCivilRegistry",
+                )
+            except ImportError:
+                app.run(host=_host, port=_port, debug=False, use_reloader=False, threaded=True)
     except KeyboardInterrupt:
         print("\nDaraga Civil Registry stopped.", flush=True)
         stop_ocr_worker()

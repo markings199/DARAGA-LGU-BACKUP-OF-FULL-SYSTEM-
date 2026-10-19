@@ -19,7 +19,7 @@
     justify-content: space-between;
     gap: 8px;
     padding: 7px 12px;
-    background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+    background: var(--header-grad);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
   .archiving-hero-brand {
@@ -74,7 +74,7 @@
     border-radius: 7px;
     border: 1px solid rgba(255, 255, 255, 0.4);
     background: #ffffff;
-    color: #002080;
+    color: var(--brand-blue);
     text-decoration: none;
     font-size: 0.75rem;
     font-weight: 800;
@@ -106,15 +106,15 @@
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
   a.archiving-stat.is-active {
-    border-color: #002080;
+    border-color: var(--brand-blue);
     box-shadow: 0 0 0 2px rgba(0, 32, 128, 0.14);
   }
   a.archiving-stat:hover {
-    border-color: #002080;
+    border-color: var(--brand-blue);
     box-shadow: 0 4px 14px rgba(0, 32, 128, 0.12);
   }
   a.archiving-stat:focus-visible {
-    outline: 2px solid #002080;
+    outline: 2px solid var(--brand-blue);
     outline-offset: 2px;
   }
   .archiving-stat-ic {
@@ -126,7 +126,7 @@
     align-items: center;
     justify-content: center;
     background: #e8eefc;
-    color: #002080;
+    color: var(--brand-blue);
   }
   .archiving-stat-ic svg {
     width: 13px;
@@ -141,7 +141,7 @@
     font-size: 1.15rem;
     line-height: 1;
     font-weight: 900;
-    color: #002080;
+    color: var(--brand-blue);
     margin: 0;
     font-variant-numeric: tabular-nums;
   }
@@ -182,7 +182,7 @@
     margin-bottom: 4px;
     padding: 5px 10px;
     border-radius: 7px;
-    background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+    background: var(--header-grad);
   }
   .archive-section-title {
     margin: 0;
@@ -234,7 +234,7 @@
     flex-direction: column;
     gap: 4px;
     font-weight: 800;
-    color: #002080;
+    color: var(--brand-blue);
     font-size: 0.68rem;
     margin: 0;
     text-transform: uppercase;
@@ -277,7 +277,7 @@
   .archive-registry-clear {
     font-size: 0.75rem;
     font-weight: 800;
-    color: #002080;
+    color: var(--brand-blue);
     text-decoration: none;
     padding-bottom: 6px;
   }
@@ -291,7 +291,7 @@
   .archive-doc-filter label {
     display: inline-flex;
     font-weight: 800;
-    color: #002080;
+    color: var(--brand-blue);
     font-size: 0.68rem;
     margin: 0;
     padding: 0;

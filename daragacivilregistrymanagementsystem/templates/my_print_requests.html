@@ -42,7 +42,7 @@
             <tr>
               <th>ID</th>
               <th>Registry</th>
-              <th>Type</th>
+              <th class="col-type">Type</th>
               <th>Requested at</th>
               <th>Status</th>
               <th>Reason</th>
@@ -56,15 +56,17 @@
               <tr>
                 <td>{{ req.id }}</td>
                 <td>{{ req.record.registry_number or '—' if req.record else '—' }}</td>
-                <td>
+                <td class="col-type">
                   {% if req.record %}
-                    <span class="doc-type-short">{{ document_types.get(req.record.document_type, req.record.document_type) }}</span>
-                    {% if req.print_format %}
-                      <span
-                        class="print-format-badge print-format-badge--{{ normalize_print_format(req.print_format) }}"
-                        title="{{ print_format_label(req.print_format, req.record.document_type) }}"
-                      >{{ print_format_short_label(req.print_format, req.record.document_type) }}</span>
-                    {% endif %}
+                    <div class="type-cell">
+                      <span class="doc-type-short">{{ document_types.get(req.record.document_type, req.record.document_type) }}</span>
+                      {% if req.print_format %}
+                        <span
+                          class="print-format-badge print-format-badge--{{ normalize_print_format(req.print_format) }}"
+                          title="{{ print_format_label(req.print_format, req.record.document_type) }}"
+                        >{{ print_format_short_label(req.print_format, req.record.document_type) }}</span>
+                      {% endif %}
+                    </div>
                   {% else %}
                     —
                   {% endif %}

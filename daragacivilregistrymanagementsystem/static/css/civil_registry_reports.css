@@ -26,7 +26,7 @@ body.page-registry-reports .reports-page-header {
   margin: 0 0 6px;
   padding: 7px 12px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  background: var(--header-grad);
   border: 1px solid rgba(0, 32, 128, 0.22);
   box-shadow: 0 4px 14px rgba(0, 32, 128, 0.14);
 }
@@ -83,7 +83,7 @@ body.page-registry-reports.reg-focus .page-header {
   display: none;
 }
 body.page-registry-reports.reg-focus .reg-toolbar {
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  background: var(--header-grad);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-top: none;
   box-shadow: 0 6px 16px rgba(0, 32, 128, 0.24);
@@ -143,12 +143,12 @@ body.page-registry-reports.reg-focus .reg-toolbar .btn-secondary:hover {
 body.page-registry-reports.reg-focus .reg-toolbar .btn-primary {
   background: #ffffff;
   border-color: #ffffff;
-  color: #002080;
+  color: var(--brand-blue);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
 }
 body.page-registry-reports .reg-toolbar .reg-btn-lead,
 body.page-registry-reports.reg-focus .reg-toolbar .reg-btn-lead {
-  background: #002080;
+  background: var(--brand-blue);
   border: 1px solid #7dd3fc;
   color: #ffffff !important;
   box-shadow: 0 3px 10px rgba(0, 32, 128, 0.28);
@@ -169,7 +169,7 @@ body.page-registry-reports.reg-focus .reg-status {
   padding: 6px 8px 7px;
   background: #ffffff;
   border: 1px solid rgba(0, 32, 128, 0.12);
-  border-top: 3px solid #002080;
+  border-top: 3px solid var(--brand-blue);
   border-radius: 10px;
   box-shadow: 0 4px 14px rgba(11, 42, 90, 0.06);
 }
@@ -231,8 +231,8 @@ body.page-registry-reports.reg-focus .reg-status {
   background: rgba(255, 255, 255, 0.8);
 }
 .page-registry-reports .reg-doc-btn.is-active {
-  background: #002080;
-  border-color: #002080;
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
   color: #ffffff !important;
   box-shadow: 0 3px 10px rgba(0, 32, 128, 0.28);
 }
@@ -282,7 +282,7 @@ body.page-registry-reports.reg-focus .reg-status {
 .page-registry-reports .reg-toolbar select:focus,
 .page-registry-reports .reg-toolbar input:focus {
   outline: none;
-  border-color: #002080;
+  border-color: var(--brand-blue);
   box-shadow: 0 0 0 2px rgba(0, 32, 128, 0.14);
   background: #fff;
 }
@@ -327,7 +327,7 @@ body.page-registry-reports.reg-focus .reg-status {
   font-weight: 600;
 }
 .page-registry-reports .reg-status-meta strong {
-  color: #002080;
+  color: var(--brand-blue);
   font-weight: 800;
 }
 .page-registry-reports .reg-status-dot {
@@ -342,7 +342,7 @@ body.page-registry-reports.reg-focus .reg-status {
 .page-registry-reports .reg-pager a {
   margin-left: 8px;
   font-weight: 800;
-  color: #002080;
+  color: var(--brand-blue);
   text-decoration: none;
 }
 .page-registry-reports .reg-pager a:hover {
@@ -352,7 +352,7 @@ body.page-registry-reports.reg-focus .reg-status {
   margin-left: 8px;
   font-weight: 800;
   color: #fff;
-  background: #002080;
+  background: var(--brand-blue);
   border-radius: 6px;
   padding: 2px 8px;
 }
@@ -377,7 +377,7 @@ body.page-registry-reports.reg-focus .reg-status {
   padding: 10px 16px 16px 12px;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: #002080 #e8eef8;
+  scrollbar-color: var(--brand-blue) #e8eef8;
 }
 body.page-registry-reports.reg-focus .reg-scroll {
   padding: 8px 20px 14px 10px;
@@ -428,13 +428,13 @@ body.page-registry-reports.reg-focus.reg-is-fitted #register-birth .reg-cert {
 .page-registry-reports .reg-zoom-row .btn.is-zoom-on {
   background: #ffffff;
   border-color: #ffffff;
-  color: #002080;
+  color: var(--brand-blue);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
 }
 body.page-registry-reports.reg-focus .reg-zoom-row .btn.is-zoom-on {
   background: #ffffff;
   border-color: #7dd3fc;
-  color: #002080 !important;
+  color: var(--brand-blue) !important;
 }
 .page-registry-reports .reg-scroll::-webkit-scrollbar {
   height: 14px;
@@ -445,7 +445,7 @@ body.page-registry-reports.reg-focus .reg-zoom-row .btn.is-zoom-on {
   border-top: 1px solid rgba(0, 32, 128, 0.12);
 }
 .page-registry-reports .reg-scroll::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #1a4a9e 0%, #002080 100%);
+  background: linear-gradient(180deg, #1a4a9e 0%, var(--brand-blue) 100%);
   border-radius: 999px;
   border: 3px solid #e8eef8;
   min-width: 48px;

@@ -61,9 +61,11 @@ svg {
 
 .document-viewer-image,
 .scan-preview-viewer-inner .document-viewer-image {
-  max-width: 100%;
   width: 100%;
+  max-width: 100%;
   height: auto;
+  object-fit: contain;
+  object-position: top center;
 }
 
 .table-wrap,
@@ -132,7 +134,25 @@ body.page-account .account-page {
   }
 
   .main {
-    overflow: auto !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #e8eef5;
+  }
+
+  .main::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    display: block !important;
+  }
+
+  .main::-webkit-scrollbar-track {
+    background: #e8eef5;
+  }
+
+  .main::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 999px;
   }
 }
 
@@ -156,29 +176,65 @@ body.page-account .account-page {
   }
 }
 
-/* Old full-width preview: the scan fills the pane. Do not clip the page. */
+/* Same full-width office format. Pane grows with the page so nothing is cropped. */
 .scan-preview-viewer-inner,
 .scanflow-preview-shell,
 .form-review-preview,
-.main-card.scan-workflow-preview-card {
-  overflow: visible;
-  clip-path: none;
-}
-
-.scan-preview-viewer-inner .document-viewer-pane:not(.is-zoomed) {
-  height: auto !important;
-  max-height: none !important;
+.main-card.scan-workflow-preview-card,
+.req-edit-viewer-shell,
+.document-viewer-section,
+.document-viewer-image-wrap {
   overflow: visible !important;
   clip-path: none !important;
 }
 
-.scan-preview-viewer-inner .document-viewer-image {
+.document-viewer-pane,
+.scan-preview-viewer-inner .document-viewer-pane,
+.req-edit-viewer-shell .document-viewer-pane {
+  display: block !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  clip-path: none !important;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.document-viewer-pane.is-zoomed,
+.scan-preview-viewer-inner .document-viewer-pane.is-zoomed,
+.req-edit-viewer-shell .document-viewer-pane.is-zoomed {
+  max-height: min(82vh, 920px) !important;
+  overflow: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #94a3b8 #e8eef5 !important;
+}
+
+.document-viewer-pane.is-zoomed::-webkit-scrollbar,
+.scan-preview-viewer-inner .document-viewer-pane.is-zoomed::-webkit-scrollbar {
+  width: 10px !important;
+  height: 10px !important;
+  display: block !important;
+}
+
+.document-viewer-pane .document-viewer-image,
+.scan-preview-viewer-inner .document-viewer-image,
+.document-viewer-pane .document-viewer-image-wrap,
+.scan-preview-viewer-inner .document-viewer-image-wrap {
   display: block;
   width: 100%;
   max-width: 100%;
   height: auto;
+  margin: 0;
   object-fit: contain;
   object-position: top center;
+}
+
+.document-viewer-pane.is-zoomed .document-viewer-image,
+.document-viewer-pane.is-zoomed .document-viewer-image-wrap,
+.document-viewer-pane.is-shrunk .document-viewer-image,
+.document-viewer-pane.is-shrunk .document-viewer-image-wrap {
+  max-width: none;
+  width: auto;
 }
 
 @media (max-width: 860px) {

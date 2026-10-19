@@ -16,7 +16,5 @@
 </div>
 {% if missing_fields is defined and missing_fields %}
 <p class="review-required-banner" role="alert">Fill every required field marked in red before saving. Empty Age, dates, and names must be typed from the certificate.</p>
-{% else %}
-<p class="review-required-hint">Fields marked <span class="field-required-mark" aria-hidden="true">*</span> must be filled before Confirm or Save. Remarks stay optional.</p>
 {% endif %}
 <script src="{{ url_for('static', filename='js/extracted_metadata.js') }}?v=required-review-1" defer></script>

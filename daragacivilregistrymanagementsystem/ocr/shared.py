@@ -33,12 +33,12 @@ class OCREngineNotFoundError(Exception):
 
 
 def _ocr_max_side() -> int:
-    """Longest side sent to PaddleOCR. 720 keeps printed form text readable and targets ~10–15s on CPU."""
+    """Longest side sent to PaddleOCR. 800 keeps handwriting readable; extra full-page passes are avoided for speed."""
     try:
-        value = int(os.environ.get("OCR_MAX_SIDE") or "720")
+        value = int(os.environ.get("OCR_MAX_SIDE") or "800")
     except ValueError:
-        value = 720
-    return max(560, min(960, value))
+        value = 800
+    return max(720, min(960, value))
 
 
 _OCR_MAX_SIDE = _ocr_max_side()
@@ -49,6 +49,16 @@ _OCR_LOCK = threading.Lock()
 _PaddleOCR = None
 
 
+def _safe_flush(stream) -> None:
+    try:
+        if stream is None or getattr(stream, "closed", False):
+            return
+        if hasattr(stream, "flush"):
+            stream.flush()
+    except (ValueError, OSError, AttributeError):
+        pass
+
+
 @contextmanager
 def _quiet_stdio():
     """Silence Python prints and native Windows tools (e.g. `where`) spawned by Paddle."""
@@ -56,35 +66,49 @@ def _quiet_stdio():
 
     stdout = getattr(sys.stdout, "_wrapped", sys.stdout)
     stderr = getattr(sys.stderr, "_wrapped", sys.stderr)
-    if hasattr(stdout, "flush"):
-        stdout.flush()
-    if hasattr(stderr, "flush"):
-        stderr.flush()
+    _safe_flush(stdout)
+    _safe_flush(stderr)
 
     saved_out = saved_err = None
     nul_fd = None
     try:
-        saved_out = os.dup(1)
-        saved_err = os.dup(2)
-        nul_fd = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(nul_fd, 1)
-        os.dup2(nul_fd, 2)
+        try:
+            saved_out = os.dup(1)
+            saved_err = os.dup(2)
+            nul_fd = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(nul_fd, 1)
+            os.dup2(nul_fd, 2)
+        except OSError:
+            saved_out = saved_err = None
+            if nul_fd is not None:
+                try:
+                    os.close(nul_fd)
+                except OSError:
+                    pass
+                nul_fd = None
         with open(os.devnull, "w") as devnull:
             with redirect_stdout(devnull), redirect_stderr(devnull):
                 yield
-    except OSError:
-        with open(os.devnull, "w") as devnull:
-            with redirect_stdout(devnull), redirect_stderr(devnull):
-                yield
+    except (OSError, ValueError):
+        yield
     finally:
         if saved_out is not None:
-            os.dup2(saved_out, 1)
-            os.close(saved_out)
+            try:
+                os.dup2(saved_out, 1)
+                os.close(saved_out)
+            except OSError:
+                pass
         if saved_err is not None:
-            os.dup2(saved_err, 2)
-            os.close(saved_err)
+            try:
+                os.dup2(saved_err, 2)
+                os.close(saved_err)
+            except OSError:
+                pass
         if nul_fd is not None:
-            os.close(nul_fd)
+            try:
+                os.close(nul_fd)
+            except OSError:
+                pass
 
 
 def _load_paddleocr():
@@ -135,7 +159,7 @@ def get_ocr():
         cpu_threads=cpu_threads,
         det_limit_side_len=max_side,
         det_limit_type="max",
-        rec_batch_num=8,
+        rec_batch_num=12,
         drop_score=0.45,
         show_log=False,
     )
@@ -186,8 +210,14 @@ def warmup_ocr() -> None:
         ("CERTIFICATE OF LIVE BIRTH", "Registry No. 2024-000123", "JUAN DELA CRUZ")
     ):
         cv2.putText(img, line, (40, 80 + i * 48), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
-    with _quiet_stdio():
-        run_ocr_on_image(img)
+    try:
+        with _quiet_stdio():
+            run_ocr_on_image(img)
+    except Exception:
+        try:
+            run_ocr_on_image(img)
+        except Exception:
+            return
     _OCR_WARMED = True
 
 
@@ -244,6 +274,75 @@ def _scale_pages_to_original(pages, scale):
             scaled.append(arr)
         page["dt_polys"] = scaled
     return pages
+
+
+def _texts_from_rec_only(raw) -> list:
+    texts = []
+    if raw is None:
+        return texts
+    rows = raw
+    if isinstance(raw, list) and raw and not isinstance(raw[0], (list, tuple)):
+        rows = [raw]
+    for row in rows or []:
+        if isinstance(row, str):
+            if row.strip():
+                texts.append(row.strip())
+            continue
+        if not row:
+            continue
+        if isinstance(row, (list, tuple)) and len(row) == 2 and isinstance(row[0], str):
+            text = str(row[0] or "").strip()
+            if text:
+                texts.append(text)
+            continue
+        for item in row:
+            if isinstance(item, str):
+                if item.strip():
+                    texts.append(item.strip())
+                continue
+            if not item:
+                continue
+            if isinstance(item, (list, tuple)) and len(item) >= 2 and isinstance(item[1], (list, tuple)):
+                text = str(item[1][0] or "").strip()
+            elif isinstance(item, (list, tuple)) and item and isinstance(item[0], str):
+                text = str(item[0] or "").strip()
+            else:
+                text = ""
+            if text:
+                texts.append(text)
+    return texts
+
+
+def run_ocr_text_only(img, max_side=400) -> str:
+    """Recognize text in a pre-cropped cell. Skips page detection so age/date crops stay fast."""
+    if img is None or getattr(img, "size", 0) == 0:
+        return ""
+    ocr_img, _scale = _resize_for_ocr(img, max_side=max_side)
+    with _OCR_LOCK:
+        ocr = get_ocr()
+        if hasattr(ocr, "ocr"):
+            try:
+                raw = ocr.ocr(ocr_img, det=False, rec=True, cls=False)
+                texts = _texts_from_rec_only(raw)
+                if texts:
+                    return " ".join(texts).strip()
+            except TypeError:
+                try:
+                    raw = ocr.ocr(ocr_img, det=False, cls=False)
+                    texts = _texts_from_rec_only(raw)
+                    if texts:
+                        return " ".join(texts).strip()
+                except TypeError:
+                    pass
+        if hasattr(ocr, "predict"):
+            raw = ocr.predict(ocr_img)
+            parts = []
+            for page in _normalize_ocr_pages(raw):
+                for text in page.get("rec_texts") or []:
+                    if text:
+                        parts.append(str(text))
+            return " ".join(parts).strip()
+    return ""
 
 
 def run_ocr_on_image(img, max_side=None):

@@ -102,7 +102,7 @@
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 800;
-  color: #002080;
+  color: var(--brand-blue);
   white-space: nowrap;
 }
 
@@ -193,7 +193,7 @@
   cursor: pointer;
   font-size: 0.75rem;
   font-weight: 800;
-  color: #002080;
+  color: var(--brand-blue);
   list-style: none;
 }
 
@@ -224,7 +224,7 @@
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 800;
-  color: #002080;
+  color: var(--brand-blue);
 }
 
 .notif-read-btn:hover {
@@ -322,7 +322,7 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
 }
 
 .sex-radio input:checked + .sex-radio-ui {
-  color: #002080;
+  color: var(--brand-blue);
   background: #fff;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(0, 32, 128, 0.14);
 }
@@ -436,7 +436,7 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
   padding: 3px 8px;
   border-radius: 999px;
   background: #e8eefc;
-  color: #002080;
+  color: var(--brand-blue);
   font-size: 0.62rem;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -447,31 +447,22 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
   content: "View";
 }
 
-.note-fold[open] .note-fold-preview {
-  display: none;
-}
-
 .note-fold[open] .note-fold-toggle::after {
   content: "Hide";
 }
 
 .note-fold-panel {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 6px);
-  z-index: 50;
-  width: min(22rem, 72vw);
-  min-width: 12rem;
-  margin-top: 0;
-  padding: 8px 10px 10px;
-  border-radius: 10px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-left: 3px solid #002080;
-  max-height: 12rem;
-  overflow: auto;
+  display: none;
   box-sizing: border-box;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  padding: 10px 12px 12px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #d5e0ee;
+  border-left: 3px solid var(--brand-blue);
+}
+
+.note-fold-panel.is-portal {
+  display: block;
 }
 
 .note-fold--rejection .note-fold-panel {
@@ -638,8 +629,8 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
 
 .sidebar-footer .btn-logout.is-active {
   background: #e8eefc;
-  border-color: #002080;
-  color: #002080;
+  border-color: var(--brand-blue);
+  color: var(--brand-blue);
 }
 
 [data-theme="dark"] .sidebar-footer .btn-logout.is-active,

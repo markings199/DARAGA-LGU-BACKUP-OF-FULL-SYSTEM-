@@ -156,11 +156,11 @@
 }
 .app-toast--info .app-toast-ic {
   background: #e8eefc;
-  color: #002080;
+  color: var(--brand-blue);
 }
 .app-toast--info .app-toast-kicker,
 .app-toast--info .app-toast-bar {
-  color: #002080;
+  color: var(--brand-blue);
   background: #2563eb;
 }
 
@@ -195,7 +195,7 @@
   justify-content: center;
   flex-shrink: 0;
   background: #e8eefc;
-  color: #002080;
+  color: var(--brand-blue);
 }
 
 .app-note-ic svg {
@@ -383,7 +383,7 @@
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  background: var(--header-grad);
 }
 .app-confirm-ic {
   width: 32px;

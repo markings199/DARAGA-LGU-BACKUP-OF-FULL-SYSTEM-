@@ -28,12 +28,25 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "Packages installed."
 }
 
-$pgBin = Join-Path $env:USERPROFILE "scoop\apps\postgresql\current\bin"
-$pgData = Join-Path $env:USERPROFILE "scoop\apps\postgresql\current\data"
 $pgLog = Join-Path $env:TEMP "daraga-postgres.log"
-$pgIsReady = Join-Path $pgBin "pg_isready.exe"
-$pgCtl = Join-Path $pgBin "pg_ctl.exe"
-if (Test-Path $pgBin) { $env:Path = "$pgBin;$env:Path" }
+$pgBinCandidates = @(
+    "$env:USERPROFILE\scoop\apps\postgresql\current\bin",
+    "C:\Program Files\PostgreSQL\17\bin",
+    "C:\Program Files\PostgreSQL\16\bin",
+    "C:\Program Files\PostgreSQL\15\bin",
+    "C:\Program Files\PostgreSQL\14\bin"
+)
+$pgBin = $null
+foreach ($bin in $pgBinCandidates) {
+    if (Test-Path (Join-Path $bin "pg_isready.exe")) {
+        $pgBin = $bin
+        break
+    }
+}
+if ($pgBin) { $env:Path = "$pgBin;$env:Path" }
+$pgData = Join-Path $env:USERPROFILE "scoop\apps\postgresql\current\data"
+$pgIsReady = if ($pgBin) { Join-Path $pgBin "pg_isready.exe" } else { "pg_isready.exe" }
+$pgCtl = if ($pgBin) { Join-Path $pgBin "pg_ctl.exe" } else { "pg_ctl.exe" }
 
 function Test-PostgresReady {
     if (-not (Test-Path $pgIsReady)) { return $false }

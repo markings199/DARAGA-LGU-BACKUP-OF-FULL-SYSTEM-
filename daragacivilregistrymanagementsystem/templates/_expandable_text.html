@@ -9,12 +9,10 @@
 {% endif %}
 {% if not text %}
   <span class="note-empty">—</span>
-{% elif text|length <= 48 %}
-  <span class="note-inline note-inline--{{ kind }}">{{ text }}</span>
 {% else %}
   <details class="note-fold note-fold--{{ kind }}">
-    <summary>
-      <span class="note-fold-preview">{{ text[:36] }}…</span>
+    <summary title="{{ text }}">
+      <span class="note-fold-preview">{% if text|length > 28 %}{{ text[:28] }}…{% else %}{{ text }}{% endif %}</span>
       <span class="note-fold-toggle"></span>
     </summary>
     <div class="note-fold-panel">

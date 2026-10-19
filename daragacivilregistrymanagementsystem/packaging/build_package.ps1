@@ -17,11 +17,16 @@ New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 $excludeDirs = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 @(
     ".git", ".venv", "venv", "env", "__pycache__", "uploads", "backups",
-    "uploads_backup_", "dist", "build", ".idea", ".vscode"
+    "uploads_backup_", "dist", "build", ".idea", ".vscode", ".cursor",
+    "instance", "logs", ".pytest_cache"
 ) | ForEach-Object { [void]$excludeDirs.Add($_) }
 
 $excludeNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-@(".env", "Thumbs.db", "Desktop.ini") | ForEach-Object { [void]$excludeNames.Add($_) }
+@(
+    ".env", "Thumbs.db", "Desktop.ini", "storage_settings.json",
+    "civil_registry.db", "database.json", "log_retention.json",
+    "debug_ocr_boxes.jpg"
+) | ForEach-Object { [void]$excludeNames.Add($_) }
 
 function Test-ExcludedPath([string]$FullPath) {
     $rel = $FullPath.Substring($AppDir.Length).TrimStart("\", "/")
@@ -33,8 +38,9 @@ function Test-ExcludedPath([string]$FullPath) {
     }
     $leaf = Split-Path $FullPath -Leaf
     if ($excludeNames.Contains($leaf)) { return $true }
-    if ($leaf -match '\.(pyc|pyo|log)$') { return $true }
+    if ($leaf -match '\.(pyc|pyo|log|db|sqlite|sqlite3)$') { return $true }
     if ($leaf -like ".env.*" -and $leaf -ne ".env.example") { return $true }
+    if ($leaf -like "database_pre_restore_*") { return $true }
     return $false
 }
 

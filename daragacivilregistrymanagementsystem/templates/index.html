@@ -9,7 +9,7 @@
   }
   .scanflow-hero-wrap { margin: 0 0 10px; }
   .scanflow-hero {
-    background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+    background: var(--header-grad);
     border-radius: 12px;
     padding: 0;
     border: 1px solid rgba(0, 32, 128, 0.28);
@@ -166,7 +166,7 @@
     gap: 10px;
     margin: 0;
     padding: 10px 14px;
-    background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+    background: var(--header-grad);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
   .scanflow-card-head-icon {
@@ -241,7 +241,7 @@
     width: 15px;
     height: 15px;
     flex-shrink: 0;
-    color: #002080;
+    color: var(--brand-blue);
     fill: none;
     stroke: currentColor;
   }
@@ -269,7 +269,7 @@
   body.page-scan-workflow .scanflow-field-control input[type="file"]:focus {
     outline: 2px solid rgba(0, 32, 128, 0.28);
     outline-offset: 1px;
-    border-color: #002080;
+    border-color: var(--brand-blue);
     background: #fff;
   }
   .scanflow-detect-status {
@@ -348,12 +348,12 @@
     font-weight: 800;
     font-size: 0.75rem;
     background: #fff;
-    color: #002080;
+    color: var(--brand-blue);
     border: 1px solid #b6c9e0;
     box-shadow: none;
     min-height: 32px;
   }
-  .btn-scanflow-ghost:hover { background: #eef4fc; border-color: #002080; }
+  .btn-scanflow-ghost:hover { background: #eef4fc; border-color: var(--brand-blue); }
   .btn-scanflow-ghost svg { width: 14px; height: 14px; flex-shrink: 0; fill: none; stroke: currentColor; }
   .btn-scanflow-ghost.is-scanning {
     opacity: 0.7;
@@ -592,7 +592,7 @@
     border-radius: 7px;
     border: 1px solid rgba(0, 32, 128, 0.18);
     background: #e8eefc;
-    color: #002080;
+    color: var(--brand-blue);
     font-weight: 800;
     font-size: 0.75rem;
     cursor: pointer;
@@ -603,7 +603,7 @@
     border-radius: 7px;
     border: 1px solid rgba(0, 32, 128, 0.18);
     background: #e8eefc;
-    color: #002080;
+    color: var(--brand-blue);
     font-weight: 800;
     font-size: 0.75rem;
     cursor: pointer;
@@ -642,13 +642,13 @@
     font-weight: 800;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #002080;
+    color: var(--brand-blue);
   }
   .scanflow-preview-head-ic {
     width: 24px;
     height: 24px;
     border-radius: 6px;
-    background: #002080;
+    background: var(--brand-blue);
     border: 1px solid #001a66;
     display: flex;
     align-items: center;
@@ -966,6 +966,10 @@
     height: auto;
     margin: 0;
   }
+  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-pane.is-zoomed .document-viewer-image,
+  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-pane.is-zoomed .document-viewer-image-wrap {
+    max-width: none;
+  }
 
   /* Slim professional scrollbars — Scan Workflow page + Document preview */
   body.page-scan-workflow .main,
@@ -1000,7 +1004,7 @@
   }
   body.page-scan-workflow .main::-webkit-scrollbar-thumb:active,
   body.page-scan-workflow .document-viewer-pane::-webkit-scrollbar-thumb:active {
-    background: #002080;
+    background: var(--brand-blue);
   }
   body.page-scan-workflow .main::-webkit-scrollbar-corner,
   body.page-scan-workflow .document-viewer-pane::-webkit-scrollbar-corner {
@@ -1039,9 +1043,9 @@
     --ocr-load-bg: linear-gradient(180deg, #f7faff 0%, #eef3fa 100%);
     --ocr-load-border: #c9d6ea;
     --ocr-load-title: #0f2b5c;
-    --ocr-load-pct: #002080;
+    --ocr-load-pct: var(--brand-blue);
     --ocr-load-track: #dce4f0;
-    --ocr-load-fill: linear-gradient(90deg, #002080 0%, #1d4ed8 48%, #0b6b38 100%);
+    --ocr-load-fill: linear-gradient(90deg, var(--brand-blue) 0%, #1d4ed8 48%, #0b6b38 100%);
     --ocr-load-pulse: #2563eb;
     --ocr-load-page: linear-gradient(180deg, #ffffff 0%, #e8eef8 100%);
     --ocr-load-page-border: rgba(0, 32, 128, 0.22);
@@ -1345,9 +1349,9 @@
     box-shadow: 0 0 0 3px rgba(0, 32, 128, 0.16);
   }
   .scanflow-source-card input:checked + .scanflow-source-card-inner {
-    border-color: #002080;
+    border-color: var(--brand-blue);
     background: linear-gradient(180deg, #f4f7ff 0%, #eef4ff 100%);
-    box-shadow: 0 0 0 1px #002080;
+    box-shadow: 0 0 0 1px var(--brand-blue);
   }
   .scanflow-source-ic {
     flex-shrink: 0;
@@ -1365,7 +1369,7 @@
     height: 16px;
   }
   .scanflow-source-card input:checked + .scanflow-source-card-inner .scanflow-source-ic {
-    background: #002080;
+    background: var(--brand-blue);
     color: #fff;
   }
   .scanflow-source-copy {
@@ -1688,7 +1692,7 @@
 </div>
 <script type="application/json" id="ocr-field-guides" data-align-url="{{ url_for('api_ocr_field_guides') }}">{{ ocr_field_guides|default({})|tojson }}</script>
 
-<script src="{{ url_for('static', filename='js/document-viewer.js') }}?v=preview-original-1" defer></script>
+<script src="{{ url_for('static', filename='js/document-viewer.js') }}?v=preview-zoom-out-6" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   var fileInput = document.getElementById('image');

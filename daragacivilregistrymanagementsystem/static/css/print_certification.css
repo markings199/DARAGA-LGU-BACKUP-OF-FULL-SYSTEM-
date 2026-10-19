@@ -31,26 +31,27 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 7px 12px;
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  padding: 5px 10px;
+  background: var(--header-grad);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .print-panel-title {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.8rem;
   font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.15;
   color: #ffffff;
 }
 
 .print-panel-subtitle {
-  margin: 2px 0 0;
-  font-size: 0.74rem;
+  margin: 1px 0 0;
+  font-size: 0.68rem;
   color: #bfdbfe;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
 .print-mode-picker {
@@ -104,8 +105,8 @@
 .print-mode-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  padding: 8px 12px 2px;
+  gap: 5px;
+  padding: 6px 10px 0;
 }
 
 .print-mode-options--three {
@@ -144,11 +145,11 @@
 .print-option-card-inner {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 6px 8px;
+  gap: 6px;
+  min-height: 34px;
+  padding: 4px 8px;
   border: 1px solid #d7e2ef;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #f8fafc;
   box-shadow: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
@@ -164,9 +165,9 @@
 }
 
 .print-option-card input:checked + .print-option-card-inner {
-  border-color: #002080;
+  border-color: var(--brand-blue);
   background: linear-gradient(180deg, #f4f7ff 0%, #eef4ff 100%);
-  box-shadow: 0 0 0 1px #002080, 0 3px 10px rgba(0, 32, 128, 0.1);
+  box-shadow: 0 0 0 1px var(--brand-blue), 0 3px 10px rgba(0, 32, 128, 0.1);
 }
 
 .print-option-radio {
@@ -182,7 +183,7 @@
 }
 
 .print-option-card input:checked + .print-option-card-inner .print-option-radio {
-  border-color: #002080;
+  border-color: var(--brand-blue);
 }
 
 .print-option-card input:checked + .print-option-card-inner .print-option-radio::after {
@@ -190,14 +191,14 @@
   position: absolute;
   inset: 2px;
   border-radius: 50%;
-  background: #002080;
+  background: var(--brand-blue);
 }
 
 .print-option-icon {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -206,13 +207,13 @@
 }
 
 .print-option-card input:checked + .print-option-card-inner .print-option-icon {
-  background: #002080;
+  background: var(--brand-blue);
   color: #fff;
 }
 
 .print-option-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 .print-option-copy {
@@ -223,11 +224,11 @@
 }
 
 .print-option-kicker {
-  font-size: 0.62rem;
+  font-size: 0.56rem;
   font-weight: 800;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  line-height: 1.2;
+  line-height: 1.15;
   color: #64748b;
 }
 
@@ -236,11 +237,11 @@
 }
 
 .print-option-title {
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 800;
   color: #0f2b5c;
   letter-spacing: -0.02em;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
 .print-option-desc {
@@ -259,22 +260,22 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
-  padding: 8px 12px 0;
+  gap: 5px;
+  padding: 6px 10px 0;
 }
 .print-setup {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 8px;
-  padding: 8px 10px;
+  gap: 4px 8px;
+  padding: 6px 8px;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 10px;
   background: #f8fafc;
 }
 .print-setup--layout,
 .print-setup--signers,
 .print-setup--blanks {
-  padding-top: 8px;
+  padding-top: 6px;
   border-top: 0;
 }
 .print-setup-head {
@@ -293,13 +294,13 @@
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #002080;
+  color: var(--brand-blue);
   background: #e8eefc;
   line-height: 1.4;
 }
 .print-setup-field--date,
 .print-setup-field--issued {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 .print-amount-wrap {
   display: flex;
@@ -309,22 +310,22 @@
 .print-peso {
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 7px;
   border: 1px solid #cbd5e1;
   border-right: 0;
-  border-radius: 8px 0 0 8px;
+  border-radius: 6px 0 0 6px;
   background: #eef2f7;
   color: #0f172a;
-  font-size: 0.86rem;
+  font-size: 0.78rem;
   font-weight: 800;
 }
 .print-amount-wrap input {
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 6px 6px 0;
 }
 .print-setup-heading {
   grid-column: 1 / -1;
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.64rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -333,9 +334,9 @@
 .print-setup-field {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
-  font-size: 0.7rem;
+  font-size: 0.62rem;
   font-weight: 800;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -355,8 +356,8 @@
 .print-panel-foot {
   display: flex;
   justify-content: flex-end;
-  margin: 2px -12px 0;
-  padding: 6px 12px 8px;
+  margin: 2px -10px 0;
+  padding: 4px 10px 6px;
   border-top: 1px solid #e2e8f0;
   background: #ffffff;
 }
@@ -372,24 +373,24 @@
 .print-setup-field input {
   box-sizing: border-box;
   width: 100%;
-  min-height: 30px;
-  height: 30px;
+  min-height: 26px;
+  height: 26px;
   margin: 0;
-  padding: 4px 8px;
+  padding: 2px 8px;
   border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #fff;
   color: #0f172a;
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.2;
   text-transform: none;
   letter-spacing: 0;
 }
 .print-setup-field select:focus,
 .print-setup-field input:focus {
   outline: none;
-  border-color: #002080;
+  border-color: var(--brand-blue);
   box-shadow: 0 0 0 3px rgba(0, 32, 128, 0.14);
 }
 
@@ -397,9 +398,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 7px 12px;
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  gap: 8px;
+  padding: 5px 10px;
+  background: var(--header-grad);
 }
 
 .print-panel--compact {
@@ -407,13 +408,13 @@
 }
 
 .btn-print-document {
-  min-width: 96px;
-  min-height: 32px;
-  padding: 6px 12px;
-  gap: 8px;
-  font-size: 0.86rem;
+  min-width: 88px;
+  min-height: 28px;
+  padding: 4px 12px;
+  gap: 6px;
+  font-size: 0.78rem;
   font-weight: 800;
-  border-radius: 9px;
+  border-radius: 8px;
 }
 
 .btn-print-document svg {
@@ -461,7 +462,7 @@
 
 [data-theme="dark"] .print-panel-head,
 [data-theme="dark"] .print-panel-compact-row {
-  background: linear-gradient(135deg, #002080 0%, #1a4a9e 100%);
+  background: var(--header-grad);
   border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 
@@ -848,12 +849,15 @@
   word-break: break-word;
 }
 .cert-pay-entry {
-  display: flex;
+  display: inline-flex;
   align-items: flex-end;
   gap: 0.05in;
-  width: 1.35in;
-  min-width: 1.35in;
-  max-width: 1.35in;
+  width: 1.58in;
+  min-width: 1.58in;
+  max-width: 1.58in;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .cert-pay-entry .cert-peso {
   flex: 0 0 auto;
@@ -863,22 +867,8 @@
 }
 .cert-pay-entry .cert-pay-value {
   flex: 1 1 auto;
-  min-width: 0.85in;
+  min-width: 0;
   min-height: 1.15em;
-}
-.cert-pay-entry--fit {
-  display: inline-flex;
-  width: auto;
-  min-width: 1.45in;
-  max-width: none;
-  white-space: nowrap;
-  overflow-wrap: normal;
-  word-break: normal;
-}
-.cert-pay-entry--fit .cert-pay-value {
-  flex: 0 1 auto;
-  width: auto;
-  min-width: 1.15in;
   white-space: nowrap;
   overflow-wrap: normal;
   word-break: normal;
@@ -1058,7 +1048,7 @@ td.cert-issued-upon {
   width: 0.14in;
 }
 .cert-pay-blank-col {
-  width: 1.2in;
+  width: 1.62in;
 }
 .cert-pay-table td {
   padding: 0.02in 0 0.01in;
@@ -1360,16 +1350,14 @@ td.cert-issued-upon {
     color: #000 !important;
     -webkit-text-stroke: 0 !important;
   }
-  .cert-pay-entry--fit {
+  .cert-pay-entry {
     display: inline-flex !important;
-    width: auto !important;
-    min-width: 1.45in !important;
-    max-width: none !important;
+    width: 1.58in !important;
+    min-width: 1.58in !important;
+    max-width: 1.58in !important;
     white-space: nowrap !important;
-    overflow-wrap: normal !important;
-    word-break: normal !important;
   }
-  .cert-pay-entry--fit .cert-pay-value {
+  .cert-pay-entry .cert-pay-value {
     white-space: nowrap !important;
     overflow-wrap: normal !important;
     word-break: normal !important;
