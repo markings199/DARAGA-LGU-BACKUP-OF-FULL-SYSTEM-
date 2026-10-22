@@ -1,6 +1,7 @@
 /* Light / dark theme — staff, admin, and shared app shell */
 
 :root {
+  color-scheme: light;
   --layout-bg: #f0f4f8;
   --sidebar-bg: linear-gradient(180deg, #eef5fc 0%, #e3ecf7 55%, #d9e5f3 100%);
   --sidebar-brand-bg: #ebf2fa;
@@ -749,6 +750,38 @@ html:not([data-theme="dark"]) body.page-administration .admin-requests-table .re
 }
 html:not([data-theme="dark"]) body.page-administration .admin-approval-code {
   color: #002080 !important;
+}
+html:not([data-theme="dark"]) body.page-administration .request-doc-type-filter select,
+html:not([data-theme="dark"]) body.page-administration .request-doc-type-filter select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  color-scheme: light;
+}
+html:not([data-theme="dark"]) body.page-administration .admin-requests-table .reject-input,
+html:not([data-theme="dark"]) body.page-administration .admin-edit-requests-table .reject-input {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  color-scheme: light;
+  -webkit-appearance: none;
+  appearance: none;
+}
+html:not([data-theme="dark"]) body.page-administration .admin-requests-table .reject-input::placeholder,
+html:not([data-theme="dark"]) body.page-administration .admin-edit-requests-table .reject-input::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+}
+html[data-theme="dark"] body.page-administration .request-doc-type-filter select,
+html[data-theme="dark"] body.page-administration .request-doc-type-filter select option {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  color-scheme: dark;
+}
+html[data-theme="dark"] body.page-administration .request-doc-type-filter select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1.2 1.2 6 6l4.8-4.8' stroke='%23f8fafc' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
 }
 html[data-theme="dark"] body.page-administration .admin-request-pager-meta,
 html[data-theme="dark"] body.page-administration .admin-request-pager-page {

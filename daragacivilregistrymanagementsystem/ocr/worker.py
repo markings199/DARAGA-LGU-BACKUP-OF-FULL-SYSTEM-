@@ -25,7 +25,9 @@ def _worker_thread_count() -> str:
         return str(max(2, n - 1))
     if n <= 6:
         return "4"
-    return "6"
+    if n <= 10:
+        return "6"
+    return "8"
 
 
 def limit_ocr_cpu_env(force: bool = False, worker: bool = False) -> None:
@@ -70,7 +72,7 @@ def set_normal_priority() -> None:
 def run_worker(in_q, out_q) -> None:
     # Do not inherit Flask's 2-thread cap; this process exists to run OCR quickly.
     os.environ.setdefault("OCR_MAX_SIDE", "800")
-    os.environ.setdefault("OCR_REC_BATCH", "24")
+    os.environ.setdefault("OCR_REC_BATCH", "32")
     os.environ.setdefault("FLAGS_conv_workspace_size_limit", "4096")
     limit_ocr_cpu_env(force=True, worker=True)
     set_normal_priority()
@@ -94,6 +96,7 @@ def run_worker(in_q, out_q) -> None:
     # Accept jobs immediately. Load Paddle in the background so the first scan is not waiting on import.
     out_q.put({"type": "ready"})
     engine_ready = False
+    preload_done = threading.Event()
 
     def _preload_engine():
         nonlocal engine_ready
@@ -103,8 +106,32 @@ def run_worker(in_q, out_q) -> None:
             engine_ready = True
         except Exception:
             pass
+        finally:
+            preload_done.set()
 
     threading.Thread(target=_preload_engine, daemon=True, name="ocr-preload").start()
+
+    def _ensure_engine(job_id: str) -> None:
+        nonlocal engine_ready
+        if engine_ready:
+            return
+        out_q.put(
+            {
+                "type": "progress",
+                "job_id": job_id,
+                "progress": 18,
+                "message": "Loading OCR engine...",
+            }
+        )
+        preload_done.wait(timeout=120)
+        if engine_ready:
+            return
+        get_ocr()
+        try:
+            warmup_ocr()
+        except Exception:
+            pass
+        engine_ready = True
 
     while True:
         try:
@@ -122,13 +149,7 @@ def run_worker(in_q, out_q) -> None:
             if job_type == "detect":
                 result = detect_from_image(path, ocr_fallback=False)
                 if not (result.get("doc_type") or "").strip():
-                    if not engine_ready:
-                        get_ocr()
-                        try:
-                            warmup_ocr()
-                        except Exception:
-                            pass
-                        engine_ready = True
+                    _ensure_engine(job_id)
                     result = detect_from_image(path, ocr_fallback=True)
                 out_q.put(
                     {
@@ -141,21 +162,7 @@ def run_worker(in_q, out_q) -> None:
                     }
                 )
                 continue
-            if not engine_ready:
-                out_q.put(
-                    {
-                        "type": "progress",
-                        "job_id": job_id,
-                        "progress": 18,
-                        "message": "Loading OCR engine...",
-                    }
-                )
-                get_ocr()
-                try:
-                    warmup_ocr()
-                except Exception:
-                    pass
-                engine_ready = True
+            _ensure_engine(job_id)
             if doc_type not in ("birth", "marriage", "death"):
                 out_q.put(
                     {
@@ -165,11 +172,8 @@ def run_worker(in_q, out_q) -> None:
                         "message": "Identifying document type...",
                     }
                 )
-                detected = detect_from_image(path, ocr_fallback=False)
+                detected = detect_from_image(path, ocr_fallback=True)
                 doc_type = (detected.get("doc_type") or "").strip().lower()
-                if doc_type not in ("birth", "marriage", "death"):
-                    detected = detect_from_image(path, ocr_fallback=True)
-                    doc_type = (detected.get("doc_type") or "").strip().lower()
                 if doc_type not in ("birth", "marriage", "death"):
                     out_q.put(
                         {

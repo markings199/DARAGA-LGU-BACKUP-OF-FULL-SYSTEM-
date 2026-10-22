@@ -141,6 +141,8 @@ def _hough_skew_angle(gray) -> float:
         if abs(mid) >= MIN_SKEW and len(horiz) > best_n:
             best = float(mid)
             best_n = len(horiz)
+            if best_n >= 20:
+                break
     return best if abs(best) >= MIN_SKEW else 0.0
 
 

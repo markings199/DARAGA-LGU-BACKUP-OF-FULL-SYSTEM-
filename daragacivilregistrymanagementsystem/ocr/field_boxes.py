@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 
 from ocr.person_name import WIDE_FML_NAME_KEYS
-from ocr.shared import run_ocr_on_image, run_ocr_text_only
+from ocr.shared import imread_bgr, run_ocr_on_image, run_ocr_text_only
 from ocr.sex import sex_from_ocr_text
 
 _CAUSE_JUNK = (
@@ -184,7 +184,7 @@ def _load_spec_file(path: Path) -> Optional[Dict[str, Any]]:
             img = cached.get("_image")
             spec["_orb"] = cached.get("_orb")
         if img is None:
-            img = cv2.imread(str(image_path))
+            img = imread_bgr(str(image_path))
         if img is None:
             return None
         spec["_image"] = img
@@ -1177,7 +1177,7 @@ def align_field_guides_to_image(doc_type: str, image_path: str) -> List[Dict[str
     guides = metadata_field_guides(doc_type)
     if not guides:
         return []
-    img = cv2.imread(str(image_path))
+    img = imread_bgr(str(image_path))
     if img is None:
         return guides
     height, width = img.shape[:2]

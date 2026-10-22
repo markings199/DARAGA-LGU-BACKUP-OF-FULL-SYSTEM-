@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 
 from ocr.engine import detect_document_type_detail, document_type_label
+from ocr.shared import imread_bgr
 
 
 TITLE_TEMPLATE_DIR = Path(__file__).resolve().parent / "title_templates"
@@ -244,7 +245,7 @@ def detect_from_image(path: str, ocr_fallback: bool = True) -> Dict[str, Any]:
         "reason": "Could not read the certificate heading",
         "header_text": "",
     }
-    img = cv2.imread(path)
+    img = imread_bgr(path)
     if img is None:
         empty["reason"] = "Could not open the image"
         return empty

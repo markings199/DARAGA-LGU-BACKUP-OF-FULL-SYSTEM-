@@ -87,19 +87,21 @@
       event.preventDefault();
       event.stopPropagation();
       var status = btn.getAttribute("data-status") || "";
-      if (root.getAttribute("data-filter-mode") === "navigate") {
-        try {
-          var url = new URL(window.location.href);
-          if (status) url.searchParams.set("status", status);
-          else url.searchParams.delete("status");
-          url.searchParams.delete("page");
-          window.location.assign(url.pathname + url.search + url.hash);
-        } catch (e) {
-          apply(root, status, true);
-        }
-        return;
-      }
       apply(root, status, true);
+      if (root.getAttribute("data-filter-mode") === "navigate") {
+        var pages = parseInt(root.getAttribute("data-pager-pages") || "1", 10) || 1;
+        if (pages > 1) {
+          try {
+            var url = new URL(window.location.href);
+            if (status) url.searchParams.set("status", status);
+            else url.searchParams.delete("status");
+            url.searchParams.delete("page");
+            window.setTimeout(function () {
+              window.location.assign(url.pathname + url.search + url.hash);
+            }, 160);
+          } catch (e) {}
+        }
+      }
     },
     true
   );

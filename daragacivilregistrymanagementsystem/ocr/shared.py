@@ -20,9 +20,15 @@ os.environ.setdefault("NUMEXPR_NUM_THREADS", _ocr_threads)
 os.environ.setdefault("FLAGS_omp_num_threads", _ocr_threads)
 os.environ.setdefault("FLAGS_use_mkldnn", "1")
 os.environ.setdefault("FLAGS_enable_pir_in_executor", "0")
+os.environ.setdefault("FLAGS_conv_workspace_size_limit", "4096")
 
 import cv2
 import numpy as np
+
+try:
+    cv2.setUseOptimized(True)
+except Exception:
+    pass
 
 warnings.filterwarnings("ignore", message="No ccache found")
 warnings.filterwarnings("ignore", category=UserWarning, module="paddle")
@@ -167,15 +173,19 @@ def get_ocr():
         )
 
     PaddleOCR = _load_paddleocr()
+    cpu_n = os.cpu_count() or 4
     try:
-        cpu_threads = max(1, min(4, int(os.environ.get("OCR_CPU_THREADS") or "4")))
+        requested = int(os.environ.get("OCR_CPU_THREADS") or "4")
     except ValueError:
-        cpu_threads = 4
+        requested = 4
+    # Dedicated OCR process may use up to 8 cores. Flask in-process jobs stay at OCR_CPU_THREADS=2.
+    cap = 8 if cpu_n >= 10 else 6 if cpu_n >= 6 else max(1, cpu_n - 1 if cpu_n > 2 else 1)
+    cpu_threads = max(1, min(cap, requested))
     max_side = _ocr_max_side()
     try:
-        rec_batch = max(8, min(32, int(os.environ.get("OCR_REC_BATCH") or "24")))
+        rec_batch = max(8, min(32, int(os.environ.get("OCR_REC_BATCH") or "32")))
     except ValueError:
-        rec_batch = 24
+        rec_batch = 32
     use_gpu = False
     try:
         import paddle
@@ -248,9 +258,9 @@ def warmup_ocr() -> None:
     if _OCR_WARMED:
         return
     side = _ocr_max_side()
-    # Same portrait shape as a PSA form so the first real scan does not recompile kernels.
-    width = max(320, int(side * 0.48))
-    height = side
+    # Same 32-aligned portrait as a resized PSA form so the first real scan reuses MKLDNN kernels.
+    height = side - (side % 32)
+    width = max(320, (int(round(side * 0.76)) // 32) * 32)
     img = np.full((height, width, 3), 255, dtype=np.uint8)
     cv2.rectangle(img, (8, 8), (width - 8, height - 8), (0, 0, 0), 2)
     lines = (
@@ -301,12 +311,20 @@ def _normalize_ocr_pages(raw):
     return pages
 
 
+def imread_bgr(path: str):
+    """Fast Unicode-safe BGR load (Windows paths). Same pixels as cv2.imread."""
+    data = np.fromfile(str(path), dtype=np.uint8)
+    if data.size == 0:
+        return None
+    return cv2.imdecode(data, cv2.IMREAD_COLOR)
+
+
 def _resize_for_ocr(img, max_side=None):
     limit = int(max_side or _ocr_max_side())
     h, w = img.shape[:2]
     longest = max(h, w)
     if longest <= limit:
-        return img, 1.0
+        return np.ascontiguousarray(img), 1.0
     scale = limit / float(longest)
     new_w = max(32, int(round(w * scale)))
     new_h = max(32, int(round(h * scale)))
@@ -315,7 +333,7 @@ def _resize_for_ocr(img, max_side=None):
     new_w = max(32, new_w)
     new_h = max(32, new_h)
     resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-    return resized, scale
+    return np.ascontiguousarray(resized), scale
 
 
 def _scale_pages_to_original(pages, scale):
@@ -441,7 +459,7 @@ def run_ocr_on_image_path(img_path: str):
     only expose .ocr(). This helper normalizes both into
     the "dict per page" structure expected by the extractors.
     """
-    img = cv2.imread(img_path)
+    img = imread_bgr(img_path)
     if img is None:
         raise FileNotFoundError(f"Could not read image: {img_path}")
     return run_ocr_on_image(img)

@@ -7,7 +7,7 @@ import difflib
 from typing import Dict, Any, List
 
 import cv2
-from ocr.shared import run_ocr_on_image
+from ocr.shared import imread_bgr, run_ocr_on_image
 from ocr.engine import extract_from_ocr_text, ocr_pages_to_text
 from ocr.field_boxes import extract_field_boxes
 from ocr.person_name import compose_first_middle_last
@@ -27,7 +27,7 @@ DEBUG_LABELS = False
 # PREPROCESS: CROP
 # =========================================================
 def load_cropped_birth_image(image_path, crop_left, crop_right):
-    img = cv2.imread(image_path)
+    img = imread_bgr(image_path)
     if img is None:
         raise FileNotFoundError(f"Could not read image: {image_path}")
 

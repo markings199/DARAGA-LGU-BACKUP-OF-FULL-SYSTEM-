@@ -304,7 +304,7 @@
                 <th class="col-staff" scope="col">Staff</th>
                 <th class="col-requested" scope="col">Requested</th>
                 <th class="col-reason" scope="col">Reason</th>
-                <th class="col-reject" scope="col">Rejection</th>
+                <th class="col-reject" scope="col">Reject</th>
                 <th class="col-code" scope="col">Code</th>
                 <th class="col-view" scope="col">View</th>
                 <th class="col-actions" scope="col">Actions</th>
@@ -402,7 +402,7 @@
                 <th class="col-staff" scope="col">Staff</th>
                 <th class="col-requested" scope="col">Requested</th>
                 <th class="col-reason" scope="col">Reason</th>
-                <th class="col-reject" scope="col">Rejection</th>
+                <th class="col-reject" scope="col">Reject</th>
                 <th class="col-code" scope="col">Code</th>
                 <th class="col-view" scope="col">View</th>
                 <th class="col-actions" scope="col">Actions</th>
@@ -415,15 +415,10 @@
                   <td class="col-record">{{ req.record.registry_number or '—' if req.record else '—' }}</td>
                   <td class="col-type">
                     {% if req.record %}
-                      <div class="type-cell">
-                        <span class="doc-type-short doc-type-short--{{ req.record.document_type }}">{{ req.record.document_type | capitalize }}</span>
-                        {% if req.print_format %}
-                          <span
-                            class="print-format-badge print-format-badge--{{ normalize_print_format(req.print_format) }}"
-                            title="{{ print_format_label(req.print_format, req.record.document_type) }}"
-                          >{{ print_format_short_label(req.print_format, req.record.document_type) }}</span>
-                        {% endif %}
-                      </div>
+                      <span
+                        class="doc-type-short doc-type-short--{{ req.record.document_type }}"
+                        {% if req.print_format %}title="{{ print_format_label(req.print_format, req.record.document_type) }}"{% endif %}
+                      >{{ req.record.document_type | capitalize }}</span>
                     {% else %}
                       —
                     {% endif %}
@@ -457,7 +452,7 @@
                         </form>
                         <form method="post" action="{{ url_for('print_request_reject', request_id=req.id) }}" class="action-form action-form-reject">
                           {% if request_doc_type %}<input type="hidden" name="doc_type" value="{{ request_doc_type }}" />{% endif %}
-                          <input type="text" name="rejection_reason" placeholder="Note" class="reject-input" aria-label="Rejection note" />
+                          <input type="text" name="rejection_reason" placeholder="Note (optional)" class="reject-input" aria-label="Rejection note" />
                           <button type="submit" class="btn btn-delete-sm">Reject</button>
                         </form>
                       </div>

@@ -4,7 +4,7 @@ from typing import Dict, Any, List
 
 import cv2
 
-from ocr.shared import run_ocr_on_image
+from ocr.shared import imread_bgr, run_ocr_on_image
 from ocr.engine import extract_from_ocr_text, ocr_pages_to_text
 from ocr.field_boxes import extract_field_boxes, is_plausible_cause_of_death
 from ocr.person_name import compose_first_middle_last
@@ -1576,7 +1576,7 @@ def extract_death_data(img_path: str) -> Dict[str, Any]:
     Registry Number, Date of Registration, Name of Deceased, Sex, Age,
     Civil Status, Nationality, Name of Mother, Date of Death, Place of Death, Cause of Death.
     """
-    img = cv2.imread(img_path)
+    img = imread_bgr(img_path)
     if img is None:
         raise FileNotFoundError(f"Could not read image: {img_path}")
 
