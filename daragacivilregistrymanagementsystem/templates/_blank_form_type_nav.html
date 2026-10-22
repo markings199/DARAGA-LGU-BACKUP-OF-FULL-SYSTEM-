@@ -1,0 +1,10 @@
+{% if not image_filename %}
+<nav class="blank-form-type-nav" aria-label="Document type">
+  <span class="blank-form-type-label">Document type</span>
+  <div class="blank-form-type-row">
+    <a class="blank-form-type-btn{% if doc_type == 'birth' %} is-active{% endif %}" href="{{ url_for('autofilled_form_latest', doc_type='birth') }}">Birth</a>
+    <a class="blank-form-type-btn{% if doc_type == 'marriage' %} is-active{% endif %}" href="{{ url_for('autofilled_form_latest', doc_type='marriage') }}">Marriage</a>
+    <a class="blank-form-type-btn{% if doc_type == 'death' %} is-active{% endif %}" href="{{ url_for('autofilled_form_latest', doc_type='death') }}">Death</a>
+  </div>
+</nav>
+{% endif %}

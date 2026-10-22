@@ -121,7 +121,7 @@
       </div>
     </form>
 
-    <section class="search-surface search-results-surface" aria-labelledby="search-results-heading">
+    <section id="search-results" class="search-surface search-results-surface" aria-labelledby="search-results-heading">
       <div class="search-results-head">
         <div class="search-card-head">
           <div class="search-card-head-ic" aria-hidden="true">
@@ -129,7 +129,13 @@
           </div>
           <h2 class="search-card-title" id="search-results-heading">Results</h2>
         </div>
-        <span class="search-results-count">{{ results|length }} record{% if results|length != 1 %}s{% endif %} found</span>
+        <span class="search-results-count">
+          {% if results_capped %}
+            Showing {{ results|length }} of {{ total_matches }} records
+          {% else %}
+            {{ results|length }} record{% if results|length != 1 %}s{% endif %} found
+          {% endif %}
+        </span>
       </div>
 
       <div class="search-results-body">
@@ -183,4 +189,8 @@
       </div>
     </section>
   </div>
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{{ url_for('static', filename='js/search_records.js') }}?v=type-live-1"></script>
 {% endblock %}

@@ -6,7 +6,12 @@
 
 {% block content %}
   {% set review_title = 'Review Marriage Certificate' %}
+  {% if not image_filename %}
+    {% set hero_kicker = 'Manual entry' %}
+    {% set review_sub = 'No scan is required. Fill the fields, then confirm to save. Original certificate can stay empty.' %}
+  {% endif %}
   {% include '_form_review_hero.html' %}
+  {% include '_blank_form_type_nav.html' %}
 
   <form method="post" action="{{ url_for('confirm', doc_type='marriage') }}" data-required-review="1" novalidate>
     <input type="hidden" name="image_filename" value="{{ image_filename }}" />
@@ -25,7 +30,7 @@
             {% set document_viewer_fit = 'fill' %}
             {% include '_document_viewer.html' %}
           {% else %}
-            <p class="scan-preview-empty">No scanned image is attached to this review. Go to Scan Workflow, choose a document, and run OCR again.</p>
+            {% include '_form_original_empty.html' %}
           {% endif %}
         </div>
       </div>

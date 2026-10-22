@@ -110,6 +110,7 @@
     </div>
   </form>
 
+  <div id="reg-book" class="reg-book">
   <div class="reg-status">
     <span class="reg-status-meta">
       {% if find_q %}
@@ -155,5 +156,9 @@
     {% endif %}
     </div>
   </div>
-  <script src="{{ url_for('static', filename='js/civil_registry_reports.js') }}"></script>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{{ url_for('static', filename='js/civil_registry_reports.js') }}?v=form-swap-1"></script>
 {% endblock %}

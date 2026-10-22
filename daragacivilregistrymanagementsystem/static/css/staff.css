@@ -597,6 +597,77 @@ body.page-staff-requests .staff-print-requests-table .btn-view-record {
   min-width: 0;
 }
 
+body.page-form-review .blank-form-type-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 8px;
+}
+body.page-form-review .blank-form-type-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand-blue);
+}
+body.page-form-review .blank-form-type-row {
+  display: inline-flex;
+  gap: 6px;
+}
+body.page-form-review .blank-form-type-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 32, 128, 0.22);
+  background: #fff;
+  color: var(--brand-blue);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+body.page-form-review .blank-form-type-btn.is-active {
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
+  color: #fff;
+}
+body.page-form-review .form-review-empty-cert {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  min-height: 12rem;
+  margin: 10px;
+  padding: 16px 14px;
+  border: 1px dashed rgba(100, 116, 139, 0.35);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+body.page-form-review .form-review-empty-cert-ic {
+  color: #64748b;
+  display: flex;
+}
+body.page-form-review .form-review-empty-cert-ic svg {
+  width: 28px;
+  height: 28px;
+}
+body.page-form-review .form-review-empty-cert-title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #1e3a67;
+}
+body.page-form-review .form-review-empty-cert-text {
+  margin: 0;
+  max-width: 22rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #64748b;
+}
 /* OCR review + archived record detail (staff + admin) */
 body.page-form-review .main,
 body.page-record-detail .main {

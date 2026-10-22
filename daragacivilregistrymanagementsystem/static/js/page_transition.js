@@ -100,39 +100,40 @@
     });
   }
 
-  function extraHeadNodes(doc) {
-    var start = doc.querySelector('meta[name="cr-extra-head"]');
-    var end = doc.querySelector('meta[name="cr-extra-head-end"]');
-    var nodes = [];
-    if (!start || !end) return nodes;
-    var node = start.nextSibling;
-    while (node && node !== end) {
-      nodes.push(node);
-      node = node.nextSibling;
-    }
-    return nodes;
-  }
-
-  function replaceExtraHead(doc) {
-    var start = document.querySelector('meta[name="cr-extra-head"]');
-    var end = document.querySelector('meta[name="cr-extra-head-end"]');
-    if (!start || !end) return;
+  function replaceHeadSlice(startName, endName, doc) {
+    var start = document.querySelector('meta[name="' + startName + '"]');
+    var end = document.querySelector('meta[name="' + endName + '"]');
+    var srcStart = doc.querySelector('meta[name="' + startName + '"]');
+    var srcEnd = doc.querySelector('meta[name="' + endName + '"]');
+    if (!start || !end || !srcStart || !srcEnd) return;
     while (start.nextSibling && start.nextSibling !== end) {
       start.parentNode.removeChild(start.nextSibling);
     }
-    extraHeadNodes(doc).forEach(function (node) {
-      if (node.nodeType === 3 && !String(node.textContent || "").trim()) return;
-      if (node.nodeType === 1 && (node.tagName === "STYLE" || node.tagName === "LINK")) {
-        var fresh = document.createElement(node.tagName.toLowerCase());
-        Array.prototype.slice.call(node.attributes).forEach(function (attr) {
-          fresh.setAttribute(attr.name, attr.value);
-        });
-        if (node.tagName === "STYLE") fresh.textContent = node.textContent;
-        end.parentNode.insertBefore(fresh, end);
-        return;
+    var node = srcStart.nextSibling;
+    while (node && node !== srcEnd) {
+      var next = node.nextSibling;
+      if (!(node.nodeType === 3 && !String(node.textContent || "").trim())) {
+        if (node.nodeType === 1 && (node.tagName === "STYLE" || node.tagName === "LINK")) {
+          var fresh = document.createElement(node.tagName.toLowerCase());
+          Array.prototype.slice.call(node.attributes).forEach(function (attr) {
+            fresh.setAttribute(attr.name, attr.value);
+          });
+          if (node.tagName === "STYLE") fresh.textContent = node.textContent;
+          end.parentNode.insertBefore(fresh, end);
+        } else {
+          end.parentNode.insertBefore(document.importNode(node, true), end);
+        }
       }
-      end.parentNode.insertBefore(document.importNode(node, true), end);
-    });
+      node = next;
+    }
+  }
+
+  function replaceExtraHead(doc) {
+    replaceHeadSlice("cr-extra-head", "cr-extra-head-end", doc);
+  }
+
+  function replaceAfterTheme(doc) {
+    replaceHeadSlice("cr-after-theme", "cr-after-theme-end", doc);
   }
 
   function runScriptsBetween(start, end) {
@@ -214,6 +215,22 @@
     return path === "/administration";
   }
 
+  function reportsPath(url) {
+    var path = String(url.pathname || "").replace(/\/+$/, "") || "/";
+    return path === "/administration/reports";
+  }
+
+  function searchPath(url) {
+    var path = String(url.pathname || "").replace(/\/+$/, "") || "/";
+    return path === "/search";
+  }
+
+  function syncReportsChrome(doc) {
+    var liveBar = document.querySelector(".reg-toolbar");
+    var nextBar = doc.querySelector(".reg-toolbar");
+    if (liveBar && nextBar) liveBar.innerHTML = nextBar.innerHTML;
+  }
+
   function syncAdminChrome(doc) {
     var curTabs = document.querySelector(".admin-tabs");
     var nextTabs = doc.querySelector(".admin-tabs");
@@ -274,10 +291,20 @@
     document.documentElement.classList.add("cr-navigating");
     page.classList.remove("is-entering");
     var panel = document.getElementById("admin-panel");
+    var book = document.getElementById("reg-book");
+    var results = document.getElementById("search-results");
     var panelNav = Boolean(panel && adminShellPath(url));
+    var bookNav = Boolean(book && reportsPath(url) && reportsPath(location));
+    var searchNav = Boolean(results && searchPath(url) && searchPath(location));
     if (panelNav) {
       panel.classList.remove("is-entering");
       panel.classList.add("is-leaving");
+    } else if (bookNav) {
+      book.classList.remove("is-entering");
+      book.classList.add("is-leaving");
+    } else if (searchNav) {
+      results.classList.remove("is-entering");
+      results.classList.add("is-leaving");
     } else {
       page.classList.add("is-leaving");
     }
@@ -323,12 +350,26 @@
           return;
         }
         var nextPanel = parsed.getElementById("admin-panel");
+        var nextBook = parsed.getElementById("reg-book");
         var stayInAdmin = Boolean(
           document.getElementById("admin-panel") &&
             nextPanel &&
             document.querySelector(".admin-tabs") &&
             parsed.querySelector(".admin-tabs") &&
             adminShellPath(payload.finalUrl)
+        );
+        var stayInReports = Boolean(
+          document.getElementById("reg-book") &&
+            nextBook &&
+            reportsPath(payload.finalUrl) &&
+            document.body.classList.contains("page-registry-reports")
+        );
+        var nextResults = parsed.getElementById("search-results");
+        var stayInSearch = Boolean(
+          document.getElementById("search-results") &&
+            nextResults &&
+            searchPath(payload.finalUrl) &&
+            document.body.classList.contains("page-search")
         );
         if (stayInAdmin) {
           var livePanel = document.getElementById("admin-panel");
@@ -343,8 +384,31 @@
           livePanel.scrollTop = 0;
           livePanel.classList.remove("is-leaving");
           livePanel.classList.add("is-entering");
+        } else if (stayInReports) {
+          var liveBook = document.getElementById("reg-book");
+          syncReportsChrome(parsed);
+          liveBook.innerHTML = nextBook.innerHTML;
+          document.body.className = parsed.body ? parsed.body.className : document.body.className;
+          if (parsed.title) document.title = parsed.title;
+          syncChrome(parsed);
+          adoptToasts(parsed);
+          runScripts(liveBook);
+          liveBook.scrollTop = 0;
+          liveBook.classList.remove("is-leaving");
+          liveBook.classList.add("is-entering");
+        } else if (stayInSearch) {
+          var liveResults = document.getElementById("search-results");
+          liveResults.innerHTML = nextResults.innerHTML;
+          document.body.className = parsed.body ? parsed.body.className : document.body.className;
+          if (parsed.title) document.title = parsed.title;
+          syncChrome(parsed);
+          adoptToasts(parsed);
+          runScripts(liveResults);
+          liveResults.classList.remove("is-leaving");
+          liveResults.classList.add("is-entering");
         } else {
           replaceExtraHead(parsed);
+          replaceAfterTheme(parsed);
           runScriptsBetween(
             document.querySelector('meta[name="cr-extra-head"]'),
             document.querySelector('meta[name="cr-extra-head-end"]')

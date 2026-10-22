@@ -2642,25 +2642,38 @@ def api_notifications_read_all():
 @app.route("/workflow/autofilled-form")
 @login_required
 def autofilled_form_latest():
-    """Sidebar link: open the unsaved OCR review, or send staff back to scan."""
+    """Sidebar link: open the unsaved OCR review, or a blank form if nothing was scanned."""
     job_id = session.get("last_ocr_job_id")
-    if not job_id:
-        flash("Scan a new document and run OCR first. Auto-Filled Form opens after OCR, before you save.")
-        return redirect(url_for("index"))
-    with _OCR_JOBS_LOCK:
-        job = _OCR_JOBS.get(job_id)
-        status = job.get("status") if job else None
-        image_filename = (job.get("image_filename") if job else "") or ""
-    if not job or status != "done":
-        if status in ("queued", "running"):
+    if job_id:
+        with _OCR_JOBS_LOCK:
+            job = _OCR_JOBS.get(job_id)
+            status = job.get("status") if job else None
+            image_filename = (job.get("image_filename") if job else "") or ""
+        if job and status in ("queued", "running"):
             flash("OCR is still running. Wait for it to finish, then open Auto-Filled Form.")
             return redirect(url_for("index"))
-        flash("That OCR review is no longer available. Scan a new document and run OCR again.")
-        return redirect(url_for("index"))
-    if image_filename and not _existing_upload_relpath(image_filename):
-        flash("The scanned image for this review is missing. Scan the document again.")
-        return redirect(url_for("index"))
-    return redirect(url_for("ocr_result", job_id=job_id))
+        if job and status == "done":
+            if image_filename and not _existing_upload_relpath(image_filename):
+                flash("The scanned image for this review is missing. Scan the document again.")
+                return redirect(url_for("index"))
+            return redirect(url_for("ocr_result", job_id=job_id))
+        session.pop("last_ocr_job_id", None)
+        session.modified = True
+
+    doc_type = (request.args.get("doc_type") or "birth").strip().lower()
+    if doc_type not in DOCUMENT_TYPES:
+        doc_type = "birth"
+    return render_template(
+        f"form_{doc_type}.html",
+        doc_type=doc_type,
+        doc_label=DOCUMENT_TYPES[doc_type],
+        data={},
+        image_filename="",
+        blank_entry=True,
+        current_user=get_current_user(),
+        nav_active="form",
+        can_print=user_can_print_during_review(get_current_user()),
+    )
 
 
 @app.route("/workflow/autofilled-form/cancel", methods=["POST"])
@@ -3012,6 +3025,8 @@ def _apply_mother_name_filter(query, mother_name: str):
 @login_required
 def search_records():
     results = []
+    total_matches = 0
+    results_capped = False
     registry_number = (request.args.get("registry_number") or request.form.get("registry_number") or "").strip()
     full_name = (request.args.get("full_name") or request.form.get("full_name") or "").strip()
     mother_name = (request.args.get("mother_name") or request.form.get("mother_name") or "").strip()
@@ -3029,7 +3044,9 @@ def search_records():
             q = q.filter(Record.document_type == document_type)
         if event_date:
             q = q.filter(Record.event_date.ilike(f"%{event_date}%"))
-        results = q.order_by(Record.created_at.desc()).limit(100).all()
+        total_matches = q.order_by(None).count()
+        results = q.order_by(Record.created_at.desc()).limit(1000).all()
+        results_capped = total_matches > 1000
 
     search_performed = request.method == "POST" or bool(
         registry_number or full_name or mother_name or document_type or event_date
@@ -3040,6 +3057,8 @@ def search_records():
         current_user=get_current_user(),
         nav_active="search",
         results=results,
+        total_matches=total_matches,
+        results_capped=results_capped,
         search_performed=search_performed,
         registry_number=registry_number,
         full_name=full_name,
