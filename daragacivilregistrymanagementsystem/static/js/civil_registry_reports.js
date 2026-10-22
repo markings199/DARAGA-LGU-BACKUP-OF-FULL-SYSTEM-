@@ -66,11 +66,24 @@
     function onWheel(event) {
       if (event.ctrlKey) return;
       var canX = scroller.scrollWidth > scroller.clientWidth + 2;
-      if (!canX) return;
-      var goingSideways = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
-      if (!goingSideways) return;
-      event.preventDefault();
-      scroller.scrollLeft += event.deltaX || event.deltaY;
+      var canY = scroller.scrollHeight > scroller.clientHeight + 2;
+      if (!canX && !canY) return;
+      var dx = event.deltaX || 0;
+      var dy = event.deltaY || 0;
+      if (event.shiftKey && canX) {
+        event.preventDefault();
+        scroller.scrollLeft += dy || dx;
+        return;
+      }
+      if (canX && Math.abs(dx) > Math.abs(dy)) {
+        event.preventDefault();
+        scroller.scrollLeft += dx;
+        return;
+      }
+      if (canY && Math.abs(dy) >= Math.abs(dx)) {
+        event.preventDefault();
+        scroller.scrollTop += dy;
+      }
     }
     scroller.addEventListener("wheel", onWheel, { passive: false });
     return function () {
@@ -199,7 +212,7 @@
     var undos = [];
     var findInput = document.getElementById("reg-find-q");
     if (findInput) undos.push(bindFind(findInput));
-    undos.push(bindSelectWheel(Array.prototype.slice.call(document.querySelectorAll(".reg-toolbar select"))));
+    undos.push(bindSelectWheel(Array.prototype.slice.call(document.querySelectorAll(".reg-toolbar select, .reg-year-input"))));
     var form = document.querySelector(".reg-form");
     var scroller = document.querySelector(".reg-scroll");
     var stage = document.querySelector(".reg-zoom-stage");

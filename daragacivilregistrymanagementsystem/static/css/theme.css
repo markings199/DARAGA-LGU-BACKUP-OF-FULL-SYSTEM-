@@ -684,9 +684,71 @@
   color: #bfdbfe;
 }
 [data-theme="dark"] body.page-administration .admin-requests-table .reject-input {
-  background: #0f172a;
+  background: #1e293b;
   border-color: rgba(148, 163, 184, 0.45);
   color: #e2e8f0;
+}
+html[data-theme="dark"] body.page-administration .admin-section.main-card {
+  background: #161f2e !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+  color: #f1f5f9 !important;
+}
+html[data-theme="dark"] body.page-administration .admin-requests-table-wrap,
+html[data-theme="dark"] body.page-administration .admin-requests-table {
+  background: #121a27 !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}
+html[data-theme="dark"] body.page-administration .admin-requests-table tbody td {
+  background: #121a27 !important;
+  color: #f1f5f9 !important;
+  border-bottom-color: rgba(148, 163, 184, 0.16) !important;
+}
+html[data-theme="dark"] body.page-administration .admin-requests-table tbody tr:nth-child(even) td {
+  background: #182233 !important;
+  color: #f1f5f9 !important;
+}
+html[data-theme="dark"] body.page-administration .admin-requests-table tbody tr:hover td {
+  background: #1e2a3d !important;
+  color: #ffffff !important;
+}
+html[data-theme="dark"] body.page-administration .admin-approval-code {
+  color: #fbbf24 !important;
+}
+html[data-theme="dark"] body.page-administration .admin-requests-table .col-record,
+html[data-theme="dark"] body.page-administration .admin-requests-table a {
+  color: #93c5fd !important;
+}
+html[data-theme="dark"] body.page-administration .admin-requests-table .reject-input {
+  background: #1e293b !important;
+  border-color: rgba(148, 163, 184, 0.45) !important;
+  color: #f8fafc !important;
+  color-scheme: dark;
+}
+html[data-theme="dark"] body.page-administration .admin-requests-table .reject-input::placeholder {
+  color: #94a3b8 !important;
+}
+html[data-theme="dark"] body.page-administration .admin-requests-table .btn-secondary,
+html[data-theme="dark"] body.page-administration .admin-requests-table .col-view .btn-sm {
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(148, 163, 184, 0.4) !important;
+}
+html[data-theme="dark"] body.page-administration .note-fold-preview,
+html[data-theme="dark"] body.page-administration .note-empty,
+html[data-theme="dark"] body.page-administration .section-desc {
+  color: #e2e8f0 !important;
+}
+html:not([data-theme="dark"]) body.page-administration .admin-requests-table tbody td {
+  color: #1e293b;
+}
+html:not([data-theme="dark"]) body.page-administration .admin-requests-table .reject-input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  color-scheme: light;
+}
+html:not([data-theme="dark"]) body.page-administration .admin-approval-code {
+  color: #002080 !important;
 }
 [data-theme="dark"] body.page-administration .admin-edit-requests-table .col-view .btn-sm,
 [data-theme="dark"] body.page-administration .admin-print-requests-table .col-view .btn-sm {

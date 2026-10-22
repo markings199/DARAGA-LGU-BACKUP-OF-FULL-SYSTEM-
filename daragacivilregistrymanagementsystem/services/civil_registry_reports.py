@@ -28,6 +28,21 @@ MONTHS = {
     "DECEMBER": "12", "DEC": "12",
 }
 
+REGISTER_YEAR_START = 2026
+REGISTER_ROWS_PER_PAGE = 25
+
+
+def register_print_sheets(rows, size: int = REGISTER_ROWS_PER_PAGE) -> List[dict]:
+    """Split register rows into official 25-line sheets, padding each sheet."""
+    data = list(rows or [])
+    if not data:
+        return [{"rows": [], "pad": size}]
+    sheets = []
+    for i in range(0, len(data), size):
+        chunk = data[i:i + size]
+        sheets.append({"rows": chunk, "pad": size - len(chunk)})
+    return sheets
+
 PLACE_KEYS_BY_TYPE = {
     "birth": ("Place of Birth", "Place of Marriage of Parents"),
     "death": ("Place of Death",),
@@ -319,22 +334,36 @@ def record_place_texts(doc_type: str, data: dict) -> List[str]:
     return out
 
 
+def _calendar_year(value) -> Optional[int]:
+    try:
+        year = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    if 1800 <= year <= 2200:
+        return year
+    return None
+
+
 def collect_filter_options(rows: Iterable[dict]) -> Tuple[List[str], List[str], List[str]]:
     years = set()
     barangays = set()
     locations = set()
     for row in rows:
         for y in row.get("_years") or []:
-            if y:
-                years.add(str(y))
+            year = _calendar_year(y)
+            if year is not None and year >= REGISTER_YEAR_START:
+                years.add(str(year))
         for b in row.get("_barangays") or []:
             if b:
                 barangays.add(b)
         for loc in row.get("_locations") or []:
             if loc:
                 locations.add(loc)
+    this_year = datetime.now().year
+    for year in range(REGISTER_YEAR_START, max(this_year, REGISTER_YEAR_START) + 1):
+        years.add(str(year))
     return (
-        sorted(years, reverse=True),
+        sorted(years),
         sorted(barangays, key=str.lower),
         sorted(locations, key=str.lower),
     )
@@ -486,8 +515,14 @@ def marriage_row(record, data: dict) -> dict:
 
 
 def row_matches_filters(row: dict, year: str, barangay: str, location: str) -> bool:
-    if year and year not in {str(y) for y in (row.get("_years") or [])}:
+    row_years = {_calendar_year(y) for y in (row.get("_years") or [])}
+    row_years.discard(None)
+    if not any(value >= REGISTER_YEAR_START for value in row_years):
         return False
+    want = _calendar_year(year)
+    if want is not None:
+        if want < REGISTER_YEAR_START or want not in row_years:
+            return False
     if barangay:
         needle = barangay.strip().lower()
         hay = " ".join(row.get("_barangays") or []).lower() + " " + " ".join(row.get("_places") or []).lower()

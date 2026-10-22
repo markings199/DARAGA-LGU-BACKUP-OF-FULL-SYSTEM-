@@ -258,6 +258,11 @@ body.page-registry-reports.reg-focus .reg-status {
   font-size: 0.78rem;
   font-weight: 700;
 }
+.page-registry-reports .reg-year-input {
+  width: 5.6rem;
+  min-width: 5.6rem;
+  max-width: 5.6rem;
+}
 .page-registry-reports .reg-find-field {
   min-width: 12rem;
   flex: 1 1 16rem;
@@ -360,14 +365,25 @@ body.page-registry-reports.reg-focus .reg-status {
   margin-left: 8px;
   color: #94a3b8;
 }
+body.page-registry-reports #reg-book {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+body.page-registry-reports #reg-book .reg-status {
+  flex: 0 0 auto;
+}
 .page-registry-reports .reg-scroll {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
   width: 100%;
   max-width: 100%;
-  overflow-x: auto;
-  overflow-y: auto;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   background: #fff;
@@ -383,7 +399,8 @@ body.page-registry-reports.reg-focus .reg-scroll {
   padding: 8px 20px 14px 10px;
 }
 body.page-registry-reports.reg-focus.reg-is-fitted .reg-scroll {
-  overflow-x: auto;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
 }
 body.page-registry-reports.reg-focus.reg-is-fitted .reg-zoom-stage,
 body.page-registry-reports.reg-focus.reg-is-fitted .reg-form,
@@ -867,10 +884,28 @@ body.page-registry-reports.reg-focus #register-marriage .reg-table tbody td {
   font-size: 7px;
 }
 
+.reg-print-sheet {
+  display: none;
+}
+
 @media print {
   @page {
-    size: legal landscape;
-    margin: 7mm 8mm 10mm;
+    size: 14in 8.5in landscape;
+    margin: 6mm 7mm 7mm;
+  }
+  html,
+  body,
+  body.page-registry-reports,
+  body.page-registry-reports .layout,
+  body.page-registry-reports .main,
+  body.page-registry-reports #cr-page,
+  body.page-registry-reports #reg-book,
+  .page-registry-reports .reg-scroll,
+  .page-registry-reports .reg-zoom-stage {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    transform: none !important;
   }
   body.page-registry-reports {
     overflow: visible;
@@ -924,30 +959,77 @@ body.page-registry-reports.reg-focus #register-marriage .reg-table tbody td {
     height: 18px;
   }
   #register-birth.reg-form,
-  #register-birth .reg-table {
+  .register-birth.reg-form,
+  #register-birth .reg-table,
+  .register-birth .reg-table {
     min-width: 0;
     width: 100%;
   }
-  #register-birth .reg-table {
-    font-size: 8px;
+  #register-birth.reg-form,
+  .register-birth.reg-form {
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
-  #register-birth .reg-table tbody td {
-    height: 17px;
-    font-size: 8px;
+  .reg-print-sheet {
+    display: block !important;
+    page-break-before: always;
+    break-before: page;
   }
-  #register-birth .cell-place {
-    white-space: normal;
-    word-break: normal;
-    overflow-wrap: anywhere;
+  #register-birth .reg-table,
+  .register-birth .reg-table {
+    font-size: 7.2px;
   }
-  #register-birth .reg-form-title h2 {
-    font-size: 13px;
+  #register-birth .reg-table thead th,
+  .register-birth .reg-table thead th {
+    font-size: 6.6px;
+    line-height: 1.05;
+    padding: 1px 2px;
+  }
+  #register-birth .reg-table tbody tr,
+  .register-birth .reg-table tbody tr,
+  #register-birth .reg-table tbody td,
+  .register-birth .reg-table tbody td,
+  #register-birth .reg-table tbody tr.reg-pad-row,
+  .register-birth .reg-table tbody tr.reg-pad-row,
+  #register-birth .reg-table tbody tr.reg-pad-row td,
+  .register-birth .reg-table tbody tr.reg-pad-row td {
+    display: table-row;
+    height: 5.15mm !important;
+    max-height: 5.15mm !important;
+    font-size: 7px !important;
+    padding: 0 2px !important;
+    page-break-inside: avoid;
+  }
+  #register-birth .reg-table tbody td,
+  .register-birth .reg-table tbody td,
+  #register-birth .reg-table tbody tr.reg-pad-row td,
+  .register-birth .reg-table tbody tr.reg-pad-row td {
+    display: table-cell;
+  }
+  #register-birth .cell-place,
+  .register-birth .cell-place {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #register-birth .reg-form-title h2,
+  .register-birth .reg-form-title h2 {
+    font-size: 12px;
   }
   #register-birth .reg-footnotes,
-  #register-birth .reg-cert {
-    font-size: 8px;
+  .register-birth .reg-footnotes,
+  #register-birth .reg-cert,
+  .register-birth .reg-cert {
+    font-size: 7.5px;
   }
-  #register-birth .reg-cert {
+  #register-birth .reg-form-foot,
+  .register-birth .reg-form-foot {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-top: 3mm;
+  }
+  #register-birth .reg-cert,
+  .register-birth .reg-cert {
     display: grid;
     grid-template-columns: 1fr 55mm;
     column-gap: 10mm;

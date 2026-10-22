@@ -4,7 +4,7 @@
 {% block body_class %}page-registry-reports{% if focus %} reg-focus reg-is-fitted{% endif %}{% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/civil_registry_reports.css') }}?v=birth-sign-3" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/civil_registry_reports.css') }}?v=birth-print-25-1" />
 {% endblock %}
 
 {% block content %}
@@ -37,12 +37,21 @@
     </div>
     <label>
       Year
-      <select name="year" onchange="this.form.submit()">
-        <option value="">All years</option>
-        {% for y in year_options %}
-          <option value="{{ y }}" {% if year == y %}selected{% endif %}>{{ y }}</option>
-        {% endfor %}
-      </select>
+      <input
+        class="reg-year-input"
+        type="number"
+        name="year"
+        id="reg-year"
+        min="2026"
+        max="2100"
+        step="1"
+        inputmode="numeric"
+        placeholder="2026"
+        value="{{ year }}"
+        autocomplete="off"
+        aria-label="Year from 2026 up"
+        onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()"
+      />
     </label>
     {% if barangay_options %}
     <label>
@@ -160,5 +169,5 @@
 {% endblock %}
 
 {% block extra_js %}
-  <script src="{{ url_for('static', filename='js/civil_registry_reports.js') }}?v=form-swap-1"></script>
+  <script src="{{ url_for('static', filename='js/civil_registry_reports.js') }}?v=year-type-1"></script>
 {% endblock %}

@@ -151,9 +151,12 @@ html.cr-navigating #search-results.is-leaving {
     display: none !important;
   }
 
-  #cr-page {
+  #cr-page,
+  #reg-book {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 }

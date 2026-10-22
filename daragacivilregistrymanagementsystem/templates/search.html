@@ -34,7 +34,7 @@
               </span>
               Document type
             </label>
-            <select id="search-doctype" name="document_type" required>
+            <select id="search-doctype" name="document_type" required onchange="window.crSubmitSearch ? window.crSubmitSearch(this) : this.form.submit()">
               <option value="" disabled {% if not document_type %}selected{% endif %}>Select type</option>
               {% for key, label in document_types.items() %}
                 <option value="{{ key }}" {% if document_type == key %}selected{% endif %}>{{ label }}</option>
@@ -191,6 +191,3 @@
   </div>
 {% endblock %}
 
-{% block extra_js %}
-  <script src="{{ url_for('static', filename='js/search_records.js') }}?v=type-live-1"></script>
-{% endblock %}

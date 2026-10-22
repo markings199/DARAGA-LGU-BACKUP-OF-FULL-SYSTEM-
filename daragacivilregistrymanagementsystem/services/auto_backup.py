@@ -550,8 +550,10 @@ def describe_backup_copies(local_path: Path, server_status: str, server_detail: 
             return f"Saved on the Daraga LGU server ({server_detail})."
         return "Saved on the Daraga LGU server."
     if server_detail:
-        return f"Not on the Daraga LGU server yet: {server_detail}"
-    return "Not on the Daraga LGU server yet. Connect the office backup folder."
+        return (
+            f"Backup file is ready on this PC. Use Send to Daraga server when the office share is online. ({server_detail})"
+        )
+    return "Backup file is ready on this PC. Use Send to Daraga server when the office share is online."
 
 
 def drop_local_zip_if_server_only(source: Path, server_status: str, base_dir: Path) -> None:
@@ -1092,8 +1094,6 @@ def run_period_backup(
     settings_now = load_settings(base_dir)
     wait = 5.0 if _is_manual_backup_trigger(trigger) else 2.0
     lgu, lgu_err = probe_daraga_official(base_dir, settings_now, wait=wait)
-    if lgu_err and _is_manual_backup_trigger(trigger):
-        return False, lgu_err, ""
     filename = period_filename(kind, period_key)
     rel = str((period_folder(Path("_root"), kind, now) / filename).relative_to(Path("_root"))).replace("\\", "/")
     dest, _on_lgu = _official_write_dest(base_dir, rel, settings_now, wait=wait)
@@ -1158,8 +1158,6 @@ def run_period_backup(
             raise RuntimeError(describe_storage_error(exc, dest)) from exc
         server_status, extra = _finish_official_backup(dest, rel, base_dir, settings_now)
         copies = describe_backup_copies(dest, server_status, extra)
-        if server_status != "ok" and _is_manual_backup_trigger(trigger):
-            raise RuntimeError(copies)
         if not records:
             msg = f"{kind.title()} backup complete. No new scans. {copies}"
         else:
@@ -1275,8 +1273,6 @@ def run_full_backup(
     period_key = schedule_period_key(str(settings_now.get("frequency") or "daily"), now)
     wait = 5.0 if _is_manual_backup_trigger(trigger) else 2.0
     lgu, lgu_err = probe_daraga_official(base_dir, settings_now, wait=wait)
-    if lgu_err and _is_manual_backup_trigger(trigger):
-        return False, lgu_err, ""
     filename = full_backup_filename(str(settings_now.get("frequency") or "daily"), now)
     rel = f"Full/{filename}"
     dest, _on_lgu = _official_write_dest(base_dir, rel, settings_now, wait=wait)
@@ -1329,12 +1325,10 @@ def run_full_backup(
         copies = describe_backup_copies(dest, server_status, extra)
         count = Record.query.count()
         if server_status != "ok":
-            if _is_manual_backup_trigger(trigger):
-                raise RuntimeError(copies)
             run_status = "partial"
             msg = (
-                "Full backup is waiting to be sent to the Daraga LGU server. "
-                f"{extra}"
+                "Full backup created. It is held on this application PC until the Daraga LGU server is online. "
+                f"{extra or copies}"
             )
         else:
             run_status = "success"

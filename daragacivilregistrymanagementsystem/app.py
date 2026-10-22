@@ -193,6 +193,7 @@ from services.civil_registry_reports import (
     birth_row,
     build_xlsx,
     collect_filter_options,
+    register_print_sheets,
     death_excel_row,
     death_row,
     load_record_fields,
@@ -3688,6 +3689,11 @@ def _civil_registry_report_context():
     if doc_type not in DOCUMENT_TYPES:
         doc_type = "birth"
     year = (request.args.get("year") or "").strip()
+    try:
+        year_n = int(year) if year else 0
+        year = str(year_n) if year_n >= 2026 else ""
+    except ValueError:
+        year = ""
     barangay = (request.args.get("barangay") or "").strip()
     location = ""
 
@@ -3727,6 +3733,7 @@ def _civil_registry_report_context():
     page = max(1, min(page, total_pages))
     start = (page - 1) * per_page
     rows = filtered_rows[start:start + per_page]
+    register_pages = register_print_sheets(rows)
     focus = (request.args.get("focus") or "").strip() in {"1", "true", "yes"}
     excel_args = {"doc_type": doc_type}
     if year:
@@ -3773,7 +3780,8 @@ def _civil_registry_report_context():
         "enter_focus_args": enter_focus_args,
         "exit_focus_args": exit_focus_args,
         "doc_links": doc_links,
-        "empty_rows": max(0, min(per_page, 25) - len(rows)) if per_page_arg else 0,
+        "register_pages": register_pages,
+        "empty_rows": register_pages[0]["pad"],
         "page_left": 1,
         "page_right": 2,
         "excel_args": excel_args,

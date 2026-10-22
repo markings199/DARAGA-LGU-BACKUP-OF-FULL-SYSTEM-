@@ -1,4 +1,6 @@
-<div class="reg-form" id="register-birth">
+{% set birth_sheets = register_pages if register_pages is defined and register_pages else [{'rows': rows, 'pad': empty_rows}] %}
+{% for sheet in birth_sheets %}
+<div class="reg-form register-birth{% if not loop.first %} reg-print-sheet{% endif %}"{% if loop.first %} id="register-birth"{% endif %}>
   <div class="reg-form-head">
     <div class="reg-form-id">(Municipal Form No. 26-1, Revised 1984)</div>
     <div class="reg-form-title">
@@ -58,7 +60,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for row in rows %}
+      {% for row in sheet.rows %}
       <tr>
         <td>{{ row.lcr_number }}</td>
         <td>{{ row.date_registration }}</td>
@@ -81,8 +83,8 @@
         <td>{{ row.father_name }}</td>
       </tr>
       {% endfor %}
-      {% for _ in range(empty_rows) %}
-      <tr>
+      {% for _ in range(sheet.pad) %}
+      <tr class="reg-pad-row">
         <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
         <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
       </tr>
@@ -104,3 +106,4 @@
   </div>
   </div>
 </div>
+{% endfor %}
