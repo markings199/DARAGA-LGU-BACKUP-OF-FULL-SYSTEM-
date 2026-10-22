@@ -236,6 +236,13 @@ body.page-administration .admin-section:has(.admin-requests-table-wrap),
 body.page-administration .admin-section:has(.admin-print-requests-table-wrap),
 body.page-administration .admin-section.admin-section--table-scroll {
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: calc(100dvh - 132px);
+}
+body.page-administration:has(.admin-section--table-scroll) .admin-shell {
+  max-width: none;
 }
 body.page-administration .admin-section.main-card > .section-title:first-of-type {
   margin: -12px -12px 8px;
@@ -566,11 +573,43 @@ body.page-administration .admin-log-table a:hover { text-decoration: underline; 
 body.page-administration .admin-requests-table-wrap {
   width: 100%;
   max-width: 100%;
-  margin: 0 2px 8px;
-  padding: 0 6px 8px;
+  margin: 0 0 8px;
+  padding: 0 16px 10px 8px;
   box-sizing: border-box;
   border-radius: 12px;
   border: 1px solid rgba(44, 94, 126, 0.12);
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+body.page-administration .admin-requests-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+body.page-administration .admin-request-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 4px 16px 4px 8px;
+  flex: 0 0 auto;
+}
+body.page-administration .admin-request-pager-meta,
+body.page-administration .admin-request-pager-page {
+  font-size: 0.78rem;
+  color: var(--text-muted, #64748b);
+  font-weight: 650;
+}
+body.page-administration .admin-request-pager-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+body.page-administration .admin-request-pager .btn.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
 }
 body.page-administration .admin-requests-table-wrap .admin-requests-table {
   margin: 0;
@@ -696,16 +735,16 @@ body.page-administration .admin-edit-requests-table td {
   padding: 4px 5px;
 }
 body.page-administration .admin-edit-requests-table .col-id { width: 3.5%; }
-body.page-administration .admin-edit-requests-table .col-record { width: 13%; }
-body.page-administration .admin-edit-requests-table .col-type { width: 7.5%; min-width: 0; }
+body.page-administration .admin-edit-requests-table .col-record { width: 12.5%; }
+body.page-administration .admin-edit-requests-table .col-type { width: 7%; min-width: 0; }
 body.page-administration .admin-edit-requests-table .col-status { width: 8%; }
 body.page-administration .admin-edit-requests-table .col-staff { width: 6%; }
 body.page-administration .admin-edit-requests-table .col-requested { width: 11%; white-space: nowrap; }
-body.page-administration .admin-edit-requests-table .col-reason { width: 11%; }
+body.page-administration .admin-edit-requests-table .col-reason { width: 10%; }
 body.page-administration .admin-edit-requests-table .col-reject { width: 7%; }
-body.page-administration .admin-edit-requests-table .col-code { width: 8%; }
+body.page-administration .admin-edit-requests-table .col-code { width: 9%; }
 body.page-administration .admin-edit-requests-table .col-view { width: 6%; }
-body.page-administration .admin-edit-requests-table .col-actions { width: 19%; min-width: 0; }
+body.page-administration .admin-edit-requests-table .col-actions { width: 20%; min-width: 0; }
 body.page-administration .admin-approval-code {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
@@ -732,8 +771,7 @@ body.page-administration .admin-edit-requests-table .col-record,
 body.page-administration .admin-edit-requests-table .col-type,
 body.page-administration .admin-edit-requests-table .col-status,
 body.page-administration .admin-edit-requests-table .col-staff,
-body.page-administration .admin-edit-requests-table .col-requested,
-body.page-administration .admin-edit-requests-table .col-code {
+body.page-administration .admin-edit-requests-table .col-requested {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -764,14 +802,17 @@ body.page-administration .admin-edit-requests-table .col-code {
 }
 body.page-administration .admin-edit-requests-table .admin-approval-code {
   font-size: 0.78rem;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
 }
 body.page-administration .admin-edit-requests-table .col-actions,
 body.page-administration .admin-edit-requests-table .cell-actions {
   white-space: nowrap !important;
   vertical-align: middle;
-  padding-right: 8px;
+  padding-right: 14px;
   overflow: hidden;
+}
+body.page-administration .admin-edit-requests-table thead .col-actions {
+  padding-right: 14px;
 }
 body.page-administration .admin-edit-requests-table .request-actions {
   display: flex;

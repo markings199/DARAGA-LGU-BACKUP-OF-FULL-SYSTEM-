@@ -291,7 +291,8 @@
       {% with filter_endpoint='administration', filter_id='admin-document-type-filter', admin_tab='edit_requests' %}
         {% include '_staff_request_filters.html' %}
       {% endwith %}
-      {% if edit_requests %}
+      {% if edit_requests or (progress_counts and progress_counts.all) %}
+        {% if edit_requests %}
         <div class="table-wrap admin-requests-table-wrap admin-edit-requests-table-wrap">
           <table class="table admin-requests-table admin-edit-requests-table">
             <thead>
@@ -363,9 +364,12 @@
             </tbody>
           </table>
         </div>
-        <div class="admin-empty" data-staff-filter-empty hidden>
+        {% include '_admin_request_pager.html' %}
+        {% else %}
+        <div class="admin-empty">
           <p>No requests in this status.</p>
         </div>
+        {% endif %}
       {% else %}
         <div class="admin-empty">
           {% if request_doc_type %}
@@ -385,7 +389,8 @@
       {% with filter_endpoint='administration', filter_id='admin-print-doc-type-filter', admin_tab='print_requests' %}
         {% include '_staff_request_filters.html' %}
       {% endwith %}
-      {% if print_requests %}
+      {% if print_requests or (progress_counts and progress_counts.all) %}
+        {% if print_requests %}
         <div class="table-wrap admin-requests-table-wrap admin-edit-requests-table-wrap">
           <table class="table admin-requests-table admin-edit-requests-table">
             <thead>
@@ -465,9 +470,12 @@
             </tbody>
           </table>
         </div>
-        <div class="admin-empty" data-staff-filter-empty hidden>
+        {% include '_admin_request_pager.html' %}
+        {% else %}
+        <div class="admin-empty">
           <p>No requests in this status.</p>
         </div>
+        {% endif %}
       {% else %}
         <div class="admin-empty">
           {% if request_doc_type %}

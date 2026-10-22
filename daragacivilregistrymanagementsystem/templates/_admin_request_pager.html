@@ -1,0 +1,19 @@
+{% set pager = request_pager or {} %}
+{% if pager.get('total') %}
+<nav class="admin-request-pager" aria-label="Request pages">
+  <span class="admin-request-pager-meta">Showing {{ pager.start }}–{{ pager.end }} of {{ pager.total }}</span>
+  <span class="admin-request-pager-nav">
+    {% if pager.has_prev %}
+      <a class="btn btn-secondary btn-sm" href="{{ url_for('administration', page=pager.page - 1, **request_list_args) }}">Previous</a>
+    {% else %}
+      <span class="btn btn-secondary btn-sm is-disabled" aria-disabled="true">Previous</span>
+    {% endif %}
+    <span class="admin-request-pager-page">Page {{ pager.page }} of {{ pager.pages }}</span>
+    {% if pager.has_next %}
+      <a class="btn btn-secondary btn-sm" href="{{ url_for('administration', page=pager.page + 1, **request_list_args) }}">Next</a>
+    {% else %}
+      <span class="btn btn-secondary btn-sm is-disabled" aria-disabled="true">Next</span>
+    {% endif %}
+  </span>
+</nav>
+{% endif %}

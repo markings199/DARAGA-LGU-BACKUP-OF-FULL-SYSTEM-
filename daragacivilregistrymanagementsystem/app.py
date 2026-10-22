@@ -89,6 +89,7 @@ from pathlib import Path
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, send_file, jsonify
 from sqlalchemy import and_, or_
+from sqlalchemy.orm import joinedload
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -712,6 +713,67 @@ def _filter_staff_print_progress(query, progress: str | None):
             )
         )
     return query
+
+
+ADMIN_REQUEST_PAGE_SIZE = 50
+
+
+def _admin_request_query_args(tab, doc_type=None, progress=None):
+    args = {"tab": tab}
+    if doc_type:
+        args["doc_type"] = doc_type
+    if progress:
+        args["status"] = progress
+    return args
+
+
+def _paged_admin_requests(model, doc_type, progress, page_arg):
+    """Load one page of edit/print requests with real totals for large queues."""
+    q = model.query
+    if doc_type:
+        q = q.filter(model.record.has(Record.document_type == doc_type))
+    all_count = q.order_by(None).count()
+    pending_count = q.filter(model.status == "PENDING").order_by(None).count()
+    listed = q
+    if progress == "pending":
+        listed = listed.filter(model.status == "PENDING")
+    elif progress == "complete":
+        listed = listed.filter(model.status != "PENDING")
+    try:
+        page = int(page_arg or 1)
+    except (TypeError, ValueError):
+        page = 1
+    page = max(1, page)
+    per_page = ADMIN_REQUEST_PAGE_SIZE
+    total = listed.order_by(None).count()
+    pages = max(1, (total + per_page - 1) // per_page) if total else 1
+    if page > pages:
+        page = pages
+    rows = (
+        listed.options(joinedload(model.record), joinedload(model.requested_by))
+        .order_by(model.requested_at.desc(), model.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    start = 0 if total == 0 else (page - 1) * per_page + 1
+    end = min(total, page * per_page)
+    pager = {
+        "page": page,
+        "pages": pages,
+        "per_page": per_page,
+        "total": total,
+        "start": start,
+        "end": end,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+    }
+    counts = {
+        "all": all_count,
+        "pending": pending_count,
+        "complete": max(0, all_count - pending_count),
+    }
+    return rows, counts, pager
 
 
 def _admin_edit_requests_redirect():
@@ -3554,36 +3616,22 @@ def administration():
         tab = "dashboard"
     _mark_admin_tab_seen(tab)
     request_doc_type = _parse_doc_type_filter_arg(request.args.get("doc_type"))
-    request_progress = None
+    request_progress = _parse_request_progress_arg(request.args.get("status"))
     progress_counts = {"all": 0, "pending": 0, "complete": 0}
+    request_pager = {"page": 1, "pages": 1, "total": 0, "start": 0, "end": 0, "has_prev": False, "has_next": False, "per_page": ADMIN_REQUEST_PAGE_SIZE}
+    request_list_args = _admin_request_query_args(tab, request_doc_type, request_progress)
     edit_requests_list = []
-    if tab == "edit_requests":
-        edit_requests_q = EditRequest.query
-        if request_doc_type:
-            edit_requests_q = edit_requests_q.join(Record, EditRequest.record_id == Record.id).filter(
-                Record.document_type == request_doc_type
-            )
-        edit_requests_list = edit_requests_q.order_by(EditRequest.requested_at.desc()).limit(200).all()
-        request_progress = _parse_request_progress_arg(request.args.get("status"))
-        progress_counts = {
-            "all": len(edit_requests_list),
-            "pending": sum(1 for req in edit_requests_list if (req.status or "").upper() == "PENDING"),
-            "complete": sum(1 for req in edit_requests_list if (req.status or "").upper() != "PENDING"),
-        }
     print_requests_list = []
-    if tab == "print_requests":
-        print_requests_q = PrintRequest.query
-        if request_doc_type:
-            print_requests_q = print_requests_q.join(Record, PrintRequest.record_id == Record.id).filter(
-                Record.document_type == request_doc_type
-            )
-        print_requests_list = print_requests_q.order_by(PrintRequest.requested_at.desc()).limit(200).all()
-        request_progress = _parse_request_progress_arg(request.args.get("status"))
-        progress_counts = {
-            "all": len(print_requests_list),
-            "pending": sum(1 for req in print_requests_list if (req.status or "").upper() == "PENDING"),
-            "complete": sum(1 for req in print_requests_list if (req.status or "").upper() != "PENDING"),
-        }
+    if tab == "edit_requests":
+        edit_requests_list, progress_counts, request_pager = _paged_admin_requests(
+            EditRequest, request_doc_type, request_progress, request.args.get("page")
+        )
+        request_list_args = _admin_request_query_args(tab, request_doc_type, request_progress)
+    elif tab == "print_requests":
+        print_requests_list, progress_counts, request_pager = _paged_admin_requests(
+            PrintRequest, request_doc_type, request_progress, request.args.get("page")
+        )
+        request_list_args = _admin_request_query_args(tab, request_doc_type, request_progress)
     audit_logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(100).all() if tab == "audit" else []
     users_list = []
     password_target = None
@@ -3666,6 +3714,8 @@ def administration():
         request_doc_type=request_doc_type,
         request_progress=request_progress,
         progress_counts=progress_counts,
+        request_pager=request_pager,
+        request_list_args=request_list_args,
         auto_backup_settings=auto_backup_settings,
         auto_backup_files=auto_backup_files,
         backup_history=backup_history,
@@ -4114,12 +4164,14 @@ def _persist_server_path_from_form() -> Optional[str]:
     trial = dict(settings)
     trial["destination_path"] = raw
     folder, dest_error = resolve_server_backup_root(BASE_DIR, trial)
-    if dest_error:
-        settings["destination_path"] = raw
-        save_auto_backup_settings(BASE_DIR, settings)
-        return None
     settings["destination_path"] = raw
     save_auto_backup_settings(BASE_DIR, settings)
+    if dest_error:
+        return dest_error
+    if folder is not None:
+        write_err = ensure_backup_dir_writable(folder)
+        if write_err:
+            return write_err
     return None
 
 
@@ -4152,7 +4204,10 @@ def administration_auto_backup_run_now():
     """Create a backup immediately on office-server storage (no workstation copy)."""
     dest_err = _persist_server_path_from_form()
     if dest_err:
-        flash(dest_err, "error")
+        flash(
+            dest_err + " The zip will still be created and held until you use Send to Daraga server.",
+            "error",
+        )
     (ok, message, rel_file), kind = _run_requested_backup(request.form.get("backup_kind"), "manual")
     _flash_backup_result(ok, message or f"Backup created: {rel_file}")
     return redirect(url_for("administration", tab="automatic_backup"))
@@ -4165,7 +4220,6 @@ def administration_auto_backup_get_now():
     dest_err = _persist_server_path_from_form()
     if dest_err:
         flash(dest_err, "error")
-        return redirect(url_for("administration", tab="automatic_backup"))
     copied, failed, err = sync_local_backups_to_server(BASE_DIR)
     if copied:
         flash(f"Sent {copied} backup(s) to the Daraga LGU server.", "success")
@@ -4183,7 +4237,7 @@ def administration_auto_backup_get_now():
 @admin_required
 def administration_auto_backup_retry(run_id):
     """Retry a failed date-based backup for the same period."""
-    row = BackupRun.query.get(run_id)
+    row = db.session.get(BackupRun, run_id)
     if row is None:
         flash("Backup history entry not found.", "error")
         return redirect(url_for("administration", tab="automatic_backup"))
@@ -5661,6 +5715,8 @@ def _print_startup_banner(host: str, port: int) -> None:
     print("-" * 62, flush=True)
     print("  Status   Ready", flush=True)
     print("  Database PostgreSQL", flush=True)
+    if (os.environ.get("SECRET_KEY") or "").strip() in ("", "change-this-secret-key"):
+        print("  Warning  Set SECRET_KEY in .env before office go-live", flush=True)
     print(f"  This PC  {local_url}", flush=True)
     try:
         from services.lgu_office import is_lgu_office_server, lgu_server_computer_name

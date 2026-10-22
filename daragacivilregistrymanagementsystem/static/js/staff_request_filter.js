@@ -86,7 +86,20 @@
       if (!root) return;
       event.preventDefault();
       event.stopPropagation();
-      apply(root, btn.getAttribute("data-status") || "", true);
+      var status = btn.getAttribute("data-status") || "";
+      if (root.getAttribute("data-filter-mode") === "navigate") {
+        try {
+          var url = new URL(window.location.href);
+          if (status) url.searchParams.set("status", status);
+          else url.searchParams.delete("status");
+          url.searchParams.delete("page");
+          window.location.assign(url.pathname + url.search + url.hash);
+        } catch (e) {
+          apply(root, status, true);
+        }
+        return;
+      }
+      apply(root, status, true);
     },
     true
   );

@@ -6,6 +6,7 @@ import logging
 import os
 import csv
 import shutil
+import tempfile
 import threading
 import time
 import zipfile
@@ -941,10 +942,17 @@ def _record_to_manifest(record) -> dict[str, Any]:
     }
 
 
+def _temp_json_path(stem: str) -> Path:
+    """Local temp JSON next to the zip is slower/riskier on a UNC share."""
+    fd, name = tempfile.mkstemp(prefix=f"{stem}_", suffix=".json")
+    os.close(fd)
+    return Path(name)
+
+
 def write_period_documents_zip(dest_path: Path, records: list[Any], resolve_upload: Callable[[str], Optional[Path]]) -> int:
     """Copy that period's records and their scans into a zip. Does not change originals."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
-    dump_tmp = dest_path.parent / f"{dest_path.stem}_database.json"
+    dump_tmp = _temp_json_path(dest_path.stem[:40] or "period_backup")
     copied = 0
     try:
         from services.postgres_backup import dump_period_records_json
@@ -1209,7 +1217,7 @@ def write_full_backup_zip(
 ) -> None:
     """Write a full backup zip (PostgreSQL dump + uploads) to dest_path."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
-    dump_tmp = dest_path.parent / f"{dest_path.stem}_database.json"
+    dump_tmp = _temp_json_path(dest_path.stem[:40] or "full_backup")
     try:
         with zipfile.ZipFile(dest_path, "w", zipfile.ZIP_DEFLATED) as zf:
             from services.postgres_backup import dump_database_json

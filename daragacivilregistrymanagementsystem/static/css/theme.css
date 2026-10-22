@@ -750,6 +750,10 @@ html:not([data-theme="dark"]) body.page-administration .admin-requests-table .re
 html:not([data-theme="dark"]) body.page-administration .admin-approval-code {
   color: #002080 !important;
 }
+html[data-theme="dark"] body.page-administration .admin-request-pager-meta,
+html[data-theme="dark"] body.page-administration .admin-request-pager-page {
+  color: #cbd5e1 !important;
+}
 [data-theme="dark"] body.page-administration .admin-edit-requests-table .col-view .btn-sm,
 [data-theme="dark"] body.page-administration .admin-print-requests-table .col-view .btn-sm {
   background: rgba(15, 23, 42, 0.65);

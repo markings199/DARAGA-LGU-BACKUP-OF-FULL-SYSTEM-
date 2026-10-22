@@ -219,7 +219,7 @@
                         {% if h.file_rel %}
                           <a href="{{ url_for('administration_auto_backup_download_period', path=h.file_rel) }}" class="btn btn-secondary btn-sm" data-no-page-transition="1">Get</a>
                         {% endif %}
-                        {% if h.status == 'error' %}
+                        {% if h.status in ('error', 'partial') %}
                           <form method="post" action="{{ url_for('administration_auto_backup_retry', run_id=h.id) }}" class="auto-backup-delete-form">
                             <button type="submit" class="btn btn-secondary btn-sm">Retry</button>
                           </form>
