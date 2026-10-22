@@ -34,7 +34,7 @@
     </div>
 
     <div class="main-card form-review-meta record-detail-meta-col">
-      <div class="form-review-card-head">
+      <div class="form-review-card-head" id="extracted-metadata">
         <h2 class="section-title">Extracted metadata</h2>
         <div class="rd-meta-head-aside">
           <span class="rd-meta-head-chip">{{ (record.document_type or 'Record')|capitalize }}</span>
@@ -44,6 +44,13 @@
         </div>
       </div>
 
+      {% if missing_print_fields %}
+        {% if (current_user.role or '')|upper == 'STAFF' %}
+          <p class="review-required-banner" role="alert">Required extracted metadata is incomplete ({% for key in missing_print_fields %}{{ metadata_display_label(key) }}{% if not loop.last %}, {% endif %}{% endfor %}). Request an edit from Admin first. You can request a print only after those fields are filled.</p>
+        {% else %}
+          <p class="review-required-banner" role="alert">Fill every required field marked <span class="field-required-mark" aria-hidden="true">*</span> before printing. Empty dates and names must be completed from the certificate.</p>
+        {% endif %}
+      {% endif %}
       <div class="form-meta-scroll">
         {% if document_annotation(data) %}
           <div class="rd-meta-annotation">
@@ -84,10 +91,14 @@
           <a href="#record-print-section" class="btn btn-primary">Print document</a>
         {% endif %}
         {% if _role == 'STAFF' %}
-          {% if not can_print and not print_unlock_req %}
-            <a href="{{ url_for('request_print', record_id=record.id) }}" class="btn btn-primary">Request print</a>
+          {% if missing_print_fields %}
+            <a href="{{ url_for('request_edit', record_id=record.id) }}" class="btn btn-primary">Request edit first</a>
+          {% else %}
+            {% if not can_print and not print_unlock_req %}
+              <a href="{{ url_for('request_print', record_id=record.id) }}" class="btn btn-primary">Request print</a>
+            {% endif %}
+            <a href="{{ url_for('request_edit', record_id=record.id) }}" class="btn btn-secondary">Request edit</a>
           {% endif %}
-          <a href="{{ url_for('request_edit', record_id=record.id) }}" class="btn btn-secondary">Request edit</a>
         {% endif %}
       </div>
 
@@ -99,7 +110,7 @@
         </div>
       {% endif %}
 
-      {% if current_user and (current_user.role or '')|upper == 'STAFF' and print_unlock_req and not can_print %}
+      {% if current_user and (current_user.role or '')|upper == 'STAFF' and print_unlock_req and not can_print and not missing_print_fields %}
         <div class="rd-code-card" id="staff-print-code">
           <div class="rd-code-card-copy">
             <h3 class="rd-code-card-title">Print code</h3>

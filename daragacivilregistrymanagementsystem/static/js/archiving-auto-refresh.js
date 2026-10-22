@@ -28,9 +28,20 @@
     });
   }
 
+  if (!document.getElementById("archive-registry") && !document.querySelector(".archiving-hero")) {
+    return;
+  }
+  if (window.__crArchiveTimer) {
+    window.clearInterval(window.__crArchiveTimer);
+  }
   var ms = 40000;
-  setInterval(function () {
+  window.__crArchiveTimer = window.setInterval(function () {
     if (document.hidden) return;
+    if (!document.getElementById("archive-registry") && !document.querySelector(".archiving-hero")) {
+      window.clearInterval(window.__crArchiveTimer);
+      window.__crArchiveTimer = null;
+      return;
+    }
     var bar = document.getElementById("ocr-job-bar");
     if (bar && bar.getAttribute("aria-busy") === "true") return;
     window.location.reload();

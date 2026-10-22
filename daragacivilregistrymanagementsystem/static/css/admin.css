@@ -56,6 +56,56 @@ body.page-administration .admin-shell {
   margin: 0 auto;
   overflow: visible;
 }
+body.page-administration .staff-request-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin: 0 0 12px;
+}
+body.page-administration .staff-progress-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+body.page-administration .staff-progress-btn span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+body.page-administration .staff-progress-btn:hover {
+  border-color: rgba(0, 32, 128, 0.35);
+  background: #f8fafc;
+}
+body.page-administration .staff-progress-btn.is-active {
+  background: var(--brand-blue, #002080);
+  border-color: var(--brand-blue, #002080);
+  color: #ffffff;
+}
+body.page-administration .staff-progress-btn.is-active span {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+body.page-administration .staff-progress-btn--pending.is-active {
+  background: #b45309;
+  border-color: #b45309;
+}
+body.page-administration .staff-progress-btn--complete.is-active {
+  background: var(--brand-green, #008a3a);
+  border-color: var(--brand-green, #008a3a);
+}
+body.page-administration .admin-requests-table tbody tr.is-filtered-out {
+  display: none;
+}
 body.page-administration .admin-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -851,8 +901,8 @@ body.page-administration .admin-print-requests-table .col-print-format { width: 
 body.page-administration .admin-print-requests-table .col-status { width: 88px; }
 body.page-administration .admin-print-requests-table .col-staff { width: 64px; }
 body.page-administration .admin-print-requests-table .col-requested { width: 128px; white-space: nowrap; }
-body.page-administration .admin-print-requests-table .col-reason { width: 88px; }
-body.page-administration .admin-print-requests-table .col-reject { width: 88px; }
+body.page-administration .admin-print-requests-table .col-reason { width: 168px; }
+body.page-administration .admin-print-requests-table .col-reject { width: 108px; }
 body.page-administration .admin-print-requests-table .col-reason,
 body.page-administration .admin-print-requests-table .col-reject {
   line-height: 1.25;
@@ -2925,47 +2975,103 @@ body.page-administration .admin-dash-footer {
   align-items: center;
   justify-content: space-between;
   gap: 8px 12px;
-  padding: 6px 10px;
-  border-radius: 10px;
+  padding: 7px 8px 7px 10px;
+  border-radius: 12px;
   background: #fff;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  box-shadow: none;
+  border: 1px solid rgba(0, 32, 128, 0.12);
+  box-shadow: 0 1px 2px rgba(15, 43, 92, 0.04);
 }
 body.page-administration .admin-dash-footer-user {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 0.88rem;
-  font-weight: 700;
+  gap: 8px;
+  min-width: 0;
   color: #1e3a5f;
 }
 body.page-administration .admin-dash-footer-avatar {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
-  background: var(--brand-blue);
+  background: var(--header-grad);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 0 0 2px #e8eefc;
+  flex-shrink: 0;
 }
 body.page-administration .admin-dash-footer-avatar svg { width: 14px; height: 14px; }
+body.page-administration .admin-dash-footer-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+body.page-administration .admin-dash-footer-who strong {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: #0f2b5c;
+  letter-spacing: -0.01em;
+}
+body.page-administration .admin-dash-footer-role {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 32, 128, 0.08);
+  border: 1px solid rgba(0, 32, 128, 0.14);
+  color: var(--brand-blue);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
 body.page-administration .admin-dash-footer-time {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  flex: 1 1 auto;
+  gap: 8px;
+  flex: 0 1 auto;
   justify-content: flex-end;
   min-width: 0;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: #eef4fc;
-  border: 1px solid #c5d4e8;
-  font-size: 0.78rem;
+  padding: 5px 10px 5px 8px;
+  border-radius: 999px;
+  background: #f4f7fc;
+  border: 1px solid #d7e2f0;
+  color: var(--brand-blue);
+}
+body.page-administration .admin-dash-footer-globe {
+  display: flex;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  color: var(--brand-blue);
+  border: 1px solid #d7e2f0;
+  flex-shrink: 0;
+}
+body.page-administration .admin-dash-footer-globe svg { width: 13px; height: 13px; }
+body.page-administration .admin-dash-footer-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #1e3a5f;
+}
+body.page-administration .admin-dash-footer-when #admin-footer-datetime-text {
+  font-variant-numeric: tabular-nums;
   font-weight: 800;
   color: var(--brand-blue);
 }
-body.page-administration .admin-dash-footer-globe { display: flex; opacity: 0.85; }
+body.page-administration .admin-dash-footer-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #94a3b8;
+  flex-shrink: 0;
+}
 @media (max-width: 720px) {
   body.page-administration .admin-dash-footer { flex-direction: column; align-items: stretch; }
   body.page-administration .admin-dash-footer-time { justify-content: center; order: 3; width: 100%; }
@@ -3121,12 +3227,7 @@ body.page-admin-dashboard .admin-qa-title {
   font-size: 0.82rem;
 }
 body.page-admin-dashboard .admin-dash-footer {
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-}
-body.page-admin-dashboard .admin-dash-footer-time {
-  background: #eef4fc;
+  padding: 7px 8px 7px 10px;
 }
 
 [data-theme="dark"] body.page-admin-dashboard .admin-stat-card,

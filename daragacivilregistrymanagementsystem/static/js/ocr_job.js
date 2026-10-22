@@ -46,9 +46,9 @@
     if (smoothTimer) return;
     smoothTimer = setInterval(function () {
       if (shownPct >= 90) return;
-      var step = shownPct < 35 ? 2 : 1;
+      var step = shownPct < 40 ? 4 : 2;
       setPct(shownPct + step);
-    }, 450);
+    }, 220);
   }
 
   function setPct(value) {
@@ -221,6 +221,9 @@
       } catch (e) {}
     }
     if (hid) hid.value = "";
+    if (window.DaragaScanLock && typeof window.DaragaScanLock.clear === "function") {
+      window.DaragaScanLock.clear();
+    }
     if (fnEl) {
       fnEl.textContent = "";
       fnEl.hidden = true;
@@ -302,9 +305,9 @@
   }
 
   function pollDelay() {
-    if (document.hidden) return 4000;
-    if (onWaitPage() || onScanPage()) return 700;
-    return 1500;
+    if (document.hidden) return 2000;
+    if (onWaitPage() || onScanPage()) return 280;
+    return 800;
   }
 
   function schedulePoll() {

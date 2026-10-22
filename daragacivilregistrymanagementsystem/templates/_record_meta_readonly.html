@@ -9,8 +9,12 @@
   {% set raw = display_registry_number if key == 'Registry Number' and display_registry_number else fields.get(key) %}
   {% set shown = (raw|string).strip() if raw is not none else '' %}
   {% set wide = key.startswith('Place of') or key in ['Cause of Death', 'Remarks'] %}
-  <div class="rd-meta-field {{ extra_class }}{% if wide %} rd-meta-field--wide{% endif %}{% if not shown %} is-empty{% endif %}">
-    <div class="rd-meta-label">{{ label or metadata_display_label(key) }}</div>
+  {% set _required = is_required_review_field(doc, key) %}
+  <div class="rd-meta-field {{ extra_class }}{% if wide %} rd-meta-field--wide{% endif %}{% if not shown %} is-empty{% endif %}{% if _required %} is-required{% endif %}{% if _required and not shown %} is-missing{% endif %}"{% if _required %} data-required-meta-field="{{ key }}"{% endif %}>
+    <div class="rd-meta-label">
+      {{ label or metadata_display_label(key) }}
+      {% if _required %}<span class="field-required-mark" title="Required before print" aria-hidden="true">*</span>{% endif %}
+    </div>
     <div class="rd-meta-value">{{ shown if shown else '—' }}</div>
   </div>
 {% endmacro %}

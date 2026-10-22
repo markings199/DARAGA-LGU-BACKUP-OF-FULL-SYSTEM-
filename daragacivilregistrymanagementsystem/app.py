@@ -88,7 +88,7 @@ from io import BytesIO
 from pathlib import Path
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, send_file, jsonify
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -299,6 +299,7 @@ def _upload_candidate_roots() -> list[Path]:
     add(UPLOAD_DIR)
     add(local_upload_dir(BASE_DIR))
     add(LGU_LOCAL_DATA_DIR / "uploads")
+    add(Path(r"C:\DaragaCivilRegistry") / "uploads")
     try:
         for extra in BASE_DIR.glob("_restore_uploads_*"):
             if extra.is_dir():
@@ -310,6 +311,18 @@ def _upload_candidate_roots() -> list[Path]:
         for extra in desktop.glob("DaragaCivilRegistry_Package_*/DaragaCivilRegistry/uploads"):
             if extra.is_dir():
                 add(extra)
+    except OSError:
+        pass
+    # Same-PC copies of this system (dev folder or another install) so Search still shows scans.
+    try:
+        for item in Path("C:/").iterdir():
+            if not item.is_dir():
+                continue
+            name = item.name.lower()
+            if "daraga" not in name or "civil" not in name:
+                continue
+            add(item / "uploads")
+            add(item / "daragacivilregistrymanagementsystem" / "uploads")
     except OSError:
         pass
     return roots
@@ -658,6 +671,48 @@ def _parse_doc_type_filter_arg(value):
     return v if v in DOCUMENT_TYPES else None
 
 
+def _parse_request_progress_arg(value):
+    """Staff monitor filter: pending | complete, else None (all)."""
+    v = (value or "").strip().lower()
+    return v if v in ("pending", "complete") else None
+
+
+def _filter_staff_edit_progress(query, progress: str | None):
+    if progress == "pending":
+        return query.filter(
+            or_(
+                EditRequest.status == "PENDING",
+                and_(EditRequest.status == "APPROVED", EditRequest.code_used_at.is_(None)),
+            )
+        )
+    if progress == "complete":
+        return query.filter(
+            or_(
+                EditRequest.status == "REJECTED",
+                EditRequest.code_used_at.isnot(None),
+            )
+        )
+    return query
+
+
+def _filter_staff_print_progress(query, progress: str | None):
+    if progress == "pending":
+        return query.filter(
+            or_(
+                PrintRequest.status == "PENDING",
+                and_(PrintRequest.status == "APPROVED", PrintRequest.used_at.is_(None)),
+            )
+        )
+    if progress == "complete":
+        return query.filter(
+            or_(
+                PrintRequest.status == "REJECTED",
+                PrintRequest.used_at.isnot(None),
+            )
+        )
+    return query
+
+
 def _admin_edit_requests_redirect():
     """Redirect back to edit requests tab, preserving optional doc_type filter."""
     dt = _parse_doc_type_filter_arg(request.form.get("doc_type") or request.args.get("doc_type"))
@@ -728,7 +783,14 @@ def user_can_print_record(user, record_id: int) -> bool:
         return True
     if (user.role or "").upper() != "STAFF":
         return False
-    return _staff_print_code_unlocked(user, record_id)
+    if not _staff_print_code_unlocked(user, record_id):
+        return False
+    record = db.session.get(Record, record_id)
+    if not record:
+        return False
+    return not missing_required_review_fields(
+        record.document_type, _record_print_payload(record)
+    )
 
 
 def user_can_print_during_review(user) -> bool:
@@ -810,6 +872,31 @@ def missing_required_review_fields(doc_type: str, submitted: dict) -> list[str]:
     return [key for key in required_review_fields(doc_type) if not _field_has_review_value(data, key)]
 
 
+def _record_print_payload(record, data=None) -> dict:
+    """Record JSON plus registry-number fallback used when checking print-ready metadata."""
+    if isinstance(data, dict):
+        payload = dict(data)
+    else:
+        try:
+            raw = json.loads(record.data_json) if getattr(record, "data_json", None) else {}
+            payload = dict(raw) if isinstance(raw, dict) else {}
+        except Exception:
+            payload = {}
+    if not str(payload.get("Registry Number") or "").strip():
+        fallback = (getattr(record, "registry_number", None) or "").strip()
+        if fallback:
+            payload["Registry Number"] = fallback
+    return payload
+
+
+def missing_print_metadata_labels(record, data=None) -> list[str]:
+    payload = _record_print_payload(record, data)
+    return [
+        metadata_display_label(key)
+        for key in missing_required_review_fields(getattr(record, "document_type", ""), payload)
+    ]
+
+
 _FLASH_ERROR_MARKERS = (
     "fail",
     "invalid",
@@ -870,6 +957,7 @@ app.jinja_env.globals["DATE_FIELD_KEYS"] = DATE_FIELD_KEYS
 app.jinja_env.globals["SEX_FIELD_KEYS"] = SEX_FIELD_KEYS
 app.jinja_env.globals["required_review_fields"] = required_review_fields
 app.jinja_env.globals["is_required_review_field"] = is_required_review_field
+app.jinja_env.globals["missing_required_review_fields"] = missing_required_review_fields
 
 
 def date_input_value(raw: str) -> str:
@@ -945,19 +1033,24 @@ _OCR_JOBS_LOCK = threading.Lock()
 def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if not session.get("user_id"):
-            flash("Please log in to continue.")
+        wants_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+        def _login_block(message: str):
+            if wants_json:
+                return jsonify({"ok": False, "error": message}), 401
+            flash(message)
             return redirect(url_for("login"))
+
+        if not session.get("user_id"):
+            return _login_block("Please log in to continue.")
         user = db.session.get(User, session["user_id"])
         if not user:
             session.clear()
-            flash("Please log in to continue.")
-            return redirect(url_for("login"))
+            return _login_block("Please log in to continue.")
         expected = int(getattr(user, "session_version", 0) or 0)
         if int(session.get("session_version") or 0) != expected:
             session.clear()
-            flash("You were signed out. Please log in again.")
-            return redirect(url_for("login"))
+            return _login_block("You were signed out. Please log in again.")
         return f(*args, **kwargs)
 
     return wrapper
@@ -1099,6 +1192,74 @@ def _clear_staged_scan(delete_temp_file: bool = False) -> None:
             path.unlink()
         except OSError:
             pass
+
+
+def _unsaved_ocr_review() -> dict | None:
+    """Finished OCR that is still waiting for Confirm and save (or Cancel review)."""
+    _prune_ocr_jobs()
+    job_id = (session.get("last_ocr_job_id") or "").strip()
+    if not job_id:
+        return None
+    user_id = session.get("user_id")
+    with _OCR_JOBS_LOCK:
+        job = _OCR_JOBS.get(job_id)
+        if not job or job.get("status") != "done":
+            return None
+        if job.get("user_id") not in (None, user_id):
+            return None
+    return {
+        "job_id": job_id,
+        "review_url": url_for("ocr_result", job_id=job_id),
+        "code": "unsaved_review",
+        "error": (
+            "This document is not saved yet. Open the review, check the fields, "
+            "and save it — or cancel the review — before scanning another document."
+        ),
+    }
+
+
+def _new_scan_conflict(incoming_rel: str = "", for_current: bool = False) -> dict | None:
+    """
+    Block replacing a document that is still in progress.
+
+    for_current=True allows OCR / type-detect on the file already on the scan desk.
+    """
+    if _get_active_ocr_for_page():
+        return {
+            "code": "ocr_running",
+            "error": "OCR is still running. Wait for it to finish, or cancel it, before adding another document.",
+        }
+    review = _unsaved_ocr_review()
+    if review:
+        return review
+    staged = _get_staged_scan()
+    if not staged:
+        return None
+    inc = _normalize_upload_relpath(incoming_rel or "")
+    if for_current and (not inc or inc == staged.get("image_filename")):
+        return None
+    return {
+        "code": "staged_document",
+        "error": (
+            "A document is already loaded. Run OCR and save it, or click Cancel OCR "
+            "to discard it, before adding another document."
+        ),
+    }
+
+
+def _json_scan_conflict(conflict: dict | None, status: int = 409):
+    if not conflict:
+        return None
+    payload = {
+        "ok": False,
+        "error": conflict.get("error") or "Finish the current document first.",
+        "code": conflict.get("code") or "scan_locked",
+    }
+    if conflict.get("review_url"):
+        payload["review_url"] = conflict["review_url"]
+    if conflict.get("job_id"):
+        payload["job_id"] = conflict["job_id"]
+    return payload, status
 
 
 def _get_staged_scan() -> dict | None:
@@ -1378,7 +1539,7 @@ def _apply_ocr_worker_message(msg: dict) -> None:
 def _ocr_worker_listener():
     while True:
         try:
-            msg = _ocr_worker_get_result(timeout=0.4)
+            msg = _ocr_worker_get_result(timeout=0.15)
         except Exception:
             msg = None
         if not msg:
@@ -1397,7 +1558,6 @@ def _ensure_ocr_listener():
 
 
 def _run_ocr_job(job_id: str, doc_type: str, save_path: Path, image_filename: str):
-    set_below_normal_priority()
     try:
         _set_ocr_job(job_id, status="running", progress=20, message="OCR started...")
         if doc_type not in DOCUMENT_TYPES:
@@ -1781,7 +1941,7 @@ def account_photo(user_id):
         return ("", 404)
     resp = send_file(path, as_attachment=False, mimetype="image/jpeg", conditional=True)
     resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["Cache-Control"] = "private, no-store"
+    resp.headers["Cache-Control"] = "private, max-age=86400"
     return resp
 
 
@@ -1789,6 +1949,16 @@ def account_photo(user_id):
 @login_required
 def index():
     if request.method == "POST":
+        review = _unsaved_ocr_review()
+        if review:
+            flash(review["error"])
+            return redirect(review["review_url"])
+        incoming = _normalize_upload_relpath((request.form.get("image_filename") or "").strip())
+        new_file = bool(request.files.get("image") and request.files["image"].filename)
+        conflict = _new_scan_conflict(incoming, for_current=not new_file)
+        if conflict:
+            flash(conflict["error"])
+            return redirect(conflict.get("review_url") or url_for("index"))
         doc_type, save_path, image_filename, err = _parse_ocr_input_from_request()
         if err:
             flash(err)
@@ -1803,6 +1973,7 @@ def index():
         return redirect(url_for("index"))
     active_ocr = _get_active_ocr_for_page()
     staged_scan = _get_staged_scan()
+    unsaved_review = _unsaved_ocr_review()
     scan_preview = None
     if active_ocr and active_ocr.get("image_url"):
         scan_preview = {
@@ -1822,6 +1993,7 @@ def index():
         staged_scan=staged_scan,
         scan_preview=scan_preview,
         ocr_field_guides=_ocr_field_guides(),
+        unsaved_review=unsaved_review,
     )
 
 
@@ -1840,6 +2012,9 @@ def api_scan():
     storage_err = _require_server_storage()
     if storage_err:
         return {"ok": False, "error": storage_err}, 507
+    blocked = _json_scan_conflict(_new_scan_conflict("", for_current=False))
+    if blocked:
+        return blocked
     device_index = request.form.get("device_index", type=int)
     if not device_index:
         return {"ok": False, "error": "Detect a scanner first, then choose a device."}, 400
@@ -1864,6 +2039,11 @@ def api_scan():
 @login_required
 def api_scan_stage():
     """Persist an uploaded/scanned image in the session until Cancel OCR."""
+    new_file = bool(request.files.get("image") and request.files["image"].filename)
+    incoming = _normalize_upload_relpath((request.form.get("image_filename") or "").strip())
+    blocked = _json_scan_conflict(_new_scan_conflict(incoming, for_current=not new_file))
+    if blocked:
+        return blocked
     save_path, image_filename, err = _save_ocr_image_from_request(straighten=False)
     if err:
         return {"ok": False, "error": err}, 400
@@ -1886,6 +2066,11 @@ def api_scan_stage():
 @login_required
 def api_detect_document_type():
     """Identify birth, marriage, or death from the top certificate heading only."""
+    new_file = bool(request.files.get("image") and request.files["image"].filename)
+    incoming = _normalize_upload_relpath((request.form.get("image_filename") or "").strip())
+    blocked = _json_scan_conflict(_new_scan_conflict(incoming, for_current=not new_file))
+    if blocked:
+        return blocked
     save_path, image_filename, err = _save_ocr_image_from_request(straighten=False)
     if err:
         return {"ok": False, "error": err}, 400
@@ -1908,6 +2093,14 @@ def api_detect_document_type():
 @app.route("/api/ocr/start", methods=["POST"])
 @login_required
 def api_ocr_start():
+    review = _unsaved_ocr_review()
+    if review:
+        return _json_scan_conflict(review)
+    incoming = _normalize_upload_relpath((request.form.get("image_filename") or "").strip())
+    new_file = bool(request.files.get("image") and request.files["image"].filename)
+    blocked = _json_scan_conflict(_new_scan_conflict(incoming, for_current=not new_file))
+    if blocked:
+        return blocked
     doc_type, save_path, image_filename, err = _parse_ocr_input_from_request()
     if err:
         return {"ok": False, "error": err}, 400
@@ -2898,10 +3091,14 @@ def record_detail(record_id):
         approval = _staff_active_print_approval(user.id, record_id)
         if approval:
             approved_print_format = normalize_print_format(getattr(approval, "print_format", None))
+    missing_print_fields = missing_required_review_fields(
+        record.document_type, _record_print_payload(record, data)
+    )
     return render_template(
         "record_detail.html",
         record=record,
         data=data,
+        missing_print_fields=missing_print_fields,
         display_registry_number=display_registry_number,
         current_user=user,
         nav_active="search",
@@ -3126,6 +3323,21 @@ def record_log_print(record_id):
         return jsonify({"ok": False, "error": "Not logged in"}), 403
     if not user_can_print_record(user, record_id):
         return jsonify({"ok": False, "error": "Admin approval is required before you can print."}), 403
+    try:
+        missing_keys = missing_required_review_fields(
+            record.document_type, _record_print_payload(record)
+        )
+        missing_labels = [metadata_display_label(key) for key in missing_keys]
+    except Exception:
+        missing_keys = []
+        missing_labels = []
+    if missing_labels:
+        return jsonify({
+            "ok": False,
+            "error": "Fill the missing Extracted metadata fields before printing: " + ", ".join(missing_labels) + ".",
+            "missing": missing_labels,
+            "missing_keys": missing_keys,
+        }), 400
     payload = request.get_json(silent=True) or {}
     print_type = (payload.get("print_type") or "original").strip().lower()
     if print_type not in ("original", "certification", "both"):
@@ -3178,6 +3390,15 @@ def request_print(record_id):
     pending = PrintRequest.query.filter_by(
         record_id=record_id, requested_by_id=user.id, status="PENDING"
     ).first()
+    missing_print_fields = missing_print_metadata_labels(record)
+    if missing_print_fields:
+        flash(
+            "Extracted metadata is incomplete. Request an edit first so Admin can fill: "
+            + ", ".join(missing_print_fields)
+            + ".",
+            "error",
+        )
+        return redirect(url_for("request_edit", record_id=record_id))
     if request.method == "POST":
         reason = (request.form.get("reason") or "").strip()
         print_format = normalize_print_format(request.form.get("print_format"))
@@ -3212,6 +3433,7 @@ def request_print(record_id):
         nav_active="search",
         document_types=DOCUMENT_TYPES,
         has_pending=pending is not None,
+        missing_print_fields=missing_print_fields,
         **_supporting_template_vars(record),
     )
 
@@ -3312,6 +3534,8 @@ def administration():
         tab = "dashboard"
     _mark_admin_tab_seen(tab)
     request_doc_type = _parse_doc_type_filter_arg(request.args.get("doc_type"))
+    request_progress = None
+    progress_counts = {"all": 0, "pending": 0, "complete": 0}
     edit_requests_list = []
     if tab == "edit_requests":
         edit_requests_q = EditRequest.query
@@ -3320,6 +3544,12 @@ def administration():
                 Record.document_type == request_doc_type
             )
         edit_requests_list = edit_requests_q.order_by(EditRequest.requested_at.desc()).limit(200).all()
+        request_progress = _parse_request_progress_arg(request.args.get("status"))
+        progress_counts = {
+            "all": len(edit_requests_list),
+            "pending": sum(1 for req in edit_requests_list if (req.status or "").upper() == "PENDING"),
+            "complete": sum(1 for req in edit_requests_list if (req.status or "").upper() != "PENDING"),
+        }
     print_requests_list = []
     if tab == "print_requests":
         print_requests_q = PrintRequest.query
@@ -3328,6 +3558,12 @@ def administration():
                 Record.document_type == request_doc_type
             )
         print_requests_list = print_requests_q.order_by(PrintRequest.requested_at.desc()).limit(200).all()
+        request_progress = _parse_request_progress_arg(request.args.get("status"))
+        progress_counts = {
+            "all": len(print_requests_list),
+            "pending": sum(1 for req in print_requests_list if (req.status or "").upper() == "PENDING"),
+            "complete": sum(1 for req in print_requests_list if (req.status or "").upper() != "PENDING"),
+        }
     audit_logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(100).all() if tab == "audit" else []
     users_list = []
     password_target = None
@@ -3408,6 +3644,8 @@ def administration():
         document_types=DOCUMENT_TYPES,
         print_logs=print_logs,
         request_doc_type=request_doc_type,
+        request_progress=request_progress,
+        progress_counts=progress_counts,
         auto_backup_settings=auto_backup_settings,
         auto_backup_files=auto_backup_files,
         backup_history=backup_history,
@@ -4395,6 +4633,15 @@ def print_request_approve(request_id):
     if not req or req.status != "PENDING":
         flash("Request not found or already processed.")
         return _admin_print_requests_redirect()
+    missing_labels = missing_print_metadata_labels(req.record) if req.record else []
+    if missing_labels:
+        flash(
+            "Cannot approve print until extracted metadata is complete: "
+            + ", ".join(missing_labels)
+            + ". Ask staff to request an edit first.",
+            "error",
+        )
+        return _admin_print_requests_redirect()
     code = _new_approval_code()
     req.status = "APPROVED"
     req.reviewed_at = datetime.utcnow()
@@ -4506,6 +4753,15 @@ def record_verify_print_code(record_id):
     if not user or (user.role or "").upper() != "STAFF":
         flash("Only staff can use print codes.")
         return redirect(url_for("record_detail", record_id=record_id))
+    missing_labels = missing_print_metadata_labels(record)
+    if missing_labels:
+        flash(
+            "Extracted metadata is incomplete. Request an edit first so Admin can fill: "
+            + ", ".join(missing_labels)
+            + ".",
+            "error",
+        )
+        return redirect(url_for("request_edit", record_id=record_id))
     code = _parsed_approval_code()
     next_url = request.form.get("next") or url_for("record_detail", record_id=record_id)
     if len(code) != 5:
@@ -4787,11 +5043,17 @@ def my_edit_requests():
         flash("This page is for staff only.")
         return redirect(url_for("index"))
     request_doc_type = _parse_doc_type_filter_arg(request.args.get("doc_type"))
+    request_progress = _parse_request_progress_arg(request.args.get("status"))
     requests_q = EditRequest.query.filter_by(requested_by_id=user.id)
     if request_doc_type:
         requests_q = requests_q.join(Record, EditRequest.record_id == Record.id).filter(
             Record.document_type == request_doc_type
         )
+    progress_counts = {
+        "all": requests_q.count(),
+        "pending": _filter_staff_edit_progress(requests_q, "pending").count(),
+        "complete": _filter_staff_edit_progress(requests_q, "complete").count(),
+    }
     requests_list = requests_q.order_by(EditRequest.requested_at.desc()).all()
     return render_template(
         "my_edit_requests.html",
@@ -4800,6 +5062,8 @@ def my_edit_requests():
         requests_list=requests_list,
         document_types=DOCUMENT_TYPES,
         request_doc_type=request_doc_type,
+        request_progress=request_progress,
+        progress_counts=progress_counts,
     )
 
 
@@ -4812,11 +5076,17 @@ def my_print_requests():
         flash("This page is for staff only.")
         return redirect(url_for("index"))
     request_doc_type = _parse_doc_type_filter_arg(request.args.get("doc_type"))
+    request_progress = _parse_request_progress_arg(request.args.get("status"))
     requests_q = PrintRequest.query.filter_by(requested_by_id=user.id)
     if request_doc_type:
         requests_q = requests_q.join(Record, PrintRequest.record_id == Record.id).filter(
             Record.document_type == request_doc_type
         )
+    progress_counts = {
+        "all": requests_q.count(),
+        "pending": _filter_staff_print_progress(requests_q, "pending").count(),
+        "complete": _filter_staff_print_progress(requests_q, "complete").count(),
+    }
     requests_list = requests_q.order_by(PrintRequest.requested_at.desc()).all()
     return render_template(
         "my_print_requests.html",
@@ -4825,6 +5095,8 @@ def my_print_requests():
         requests_list=requests_list,
         document_types=DOCUMENT_TYPES,
         request_doc_type=request_doc_type,
+        request_progress=request_progress,
+        progress_counts=progress_counts,
     )
 
 

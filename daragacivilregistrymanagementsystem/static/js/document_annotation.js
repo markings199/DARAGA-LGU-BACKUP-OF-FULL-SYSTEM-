@@ -79,5 +79,14 @@
     }
   }
 
-  document.querySelectorAll("[data-annotation-form]").forEach(bind);
+  function initAnnotation() {
+    document.querySelectorAll("[data-annotation-form]").forEach(function (root) {
+      if (root.getAttribute("data-annotation-bound")) return;
+      root.setAttribute("data-annotation-bound", "1");
+      bind(root);
+    });
+  }
+
+  initAnnotation();
+  window.addEventListener("cr:page", initAnnotation);
 })();

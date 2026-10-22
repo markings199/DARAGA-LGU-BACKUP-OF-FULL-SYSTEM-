@@ -4,15 +4,22 @@
     <meta charset="utf-8" />
     <script>
       (function () {
-        try {
-          if (localStorage.getItem("cr-theme") === "dark") {
-            document.documentElement.setAttribute("data-theme", "dark");
-          }
-        } catch (e) { /* ignore */ }
+        var dark = false;
+        try { dark = localStorage.getItem("cr-theme") === "dark"; } catch (e) {}
+        var html = document.documentElement;
+        if (dark) html.setAttribute("data-theme", "dark");
+        html.style.backgroundColor = dark ? "#0c1117" : "#f0f4f8";
+        html.style.colorScheme = dark ? "dark" : "light";
       })();
     </script>
     <title>{% block title %}Civil Registry OCR{% endblock %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {% if current_user %}
+      {% set _nav_photo = user_photo_url(current_user) %}
+      {% if _nav_photo %}
+        <link rel="preload" as="image" href="{{ _nav_photo }}" />
+      {% endif %}
+    {% endif %}
     <style>
       :root {
         --brand-blue: #002080;
@@ -29,7 +36,20 @@
         --content-max: 1180px;
         --topbar-height: 64px;
       }
-      html { font-size: 15px; height: 100%; overflow: hidden; }
+      .theme-toggle .theme-icon-light,
+      .theme-toggle .theme-toggle-label-light { display: none; }
+      .theme-toggle .theme-icon-dark,
+      .theme-toggle .theme-toggle-label-dark { display: flex; }
+      [data-theme="dark"] .theme-toggle .theme-icon-light,
+      [data-theme="dark"] .theme-toggle .theme-toggle-label-light { display: flex; }
+      [data-theme="dark"] .theme-toggle .theme-icon-dark,
+      [data-theme="dark"] .theme-toggle .theme-toggle-label-dark { display: none; }
+      .theme-toggle-label-light,
+      .theme-toggle-label-dark { align-items: center; }
+      html { font-size: 15px; height: 100%; overflow: hidden; background: #f0f4f8; }
+      html, body { background: #f0f4f8; }
+      [data-theme="dark"],
+      [data-theme="dark"] body { background: #0c1117; color-scheme: dark; }
       * { box-sizing: border-box; }
       /* Hide scrollbars site-wide; mouse wheel, touch, and keyboard scroll still work */
       html, body, * {
@@ -53,6 +73,7 @@
         font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
         color: var(--text);
         line-height: 1.4;
+        background: #f0f4f8;
       }
       .topbar {
         position: relative;
@@ -252,7 +273,10 @@
         overflow: hidden;
       }
       .topbar-user-avatar--photo {
-        background: #0f172a;
+        background-color: #0f172a;
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
         padding: 0;
       }
       .topbar-user-avatar img {
@@ -938,17 +962,22 @@
         }
       }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}?v=reason-view-2" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/staff.css') }}?v=annotation-compact-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}?v=progress-click-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/staff.css') }}?v=progress-click-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/scanflow.css') }}?v=scan-layout-2" />
+    <meta name="cr-extra-head" content="" />
     {% block extra_head %}{% endblock %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}?v=required-review-1" />
+    <meta name="cr-extra-head-end" content="" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}?v=progress-click-1" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/document_annotation.css') }}?v=annotation-compact-1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/notifications.css') }}?v=reason-portal-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/notifications.css') }}?v=reason-table-2" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/flash.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/page_transition.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/page_transition.css') }}?v=progress-click-1" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/logout_motion.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout_fit.css') }}?v=doc-zoom-out-6" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout_fit.css') }}?v=scan-icons-2" />
+    <meta name="cr-after-theme" content="" />
     {% block after_theme %}{% endblock %}
+    <meta name="cr-after-theme-end" content="" />
   </head>
   <body class="{% block body_class %}{% endblock %}">
     <header class="topbar">
@@ -964,6 +993,8 @@
             alt="Seal of the Municipality of Daraga"
             width="40"
             height="40"
+            decoding="sync"
+            fetchpriority="high"
           />
         </span>
         <span class="topbar-brand-text">
@@ -1008,6 +1039,17 @@
                   <path d="M13.73 21a2 2 0 01-3.46 0"/>
                 </svg>
                 <span class="notif-count" id="notif-count" hidden>0</span>
+                <script>
+                  (function () {
+                    try {
+                      var n = parseInt(sessionStorage.getItem("cr-notif-count") || "0", 10);
+                      var el = document.getElementById("notif-count");
+                      if (!el || !n) return;
+                      el.textContent = n > 99 ? "99+" : String(n);
+                      el.hidden = false;
+                    } catch (e) {}
+                  })();
+                </script>
               </button>
               <div class="notif-panel" id="notif-panel" role="menu">
                 <div class="notif-panel-head">
@@ -1022,10 +1064,10 @@
         </div>
         {% if current_user %}
           <a class="topbar-user" href="{{ url_for('account') }}" title="My account">
-            {% set _photo = user_photo_url(current_user) %}
-            <span class="topbar-user-avatar{% if _photo %} topbar-user-avatar--photo{% endif %}" aria-hidden="true">
+            {% set _photo = _nav_photo if _nav_photo is defined else user_photo_url(current_user) %}
+            <span class="topbar-user-avatar{% if _photo %} topbar-user-avatar--photo{% endif %}"{% if _photo %} style="background-image: url('{{ _photo }}')"{% endif %} aria-hidden="true">
               {% if _photo %}
-                <img src="{{ _photo }}" alt="" />
+                <img src="{{ _photo }}" alt="" width="32" height="32" decoding="sync" fetchpriority="high" />
               {% else %}
                 {{ (current_user.username or 'U')[:1]|upper }}
               {% endif %}
@@ -1102,7 +1144,7 @@
           {% endif %}
         </div>
       </aside>
-      <main class="main">
+      <main class="main" id="cr-page">
         {% block content %}{% endblock %}
       </main>
     </div>
@@ -1127,8 +1169,8 @@
     {% endif %}
     {% include '_flash_toasts.html' %}
     {% include '_app_confirm.html' %}
-    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/page_transition.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/theme.js') }}?v=topbar-stable-1"></script>
+    <script src="{{ url_for('static', filename='js/page_transition.js') }}?v=scan-safe-1"></script>
     {% if current_user %}
       <script src="{{ url_for('static', filename='js/logout_motion.js') }}"></script>
     {% endif %}
@@ -1137,10 +1179,14 @@
     <script src="{{ url_for('static', filename='js/app_confirm.js') }}"></script>
     <script src="{{ url_for('static', filename='js/document_annotation.js') }}"></script>
     {% if current_user %}
-      <script src="{{ url_for('static', filename='js/ocr_job.js') }}?v=ocr-type-first-1"></script>
-      <script src="{{ url_for('static', filename='js/ocr_preview_targets.js') }}?v=no-doc-targets-2"></script>
-      <script src="{{ url_for('static', filename='js/notifications.js') }}?v=reason-pop-1"></script>
+      <script src="{{ url_for('static', filename='js/ocr_job.js') }}?v=ocr-fast-1"></script>
+      <script src="{{ url_for('static', filename='js/ocr_preview_targets.js') }}?v=nav-soft-1"></script>
+      <script src="{{ url_for('static', filename='js/notifications.js') }}?v=notif-stable-1"></script>
       <script src="{{ url_for('static', filename='js/note_fold.js') }}?v=reason-portal-1"></script>
+      <script src="{{ url_for('static', filename='js/staff_request_filter.js') }}?v=progress-click-1"></script>
     {% endif %}
+    <div id="cr-page-scripts">
+      {% block extra_js %}{% endblock %}
+    </div>
   </body>
 </html>

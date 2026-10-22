@@ -85,6 +85,126 @@
     return missing;
   }
 
+  function metaTextFilled(text) {
+    var t = String(text || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/[—–]/g, "-")
+      .trim();
+    return t.length > 0 && t !== "-";
+  }
+
+  function reviewWrapFilled(wrap) {
+    var radios = wrap.querySelectorAll("input[type='radio']");
+    if (radios.length) {
+      return Array.prototype.some.call(radios, function (radio) {
+        return radio.checked && String(radio.value || "").trim();
+      });
+    }
+    var input = wrap.querySelector("input:not([type='hidden']), textarea, select");
+    if (input) return String(input.value || "").trim().length > 0;
+    var valueEl = wrap.querySelector(".rd-meta-value");
+    if (valueEl) return metaTextFilled(valueEl.textContent);
+    return true;
+  }
+
+  function wrapLabel(wrap) {
+    var label = wrap.querySelector(".confirm-item-label, .rd-meta-label, label");
+    var text = label ? String(label.textContent || "").replace(/\*/g, "").trim() : "";
+    return text || wrap.getAttribute("data-required-meta-field") || "Required field";
+  }
+
+  function missingRequiredMeta(btn) {
+    var missing = [];
+    var seen = {};
+    document.querySelectorAll("[data-review-required='1'], [data-required-meta-field]").forEach(function (wrap) {
+      var key = wrap.getAttribute("data-required-meta-field") || wrapLabel(wrap);
+      var empty = !reviewWrapFilled(wrap);
+      wrap.classList.toggle("is-missing", empty);
+      if (!empty || seen[key]) return;
+      seen[key] = true;
+      missing.push({
+        wrap: wrap,
+        input: wrap.querySelector("input:not([type='hidden']), textarea, select"),
+        label: wrapLabel(wrap),
+        key: key,
+      });
+    });
+    if (!missing.length && btn) {
+      try {
+        var stored = JSON.parse(btn.getAttribute("data-missing-meta") || "[]") || [];
+        stored.forEach(function (key) {
+          if (!key || seen[key]) return;
+          seen[key] = true;
+          missing.push({
+            wrap: document.getElementById("extracted-metadata"),
+            input: null,
+            label: key,
+            key: key,
+          });
+        });
+      } catch (e) {}
+    }
+    return missing;
+  }
+
+  function updatePrintMetaBanner(missing) {
+    var box = document.getElementById("print-missing-meta");
+    var list = document.getElementById("print-missing-meta-list");
+    var btn = document.getElementById("btn-print-document");
+    if (list) {
+      list.innerHTML = "";
+      missing.forEach(function (row) {
+        var item = document.createElement("li");
+        item.textContent = row.label;
+        list.appendChild(item);
+      });
+    }
+    if (box) box.classList.toggle("is-hidden", !missing.length);
+    if (btn) {
+      btn.setAttribute("aria-disabled", missing.length ? "true" : "false");
+      btn.setAttribute("data-missing-meta", JSON.stringify(missing.map(function (row) {
+        return row.key || row.label;
+      })));
+    }
+  }
+
+  function notifyRequiredMeta(missing) {
+    updatePrintMetaBanner(missing);
+    var names = missing
+      .map(function (row) {
+        return row.label;
+      })
+      .join(", ");
+    var editable = missing.some(function (row) {
+      return row.input;
+    });
+    var message = editable
+      ? "Fill these Extracted metadata fields before printing: " + names + "."
+      : "These Extracted metadata fields are empty: " +
+        names +
+        ". Open Extracted metadata, then use Edit record (admin) or Request edit (staff).";
+    if (window.DaragaToast && window.DaragaToast.show) {
+      window.DaragaToast.show({
+        tone: "error",
+        title: "Missing extracted metadata",
+        message: message,
+      });
+    } else {
+      window.alert(message);
+    }
+    var first = missing[0] && (missing[0].input || missing[0].wrap);
+    var heading = document.getElementById("extracted-metadata");
+    var target = first || heading;
+    if (target && typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    if (missing[0] && missing[0].input) {
+      try {
+        missing[0].input.focus();
+      } catch (e) {}
+    }
+  }
+
   function notifyCertBlanksRequired(missing) {
     var names = missing
       .map(function (row) {
@@ -293,6 +413,19 @@
       body: JSON.stringify(payload),
     })
       .then(function (r) {
+        var ctype = String(r.headers.get("content-type") || "").toLowerCase();
+        if (ctype.indexOf("json") === -1) {
+          return {
+            httpOk: false,
+            data: {
+              ok: false,
+              error:
+                r.status === 401
+                  ? "Please log in again to print."
+                  : "Print could not start. Refresh the page and try again.",
+            },
+          };
+        }
         return r.json().then(
           function (data) {
             return { httpOk: r.ok, data: data };
@@ -300,7 +433,7 @@
           function () {
             return {
               httpOk: false,
-              data: { ok: false, error: "Could not verify print permission." },
+              data: { ok: false, error: "Print could not start. Refresh the page and try again." },
             };
           }
         );
@@ -308,16 +441,33 @@
       .then(function (result) {
         var data = result.data || {};
         if (!result.httpOk || !data.ok) {
-          if (window.DaragaToast && window.DaragaToast.error) {
-            window.DaragaToast.error(data.error, "Print was not allowed.");
+          var serverMissing = data.missing || [];
+          if (serverMissing.length) {
+            notifyRequiredMeta(
+              serverMissing.map(function (label) {
+                return { label: label, wrap: document.getElementById("extracted-metadata"), input: null };
+              })
+            );
+            return;
+          }
+          if (window.DaragaToast && window.DaragaToast.show) {
+            window.DaragaToast.show({
+              tone: "error",
+              title: "Print was not allowed",
+              message: data.error || "Print could not start. Refresh the page and try again.",
+            });
           }
           return;
         }
         triggerPrint();
       })
       .catch(function () {
-        if (window.DaragaToast && window.DaragaToast.error) {
-          window.DaragaToast.error("Could not verify print permission.");
+        if (window.DaragaToast && window.DaragaToast.show) {
+          window.DaragaToast.show({
+            tone: "error",
+            title: "Print was not allowed",
+            message: "Print could not start. Refresh the page and try again.",
+          });
         }
       });
   }
@@ -338,6 +488,15 @@
     var paperSel = document.getElementById("print-paper-size");
     if (paperSel) paperSel.addEventListener("change", applyPrintLayout);
     restoreCertBlanks();
+    updatePrintMetaBanner(missingRequiredMeta(btn));
+    document.addEventListener("input", function (event) {
+      if (!event.target || !event.target.closest("[data-review-required='1']")) return;
+      updatePrintMetaBanner(missingRequiredMeta(btn));
+    });
+    document.addEventListener("change", function (event) {
+      if (!event.target || !event.target.closest("[data-review-required='1']")) return;
+      updatePrintMetaBanner(missingRequiredMeta(btn));
+    });
     document.querySelectorAll("[data-cert-blank-input]").forEach(function (input) {
       input.addEventListener("input", function () {
         storeCertBlanks();
@@ -371,6 +530,11 @@
             message: "Admin approval is required before you can print this document.",
           });
         }
+        return;
+      }
+      var missingMeta = missingRequiredMeta(btn);
+      if (missingMeta.length) {
+        notifyRequiredMeta(missingMeta);
         return;
       }
       if (certPrintNeedsBlanks()) {

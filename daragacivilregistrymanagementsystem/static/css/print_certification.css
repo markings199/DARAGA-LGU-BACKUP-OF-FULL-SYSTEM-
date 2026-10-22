@@ -353,6 +353,39 @@
   box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.18);
   background: #fff7f7;
 }
+.print-missing-meta {
+  margin: 0 10px 8px;
+  padding: 10px 12px;
+  border: 1px solid #fdba74;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+.print-missing-meta.is-hidden {
+  display: none;
+}
+.print-missing-meta-title {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+.print-missing-meta-copy {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+.print-missing-meta-list {
+  margin: 0 0 8px;
+  padding-left: 1.15rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.print-missing-meta-link {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #9a3412;
+  text-decoration: underline;
+}
 .print-panel-foot {
   display: flex;
   justify-content: flex-end;

@@ -27,8 +27,6 @@
     var label = isDark ? "Switch to light mode" : "Switch to dark mode";
     btn.setAttribute("aria-label", label);
     btn.title = label;
-    var text = btn.querySelector(".theme-toggle-label");
-    if (text) text.textContent = isDark ? "Light" : "Dark";
   }
 
   function initToggle() {

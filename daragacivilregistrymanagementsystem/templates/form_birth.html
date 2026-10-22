@@ -63,7 +63,15 @@
             Cancel
           </button>
           {% include '_staff_ocr_print_request.html' %}
-          <button type="submit" class="btn btn-primary form-review-confirm">Confirm birth data</button>
+          <button
+            type="submit"
+            class="btn btn-primary form-review-confirm"
+            data-app-confirm
+            data-confirm-title="Confirm birth record"
+            data-confirm-message="Please check every field against the original certificate. Saving adds this birth record to the official civil registry."
+            data-confirm-ok="Confirm and save"
+            data-confirm-cancel="Review again"
+          >Confirm birth data</button>
         </div>
       </div>
     </div>

@@ -71,10 +71,16 @@ MONTH_FIXES = {
 OCR_WORD_FIXES = {
     "FILIFIRO": "FILIPINO",
     "PILIPINO": "FILIPINO",
+    "FILIPINE": "FILIPINO",
+    "FILIPING": "FILIPINO",
+    "FLIPINO": "FILIPINO",
+    "FILPINO": "FILIPINO",
     "FOMUTE": "FEMALE",
     "FOMALE": "FEMALE",
     "RELIBION": "RELIGION",
     "CETIZENSHIP": "CITIZENSHIP",
+    "TIZENSHIP": "CITIZENSHIP",
+    "ITIZENSHIP": "CITIZENSHIP",
     "REGIATRY": "REGISTRY",
     "ROPUTFIC": "REPUBLIC",
     "PHLPPINS": "PHILIPPINES",
@@ -115,7 +121,21 @@ FORM_JUNK_NAME_MARKERS = {
     "PREPARED", "RECEIVED", "REGISTERED", "CERTIFY", "CERTIFICATION",
     "HOUSE", "BARANGAY", "MUNICIPALITY", "PROVINCE", "COUNTRY", "STREET",
     "HOSPITAL", "CLINIC", "INSTITUTION", "RELATIONSHIP", "OCCUPATION",
-    "RELIGION", "CITIZENSHIP", "RESIDENCE", "WEIGHT", "GRAMS",
+    "RELIGION", "RELIGIOUS", "CITIZENSHIP", "TIZENSHIP", "RESIDENCE",
+    "WEIGHT", "GRAMS", "ICIPALITY", "ANNOTATION", "REGISTRY", "SECT",
+}
+
+RELIGION_WORDS = {
+    "CATHOLIC", "ROMAN", "CHRISTIAN", "MUSLIM", "ISLAM", "IGLESIA",
+    "BAPTIST", "PROTESTANT", "BUDDHIST", "HINDU", "ADVENTIST",
+    "SEVENTH", "METHODIST", "JEHOVAH", "MORMON", "ORTHODOX",
+    "PENTECOSTAL", "AGNOSTIC", "ATHEIST", "BORN", "AGAIN", "SECT",
+}
+
+NAME_OCR_JUNK = {
+    "MIDDE", "MIDDEL", "MIDLE", "AIDEN", "MAIDEN", "MADE",
+    "ICIPALITY", "MUNICIPALITY", "PROVINCE", "HOSPITAL", "PHILIPPINES",
+    "PHILIPPINE", "PHILIPPIN", "ALBAY", "FILIPINO", "FILIPINE",
 }
 
 PLACE_HINTS = {
@@ -220,9 +240,12 @@ def _is_plausible_place(text: str) -> bool:
     if letters and vowels / letters < 0.22:
         return False
     words = [w for w in nt.split() if w]
-    has_hint = any(hint in nt for hint in PLACE_HINTS)
-    # Long strings of form option words are not places.
-    if not has_hint:
+    generic_place = {
+        "PROVINCE", "CITY", "MUNICIPALITY", "MUNICIPAL", "COUNTRY",
+        "STREET", "ROAD", "AVENUE", "BARANGAY", "DISTRICT",
+    }
+    has_specific = any(hint in nt for hint in PLACE_HINTS if hint not in generic_place)
+    if not has_specific:
         return False
     if len(words) < 2 and len(nt) < 10:
         return False
@@ -232,7 +255,9 @@ def _is_plausible_place(text: str) -> bool:
 _MARRIAGE_PLACE_PRINTED = re.compile(
     r"(?i)\b(?:20\s*[AB]\.?|MARRIAGE OF PARENTS|IF NOT MARRIED|ACCOMPLISH|"
     r"AFFIDAVIT|ACKNOWLEDG(?:E)?MENT|ADMISSION OF PATERNITY|AT THE BACK|"
-    r"MONTH|DAY|YEAR|CITY/?\s*MUNICIPALITY|PROVINCE|COUNTRY)\b"
+    r"MONTH|DAY|YEAR|CITY/?\s*MUNICIPALITY|PROVINCE|COUNTRY|"
+    r"ATTENDANT|PHYSICIAN|NURSE|MIDWIFE|HILOT|SIGNATURE|ADDRESS|"
+    r"TITLE|POSITION|AM/?PM|OTHERS|SPECIFY|CERTIFY)\b"
 )
 
 
@@ -244,6 +269,7 @@ def sanitize_place_of_marriage_of_parents(text: str) -> str:
     raw = re.sub(r"\([^)]*\)", " ", raw)
     raw = _MARRIAGE_PLACE_PRINTED.sub(" ", raw)
     raw = re.sub(r"\b20\s*[AB]\b", " ", raw, flags=re.I)
+    raw = re.sub(r"(?i)\bPHILIPP(?:INES?|INE)?\b", "Philippines", raw)
     parsed = parse_date_from_string(raw)
     if parsed:
         raw = re.sub(re.escape(parsed), " ", raw, flags=re.I)
@@ -322,12 +348,21 @@ def _is_plausible_person_name(text: str) -> bool:
         return False
     if any(marker in nt for marker in FORM_JUNK_NAME_MARKERS):
         return False
+    if any(junk in nt for junk in NAME_OCR_JUNK):
+        return False
+    if "(" in (text or "") or ")" in (text or ""):
+        return False
     if parse_date_from_string(text):
         return False
     words = [w for w in nt.split() if w]
     if not words:
         return False
     if len(words) < 2:
+        return False
+    religion_hits = sum(1 for w in words if w in RELIGION_WORDS)
+    if religion_hits and religion_hits >= max(1, len(words) - 1):
+        return False
+    if "CATHOLIC" in words or "MUSLIM" in words or "ISLAM" in words:
         return False
     for i in range(1, len(words)):
         if words[i] == words[i - 1] and len(words[i]) >= 4:
@@ -347,6 +382,8 @@ def _normalize_citizenship(text: str) -> str:
     nt = norm_text(text or "")
     if not nt:
         return ""
+    if "FILIP" in nt.replace(" ", "") or nt in {"FILIPINE", "FILIPINA", "PILIPINO"}:
+        return "FILIPINO"
     for word in NATIONALITY_WORDS:
         if word in nt:
             return word.title() if word != "FILIPINO" else "FILIPINO"
@@ -545,6 +582,9 @@ def find_child_name_label(items, img_w, img_h, dob_label=None):
         if nt == "NAME" or ct == "NAME":
             candidates.append((2, it))
             continue
+        if nt in {"ME", "AME", "NME"} and it["cx"] <= img_w * 0.12:
+            candidates.append((3, it))
+            continue
 
     if candidates:
         candidates.sort(key=lambda pair: (pair[0], pair[1]["cy"], pair[1]["x1"]))
@@ -585,7 +625,7 @@ def find_mother_name_label(items, img_w, img_h, y_min=None):
         ct = compact_text(it["text"])
         if "CHILD" in nt or "FATHER" in nt:
             continue
-        if "MAIDEN" in nt:
+        if "MAIDEN" in nt or nt in {"AIDEN", "MAIDENNAME"}:
             maiden = it if maiden is None or it["cy"] < maiden["cy"] else maiden
             continue
         if "NAME" in nt and "MOTHER" in nt:
@@ -641,10 +681,140 @@ def find_father_name_label(items, img_w, img_h, y_min=None):
         if nt == "NAME" or ct == "NAME":
             candidates.append((3, it))
             continue
+        # Cropped spine OCR: 1.NAME -> ME, 14.NAME -> AME
+        if nt in {"ME", "AME", "NME", "NAM"} and it["cx"] <= img_w * 0.12:
+            candidates.append((4, it))
+            continue
     if candidates:
         candidates.sort(key=lambda pair: (pair[0], pair[1]["cy"], pair[1]["x1"]))
         return candidates[0][1]
     return None
+
+
+def _fml_helper_kind(text: str) -> str:
+    """Map a (First)/(Middle)/(Last) print hint, including common OCR misses."""
+    ct = compact_text(text)
+    if not ct:
+        return ""
+    if "FIR" in ct or ct in {"FRST", "FIRT"}:
+        return "F"
+    if "LAS" in ct:
+        return "L"
+    if "MID" in ct or ct in {"MADE", "MDDLE", "MDLE"}:
+        return "M"
+    return ""
+
+
+def _is_fml_helper(text: str) -> bool:
+    return bool(_fml_helper_kind(text))
+
+
+def _fml_helper_rows(items, img_w, y_min, y_max):
+    helpers = [
+        it for it in items
+        if it["score"] >= 0.10
+        and y_min <= it["cy"] <= y_max
+        and it["cx"] >= img_w * 0.08
+        and _is_fml_helper(it["text"])
+    ]
+    rows = []
+    for row in group_rows(helpers, y_tol=16):
+        kinds = {_fml_helper_kind(it["text"]) for it in row}
+        kinds.discard("")
+        if len(kinds) >= 2:
+            rows.append(row)
+    rows.sort(key=lambda row: sum(it["cy"] for it in row) / len(row))
+    return rows
+
+
+def extract_name_under_fml_helpers(items, helper_row, img_w, img_h, working_xmax) -> str:
+    """Read First/Middle/Last write-ins sitting on or just below the printed hints."""
+    if not helper_row:
+        return ""
+    y0 = min(it["y1"] for it in helper_row) - 4
+    y1 = max(it["y2"] for it in helper_row) + max(18, int(img_h * 0.032))
+    x0 = max(img_w * 0.08, min(it["x1"] for it in helper_row) - img_w * 0.04)
+    tokens = tokens_in_region(items, x0, working_xmax, y0, y1, min_score=0.12)
+    kept = []
+    for it in tokens:
+        if _is_fml_helper(it["text"]):
+            continue
+        txt = clean_text(it["text"])
+        nt = norm_text(txt)
+        if len(nt) < 2:
+            continue
+        if re.fullmatch(r"\d+", nt) or re.search(r"\d{4}", nt):
+            continue
+        if nt in {"NAME", "MAIDEN", "ME", "AME", "CHILD", "MOTHER", "FATHER"}:
+            continue
+        if any(bad in nt for bad in (
+            "DATE OF", "PLACE OF", "CITIZEN", "RELIGION", "SEX", "DAY", "MONTH", "YEAR",
+            "HOSPITAL", "CLINIC", "MUNICIPAL", "PROVINCE",
+        )):
+            continue
+        if _is_citizenship(nt) or any(w in RELIGION_WORDS for w in nt.split()):
+            continue
+        if _is_placeholder_text(txt):
+            continue
+        kept.append(it)
+    composed = compose_first_middle_last(kept, x0, working_xmax)
+    cleaned = _clean_person_name(composed)
+    if cleaned:
+        return cleaned
+    row_text = normalize_simple_text(join_tokens(kept))
+    return _clean_person_name(row_text)
+
+
+def extract_form102_party_names(items, img_w, img_h, working_xmax, dob_label=None, type_birth_label=None, marriage_label=None):
+    """
+    Municipal Form 102 writes three name rows the same way:
+
+        (First)   (Middle)   (Last)
+         Juan      Miguel     Santos
+
+    Child is item 1, mother maiden name is item 7, father is item 14.
+    """
+    child_y1 = img_h * 0.07
+    child_y2 = img_h * 0.155
+    if dob_label:
+        child_y2 = min(child_y2, max(dob_label["y1"] - 2, img_h * 0.12))
+
+    mother_y1 = img_h * 0.235
+    if type_birth_label:
+        mother_y1 = max(mother_y1, type_birth_label["y2"] + 2)
+    mother_y2 = img_h * 0.325
+
+    father_y1 = img_h * 0.375
+    father_y2 = img_h * 0.455
+    if marriage_label:
+        father_y2 = min(father_y2, max(marriage_label["y1"] - 4, father_y1 + 12))
+
+    child = mother = father = ""
+    child_rows = _fml_helper_rows(items, img_w, child_y1, child_y2)
+    if child_rows:
+        child = extract_name_under_fml_helpers(items, child_rows[0], img_w, img_h, working_xmax)
+    mother_rows = _fml_helper_rows(items, img_w, mother_y1, mother_y2)
+    if mother_rows:
+        mother = extract_name_under_fml_helpers(items, mother_rows[0], img_w, img_h, working_xmax)
+    father_rows = _fml_helper_rows(items, img_w, father_y1, father_y2)
+    if father_rows:
+        father = extract_name_under_fml_helpers(items, father_rows[0], img_w, img_h, working_xmax)
+    return child, mother, father
+
+
+def extract_citizenship_in_band(items, y_min, y_max, img_w) -> str:
+    """Items 8 and 15 sit on the left half, under the name row."""
+    region = tokens_in_region(items, img_w * 0.04, img_w * 0.48, y_min, y_max, min_score=0.10)
+    best = ""
+    best_y = None
+    for it in region:
+        cit = _normalize_citizenship(it["text"])
+        if not cit:
+            continue
+        if best_y is None or it["cy"] < best_y:
+            best = cit
+            best_y = it["cy"]
+    return best
 
 
 def find_label_below(items, anchor_label, patterns, y_min_offset=2, y_max_offset=95, x_max=None, min_match_score=5.8):
@@ -1067,9 +1237,10 @@ def extract_best_name_in_band(items, y_min, y_max, x_min, x_max):
             continue
         nt = norm_text(text)
         if any(kw in nt for kw in (
-            "DATE OF BIRTH", "PLACE OF", "CITIZENSHIP", "RELIGION", "SEX",
-            "TYPE OF BIRTH", "REGISTRY", "CERTIFICATE", "REPUBLIC", "PHILIPPINES",
-            "NAME OF", "MOTHER", "FATHER", "MARRIAGE",
+            "DATE OF BIRTH", "PLACE OF", "CITIZENSHIP", "TIZENSHIP", "RELIGION",
+            "RELIGIOUS", "SEX", "TYPE OF BIRTH", "REGISTRY", "CERTIFICATE",
+            "REPUBLIC", "PHILIPPINES", "NAME OF", "MOTHER", "FATHER", "MARRIAGE",
+            "SECT",
         )):
             continue
         if not _is_plausible_person_name(text):
@@ -1301,8 +1472,11 @@ def extract_marriage_of_parents(items, marriage_label, working_xmax, img_w, img_
     y0 = img_h * 0.48
     y1 = img_h * 0.66
     if marriage_label:
-        y0 = max(img_h * 0.42, marriage_label["y1"] - 6)
-        y1 = min(img_h * 0.72, max(marriage_label["y2"] + int(img_h * 0.12), y0 + 36))
+        y0 = max(img_h * 0.48, marriage_label["y1"] - 8)
+        # Stay on the 20a/20b write-in row; do not run into item 21 attendant.
+        y1 = min(img_h * 0.58, marriage_label["y2"] + int(img_h * 0.042))
+        if y1 <= y0 + 10:
+            y1 = y0 + int(img_h * 0.04)
 
     date_tokens = tokens_in_region(
         items, img_w * 0.03, mid + 8, y0, y1, min_score=0.10
@@ -1451,49 +1625,146 @@ def find_marriage_in_form(items, img_h, img_w):
 
 
 def find_remarks_label(items, img_w, img_h):
-    """Find the REMARKS/ANNOTATION label."""
+    """Find the REMARKS/ANNOTATION label at the bottom of Form 102."""
     return find_best_label(
         items,
-        patterns=["REMARKS", "ANNOTATION", "REMARKS ANNOTATION"],
-        x_min=img_w * 0.50,
-        x_max=img_w * 0.98,
-        y_min=img_h * 0.60,
-        y_max=img_h * 0.95,
-        min_match_score=5.5
+        patterns=["REMARKS", "ANNOTATION", "REMARKS ANNOTATION", "ANNOTATIONS"],
+        x_min=0,
+        x_max=img_w * 0.85,
+        y_min=img_h * 0.78,
+        y_max=img_h * 0.96,
+        min_match_score=5.0
     )
 
 
+def _is_remarks_noise(text: str) -> bool:
+    nt = norm_text(text or "")
+    if not nt or len(nt) < 4:
+        return True
+    if parse_date_from_string(text):
+        return True
+    if re.fullmatch(r"[\d\s-]+", nt):
+        return True
+    if any(kw in nt for kw in (
+        "REMARKS", "ANNOTATION", "FOR OCR", "LCRO", "OCRG", "SHARIA",
+        "OFFICE", "REGISTRAR", "TO BE FILLED", "CIVIL REGISTRAR",
+        "POPULATION", "USE ONLY",
+    )):
+        return True
+    return False
+
+
 def extract_remarks(items, remarks_label, working_xmax):
-    """Extract remarks from the form."""
+    """Keep a real annotation; drop the printed prompt and footer registry digits."""
     if not remarks_label:
         return ""
 
-    # Search in the region below the label
     remarks_region = tokens_in_region(
         items,
         remarks_label["x1"] - 20,
         working_xmax,
-        remarks_label["y2"] + 5,
-        remarks_label["y2"] + 320,
-        min_score=0.08
+        remarks_label["y1"] - 6,
+        remarks_label["y2"] + 80,
+        min_score=0.10
     )
-
     if not remarks_region:
         return ""
 
-    # Get text from the region
-    rows = group_rows(remarks_region, y_tol=12)
-
-    # Get multi-row text, join first few substantial rows
     remark_rows = []
-    for row in rows[:3]:  # First 3 rows
+    for row in group_rows(remarks_region, y_tol=12)[:3]:
         text = normalize_simple_text(join_tokens(row))
-        if text and len(text) > 3:
-            nt = norm_text(text)
-            if not any(kw in nt for kw in ["REMARKS", "ANNOTATION", "FOR OCR", "OFFICE", "REGISTRAR"]):
-                remark_rows.append(text)
-
+        if text and not _is_remarks_noise(text):
+            remark_rows.append(text)
     return " ".join(remark_rows)
+
+
+def extract_birth_date_of_registration(items, img_w, img_h, dob_text="", marriage_text=""):
+    """
+    Form 102 has no header registration date.
+    Item 25 (bottom right) 'Registered at the office of the civil registrar' holds Date.
+    Item 24 Received-by Date is the fallback.
+    """
+    skip = set()
+    for raw in (dob_text, marriage_text):
+        parsed = parse_date_from_string(raw or "")
+        if parsed:
+            skip.add(norm_text(parsed))
+
+    def first_date(region):
+        found = []
+        seen = set()
+        parsed = normalize_date_text(region)
+        if parsed:
+            key = norm_text(parsed)
+            if key not in skip and key not in seen:
+                return parsed
+        for it in region:
+            parsed = parse_date_from_string(it.get("text") or "")
+            if not parsed:
+                continue
+            key = norm_text(parsed)
+            if key in skip or key in seen:
+                continue
+            seen.add(key)
+            found.append((it["cy"], parsed))
+        if not found:
+            return ""
+        found.sort(key=lambda x: x[0])
+        return found[-1][1]
+
+    registered = find_best_label(
+        items,
+        patterns=[
+            "REGISTERED AT THE OFFICE",
+            "25. REGISTERED",
+            "25 REGISTERED",
+            "REGISTERED AT THE",
+            "REGISTERED",
+        ],
+        x_min=img_w * 0.35,
+        x_max=img_w * 0.99,
+        y_min=img_h * 0.68,
+        y_max=img_h * 0.93,
+        min_match_score=5.0,
+    )
+    if registered:
+        got = first_date(tokens_in_region(
+            items,
+            max(img_w * 0.42, registered["x1"] - 20),
+            img_w * 0.99,
+            registered["y1"],
+            min(img_h * 0.94, registered["y2"] + img_h * 0.08),
+            min_score=0.10,
+        ))
+        if got:
+            return got
+
+    received = find_best_label(
+        items,
+        patterns=["RECEIVED BY", "24. RECEIVED", "RECEIVED"],
+        x_min=0,
+        x_max=img_w * 0.55,
+        y_min=img_h * 0.68,
+        y_max=img_h * 0.93,
+        min_match_score=5.0,
+    )
+    if received:
+        got = first_date(tokens_in_region(
+            items,
+            received["x1"] - 10,
+            min(img_w * 0.55, received["x2"] + img_w * 0.40),
+            received["y1"],
+            min(img_h * 0.94, received["y2"] + img_h * 0.08),
+            min_score=0.10,
+        ))
+        if got:
+            return got
+
+    # Last resort: Date label in the bottom-right registrar block.
+    bottom_right = tokens_in_region(
+        items, img_w * 0.48, img_w * 0.99, img_h * 0.78, img_h * 0.90, min_score=0.10
+    )
+    return first_date(bottom_right)
 
 
 # =========================================================
@@ -1908,22 +2179,18 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
             )
             reg_date = normalize_date_text(reg_date_region)
 
-        # Also check near registry number
-        if reg_label and not reg_date:
-            reg_date_region = tokens_in_region(
-                items,
-                reg_label["x1"],
-                working_xmax,
-                reg_label["y1"] - 40,
-                reg_label["y2"] + 80,
-                min_score=0.10
-            )
-            reg_date = normalize_date_text(reg_date_region)
-
-        data["Date of Registration"] = reg_date
+        # Form 102 registration date is item 25 at the bottom, not beside Registry No.
 
         # Name of Child is First | Middle | Last on Form 102 — keep that order.
-        if name_label:
+        fml_child, fml_mother, fml_father = extract_form102_party_names(
+            items, img_w, img_h, working_xmax,
+            dob_label=dob_label,
+            type_birth_label=type_birth_label,
+            marriage_label=marriage_label,
+        )
+        if fml_child:
+            data["Name of Child"] = fml_child
+        elif name_label:
             next_y = min(
                 [y for y in [
                     dob_label["y1"] if dob_label else None,
@@ -1968,7 +2235,9 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
             data["Place of Birth"] = find_place_in_form(items, img_h, working_xmax)
 
         # Mother
-        if mother_label:
+        if fml_mother:
+            data["Name of Mother"] = fml_mother
+        elif mother_label:
             next_y = min(
                 [y for y in [
                     mother_cit_label["y1"] if mother_cit_label else None,
@@ -1996,6 +2265,10 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
                     y_down=55
                 )
             )
+        if not data["Citizenship of Mother"]:
+            data["Citizenship of Mother"] = extract_citizenship_in_band(
+                items, img_h * 0.285, img_h * 0.345, img_w
+            )
 
         if mother_rel_label:
             data["Religion of Mother"] = extract_value_near_label(
@@ -2007,7 +2280,9 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
             )
 
         # Father
-        if father_label:
+        if fml_father:
+            data["Name of Father"] = fml_father
+        elif father_label:
             next_y = min(
                 [y for y in [
                     father_cit_label["y1"] if father_cit_label else None,
@@ -2035,6 +2310,10 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
                     y_down=50
                 )
             )
+        if not data["Citizenship of Father"]:
+            data["Citizenship of Father"] = extract_citizenship_in_band(
+                items, img_h * 0.430, img_h * 0.490, img_w
+            )
 
         if father_rel_label:
             data["Religion of Father"] = extract_value_near_label(
@@ -2060,6 +2339,16 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
             if not data["Place of Marriage of Parents"] and place_fb:
                 data["Place of Marriage of Parents"] = place_fb
 
+        data["Date of Registration"] = extract_birth_date_of_registration(
+            items, img_w, img_h,
+            dob_text=data.get("Date of Birth") or "",
+            marriage_text=data.get("Date of Marriage of Parents") or "",
+        )
+        if not data["Date of Registration"] and reg_date:
+            parsed_reg = parse_date_from_string(reg_date)
+            if parsed_reg and norm_text(parsed_reg) != norm_text(data.get("Date of Birth") or ""):
+                data["Date of Registration"] = parsed_reg
+
         # Remarks
         data["Remarks"] = extract_remarks(items, remarks_label, working_xmax)
 
@@ -2072,16 +2361,20 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
                 data[key] = val
         child_name = norm_text(data.get("Name of Child") or "")
         mother_name = norm_text(data.get("Name of Mother") or "")
+        applied_boxes = set()
         for key, val in (box_map or {}).items():
             if not val:
                 continue
             val = str(val).strip()
+            current = (data.get(key) or "").strip()
             if key in {"Name of Child", "Name of Mother", "Name of Father"}:
                 if not _is_plausible_person_name(val):
                     continue
                 if key != "Name of Child" and child_name and norm_text(val) == child_name:
                     continue
                 if key == "Name of Father" and mother_name and norm_text(val) == mother_name:
+                    continue
+                if current and _is_plausible_person_name(current):
                     continue
             elif key in {"Place of Birth", "Place of Marriage of Parents"}:
                 if key == "Place of Birth":
@@ -2090,19 +2383,41 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
                     val = sanitize_place_of_marriage_of_parents(val)
                 if not val:
                     continue
+                if current and _is_plausible_place(current):
+                    continue
             elif "Citizenship" in key:
                 cit = _normalize_citizenship(val)
                 if not cit:
                     continue
                 val = cit
+                if current and _normalize_citizenship(current):
+                    continue
             elif "Date" in key:
                 parsed = parse_date_from_string(val)
                 if not parsed:
                     continue
                 val = parsed
+                if current and parse_date_from_string(current):
+                    continue
+            elif key == "Remarks":
+                if _is_remarks_noise(val):
+                    continue
+                if current:
+                    continue
+            elif key == "Type of Birth":
+                nt = norm_text(val)
+                if not any(w in nt for w in ("SINGLE", "TWIN", "TRIPLET", "QUADRUPLET")):
+                    continue
+            elif key == "Birth Order":
+                nt = norm_text(val)
+                if not re.search(r"\b(FIRST|SECOND|THIRD|FOURTH|FIFTH|1ST|2ND|3RD)\b", nt):
+                    continue
             elif _is_placeholder_text(val):
                 continue
+            elif current and current.lower() != "unknown":
+                continue
             data[key] = val
+            applied_boxes.add(key)
         _sanitize_birth_fields(data)
 
         out = {key: data.get(key, "") for key in BIRTH_OUTPUT_KEYS}
@@ -2110,7 +2425,7 @@ def extract_birth_data(img_path: str) -> Dict[str, Any]:
         source_map: Dict[str, str] = {}
         for key in BIRTH_OUTPUT_KEYS:
             val = (out.get(key) or "").strip()
-            if (box_map or {}).get(key) and val:
+            if key in applied_boxes and val:
                 source = "box"
             else:
                 is_template_fill = (

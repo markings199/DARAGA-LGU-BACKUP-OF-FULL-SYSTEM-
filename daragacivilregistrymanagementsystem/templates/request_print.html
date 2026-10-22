@@ -67,7 +67,17 @@
       </div>
 
       <div class="req-edit-form-body">
-        {% if has_pending %}
+        {% if missing_print_fields %}
+          <p class="review-required-banner" role="alert">
+            Complete extracted metadata before requesting a print:
+            {{ missing_print_fields|join(', ') }}.
+            Request an edit first so those fields can be filled.
+          </p>
+          <div class="request-edit-actions">
+            <a href="{{ url_for('request_edit', record_id=record.id) }}" class="btn btn-primary req-edit-btn-primary">Request edit</a>
+            <a href="{{ url_for('record_detail', record_id=record.id) }}" class="btn btn-secondary">Back to record</a>
+          </div>
+        {% elif has_pending %}
           <p class="req-edit-note" role="note">
             <span class="req-edit-note-ic" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M11 12h1v4h1"/></svg>

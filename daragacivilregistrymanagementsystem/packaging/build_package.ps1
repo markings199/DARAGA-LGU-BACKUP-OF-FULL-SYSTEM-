@@ -18,7 +18,7 @@ $excludeDirs = [System.Collections.Generic.HashSet[string]]::new([StringComparer
 @(
     ".git", ".venv", "venv", "env", "__pycache__", "uploads", "backups",
     "uploads_backup_", "dist", "build", ".idea", ".vscode", ".cursor",
-    "instance", "logs", ".pytest_cache"
+    "instance", "logs", ".pytest_cache", "agent-transcripts", "terminals"
 ) | ForEach-Object { [void]$excludeDirs.Add($_) }
 
 $excludeNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -41,6 +41,7 @@ function Test-ExcludedPath([string]$FullPath) {
     if ($leaf -match '\.(pyc|pyo|log|db|sqlite|sqlite3)$') { return $true }
     if ($leaf -like ".env.*" -and $leaf -ne ".env.example") { return $true }
     if ($leaf -like "database_pre_restore_*") { return $true }
+    if ($leaf -like "_dbg_*") { return $true }
     return $false
 }
 
@@ -62,6 +63,33 @@ foreach ($sub in @("uploads", "uploads\birth", "uploads\marriage", "uploads\deat
 }
 Set-Content -Path (Join-Path $Stage "uploads\.keep") -Value "Scans are stored here after install." -Encoding UTF8
 Set-Content -Path (Join-Path $Stage "backups\.keep") -Value "Backup ZIP files are stored here after install." -Encoding UTF8
+
+$leaks = Get-ChildItem -Path $Stage -Recurse -File -Force | Where-Object {
+    $n = $_.Name
+    $n -eq ".env" -or
+    ($n -like ".env.*" -and $n -ne ".env.example") -or
+    $n -eq "storage_settings.json" -or
+    $n -like "database_pre_restore_*" -or
+    $_.Extension -in @(".db", ".sqlite", ".sqlite3")
+}
+if ($leaks) {
+    throw "Package safety check failed. These files must not be shipped:`n$($leaks.FullName -join "`n")"
+}
+$scanLeak = Get-ChildItem -Path (Join-Path $Stage "uploads") -Recurse -File -Force -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne ".keep" -and $_.Extension -match '\.(jpg|jpeg|png|tif|tiff|pdf)$' }
+if ($scanLeak) {
+    throw "Package safety check failed. Live scans must not be shipped."
+}
+
+$manifest = @(
+    "Daraga Civil Registry - package manifest"
+    "Built: $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    "Files: $count"
+    "This ZIP does not include .env, live scans, backups, or .venv."
+    "On the office PC: unzip, copy DaragaCivilRegistry to C:\DaragaCivilRegistry, run Install.bat, then Start.bat."
+)
+Set-Content -Path (Join-Path $Stage "PACKAGE_MANIFEST.txt") -Value $manifest -Encoding UTF8
+Copy-Item -LiteralPath (Join-Path $Stage "0_READ_ME_FIRST.txt") -Destination (Join-Path $DistRoot "0_READ_ME_FIRST.txt") -Force -ErrorAction SilentlyContinue
 
 if (Test-Path $ZipPath) { Remove-Item -Force $ZipPath }
 Compress-Archive -Path $Stage -DestinationPath $ZipPath -CompressionLevel Optimal

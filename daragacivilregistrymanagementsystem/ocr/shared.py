@@ -121,6 +121,37 @@ def _load_paddleocr():
     return _PaddleOCR
 
 
+def _unknown_kwarg_name(exc: BaseException) -> str:
+    """PaddleOCR 2.x raises TypeError; 3.x raises ValueError('Unknown argument: show_log')."""
+    message = str(exc or "")
+    if "Unknown argument:" in message:
+        return message.split("Unknown argument:", 1)[1].strip().strip("'\" .,")
+    marker = "unexpected keyword argument "
+    if marker in message:
+        tail = message.split(marker, 1)[1].strip()
+        return tail.split()[0].strip("'\"") if tail else ""
+    return ""
+
+
+def _create_paddleocr(PaddleOCR, kwargs: dict):
+    pending = dict(kwargs)
+    last_error = None
+    while True:
+        try:
+            return PaddleOCR(**pending)
+        except (TypeError, ValueError) as exc:
+            last_error = exc
+            name = _unknown_kwarg_name(exc)
+            if name and name in pending:
+                pending.pop(name, None)
+                continue
+            raise
+        except Exception:
+            if last_error is not None:
+                raise last_error
+            raise
+
+
 def get_ocr():
     """
     Lazily create a shared PaddleOCR instance.
@@ -137,10 +168,14 @@ def get_ocr():
 
     PaddleOCR = _load_paddleocr()
     try:
-        cpu_threads = max(1, min(8, int(os.environ.get("OCR_CPU_THREADS") or "4")))
+        cpu_threads = max(1, min(4, int(os.environ.get("OCR_CPU_THREADS") or "4")))
     except ValueError:
         cpu_threads = 4
     max_side = _ocr_max_side()
+    try:
+        rec_batch = max(8, min(32, int(os.environ.get("OCR_REC_BATCH") or "24")))
+    except ValueError:
+        rec_batch = 24
     use_gpu = False
     try:
         import paddle
@@ -159,7 +194,7 @@ def get_ocr():
         cpu_threads=cpu_threads,
         det_limit_side_len=max_side,
         det_limit_type="max",
-        rec_batch_num=12,
+        rec_batch_num=rec_batch,
         drop_score=0.45,
         show_log=False,
     )
@@ -171,7 +206,7 @@ def get_ocr():
         use_doc_unwarping=False,
         text_det_limit_side_len=max_side,
         text_det_limit_type="max",
-        text_recognition_batch_size=16,
+        text_recognition_batch_size=rec_batch,
         cpu_threads=cpu_threads,
         enable_mkldnn=not use_gpu,
         show_log=False,
@@ -181,35 +216,56 @@ def get_ocr():
     last_error = None
     try:
         with _quiet_stdio():
-            for kwargs in (kwargs_v2, kwargs_v3):
+            for kwargs in (
+                kwargs_v2,
+                kwargs_v3,
+                dict(lang="en", use_textline_orientation=False),
+                dict(lang="en", use_angle_cls=False, show_log=False),
+                dict(lang="en"),
+            ):
                 try:
-                    _OCR_INSTANCE = PaddleOCR(**kwargs)
+                    _OCR_INSTANCE = _create_paddleocr(PaddleOCR, kwargs)
                     return _OCR_INSTANCE
                 except (TypeError, ValueError) as exc:
                     last_error = exc
                     continue
-            _OCR_INSTANCE = PaddleOCR(lang="en", use_angle_cls=False, show_log=False)
     except Exception as exc:
         raise OCREngineNotFoundError(
             "Failed to initialize PaddleOCR engine. Ensure 'paddlepaddle' is installed and compatible "
             "with this Python version."
         ) from (exc if last_error is None else last_error)
+    if _OCR_INSTANCE is None:
+        raise OCREngineNotFoundError(
+            "Failed to initialize PaddleOCR engine. Ensure 'paddlepaddle' is installed and compatible "
+            "with this Python version."
+        ) from last_error
     return _OCR_INSTANCE
 
 
 def warmup_ocr() -> None:
-    """Compile CPU kernels at the real scan size so the first certificate is not the slow one."""
+    """Compile CPU kernels on a portrait form so the first certificate is not the slow one."""
     global _OCR_WARMED
     if _OCR_WARMED:
         return
     side = _ocr_max_side()
-    height = max(360, int(side * 0.72))
-    img = np.full((height, side, 3), 255, dtype=np.uint8)
-    cv2.rectangle(img, (24, 24), (side - 24, height - 24), (0, 0, 0), 2)
-    for i, line in enumerate(
-        ("CERTIFICATE OF LIVE BIRTH", "Registry No. 2024-000123", "JUAN DELA CRUZ")
-    ):
-        cv2.putText(img, line, (40, 80 + i * 48), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
+    # Same portrait shape as a PSA form so the first real scan does not recompile kernels.
+    width = max(320, int(side * 0.48))
+    height = side
+    img = np.full((height, width, 3), 255, dtype=np.uint8)
+    cv2.rectangle(img, (8, 8), (width - 8, height - 8), (0, 0, 0), 2)
+    lines = (
+        "CERTIFICATE OF LIVE BIRTH",
+        "Registry No. 2026-000123",
+        "JUAN MIGUEL SANTOS",
+        "15 MARCH 1995 MALE",
+        "DARAGA COMMUNITY HOSPITAL ALBAY",
+        "MARIA SANTOS CRUZ FILIPINO",
+        "16 JUNE 1995 MUNICIPAL CIVIL REGISTRAR",
+    )
+    y = 40
+    for line in lines:
+        cv2.putText(img, line, (14, y), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (0, 0, 0), 1, cv2.LINE_AA)
+        y += 36
     try:
         with _quiet_stdio():
             run_ocr_on_image(img)

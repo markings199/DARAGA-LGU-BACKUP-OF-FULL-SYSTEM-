@@ -156,6 +156,21 @@
         <input id="print-signer-registrar-title" type="text" value="MGDH I / Municipal Civil Registrar I" autocomplete="off" />
       </label>
     </div>
+    {% set _missing_meta = missing_print_fields if missing_print_fields is defined else missing_required_review_fields(doc_type, _data) %}
+    <div
+      class="print-missing-meta{% if not _missing_meta %} is-hidden{% endif %}"
+      id="print-missing-meta"
+      role="alert"
+    >
+      <p class="print-missing-meta-title">Print is blocked — fill Extracted metadata first</p>
+      <p class="print-missing-meta-copy">These required fields are empty. Open Extracted metadata, type the missing information from the certificate, then print.</p>
+      <ul class="print-missing-meta-list" id="print-missing-meta-list">
+        {% for key in _missing_meta %}
+          <li>{{ metadata_display_label(key) }}</li>
+        {% endfor %}
+      </ul>
+      <a class="print-missing-meta-link" href="#extracted-metadata">Go to Extracted metadata</a>
+    </div>
     <div class="print-panel-foot">
       <button
         type="button"
@@ -166,6 +181,8 @@
         data-sync-form="{{ '1' if sync_from_form|default(false) else '0' }}"
         data-locked-print-format="{{ _locked }}"
         data-default-print-mode="{{ _default_mode }}"
+        data-missing-meta="{{ _missing_meta | tojson }}"
+        {% if _missing_meta %}aria-disabled="true"{% endif %}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
         Print

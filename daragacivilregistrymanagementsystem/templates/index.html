@@ -3,1424 +3,10 @@
 {% block body_class %}page-scan-workflow{% if active_ocr %} ocr-busy{% endif %}{% endblock %}
 
 {% block extra_head %}
-<style>
-  body.page-scan-workflow .main {
-    padding: 12px 16px 20px;
-  }
-  .scanflow-hero-wrap { margin: 0 0 10px; }
-  .scanflow-hero {
-    background: var(--header-grad);
-    border-radius: 12px;
-    padding: 0;
-    border: 1px solid rgba(0, 32, 128, 0.28);
-    box-shadow: 0 6px 20px rgba(0, 32, 128, 0.18);
-    overflow: hidden;
-  }
-  .scanflow-hero-main {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px 16px;
-    padding: 10px 14px;
-  }
-  .scanflow-hero-brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    min-width: 0;
-  }
-  .scanflow-hero-mark {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  }
-  .scanflow-hero-mark svg {
-    width: 18px;
-    height: 18px;
-  }
-  .scanflow-hero-kicker {
-    margin: 0 0 1px;
-    font-size: 0.62rem;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #93c5fd;
-  }
-  .scanflow-hero-title {
-    margin: 0 0 2px;
-    font-size: 1.05rem;
-    font-weight: 900;
-    color: #ffffff;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-  }
-  .scanflow-hero-tagline {
-    margin: 0;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #dbe7ff;
-    line-height: 1.35;
-    max-width: 38rem;
-  }
-  .scanflow-hero-meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-  }
-  .scanflow-role-chip,
-  .scanflow-meta-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 0.68rem;
-    font-weight: 800;
-    letter-spacing: 0.03em;
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    white-space: nowrap;
-  }
-  .scanflow-role-chip {
-    background: #7dd3fc;
-    border-color: #7dd3fc;
-    color: #0f172a;
-    letter-spacing: 0.06em;
-  }
-  .scanflow-meta-chip svg {
-    width: 12px;
-    height: 12px;
-    flex-shrink: 0;
-    opacity: 0.9;
-  }
-  .scanflow-hero-rail {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px 16px;
-    padding: 7px 14px;
-    background: rgba(0, 10, 40, 0.28);
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-  }
-  .scanflow-step {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-  .scanflow-step-lbl {
-    font-size: 0.62rem;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #93c5fd;
-  }
-  .scanflow-step-val {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    font-size: 0.8rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    color: #ffffff;
-  }
-  .scanflow-step-val svg {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    fill: #7dd3fc;
-  }
-  .scanflow-state-check[hidden] { display: none !important; }
-  .scanflow-rail-sep {
-    width: 1px;
-    height: 16px;
-    background: rgba(255, 255, 255, 0.2);
-    flex-shrink: 0;
-  }
-
-  body.page-scan-workflow .scan-workflow-stack { gap: 10px; }
-  body.page-scan-workflow .scan-workflow-stack > .main-card.scanflow-form-card {
-    padding: 0;
-    overflow: visible;
-    border-radius: 12px;
-    background: #ffffff;
-    border: 1px solid rgba(0, 32, 128, 0.14);
-    box-shadow: 0 4px 16px rgba(0, 32, 128, 0.08);
-  }
-  .scanflow-card-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 0;
-    padding: 10px 14px;
-    background: var(--header-grad);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-  .scanflow-card-head-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #ffffff;
-    flex-shrink: 0;
-  }
-  .scanflow-card-head-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; }
-  .scanflow-card-head-copy { min-width: 0; }
-  .scanflow-card-head h2 {
-    margin: 0;
-    font-size: 0.92rem;
-    font-weight: 900;
-    color: #ffffff;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
-  }
-  .scanflow-card-sub {
-    margin: 2px 0 0;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: #dbe7ff;
-    line-height: 1.3;
-  }
-
-  .scanflow-form-body {
-    padding: 12px 14px 4px;
-  }
-  .scanflow-form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px 14px;
-    margin: 0 0 10px;
-  }
-  .scanflow-form-card form > .scanflow-field-row,
-  .scanflow-form-grid > .scanflow-field-row {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 5px;
-    margin: 0;
-    padding: 0;
-    border: none;
-  }
-  .scanflow-form-card form > .scanflow-field-row:first-of-type {
-    border-top: none;
-    padding-top: 0;
-  }
-  .scanflow-form-card form > .scanflow-field-row:has(+ .scanflow-actions-primary) {
-    padding-bottom: 0;
-  }
-  .scanflow-field-row {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-  .scanflow-field-label-col {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    padding-top: 0;
-  }
-  .scanflow-field-ic {
-    width: 15px;
-    height: 15px;
-    flex-shrink: 0;
-    color: var(--brand-blue);
-    fill: none;
-    stroke: currentColor;
-  }
-  .scanflow-field-label-col label,
-  .scanflow-field-label-col > span {
-    margin: 0;
-    font-size: 0.7rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #475569;
-  }
-  .scanflow-field-control.field { margin-bottom: 0; }
-  body.page-scan-workflow .scanflow-field-control select,
-  body.page-scan-workflow .scanflow-field-control input[type="file"] {
-    border-radius: 8px;
-    border: 1px solid #c5d4e8;
-    background: #f8fafc;
-    box-shadow: none;
-    padding: 7px 10px;
-    font-size: 0.84rem;
-    min-height: 36px;
-  }
-  body.page-scan-workflow .scanflow-field-control select:focus,
-  body.page-scan-workflow .scanflow-field-control input[type="file"]:focus {
-    outline: 2px solid rgba(0, 32, 128, 0.28);
-    outline-offset: 1px;
-    border-color: var(--brand-blue);
-    background: #fff;
-  }
-  .scanflow-detect-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 36px;
-    padding: 7px 10px;
-    border-radius: 8px;
-    border: 1px solid #c5d4e8;
-    background: #f8fafc;
-    font-size: 0.84rem;
-    font-weight: 700;
-    color: #334155;
-    line-height: 1.3;
-  }
-  .scanflow-detect-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: #94a3b8;
-  }
-  .scanflow-detect-status.is-busy .scanflow-detect-dot {
-    background: #2563eb;
-    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18);
-    animation: scanflow-detect-pulse 1s ease-in-out infinite;
-  }
-  .scanflow-detect-status.is-ready {
-    border-color: #86efac;
-    background: #f0fdf4;
-    color: #166534;
-  }
-  .scanflow-detect-status.is-ready .scanflow-detect-dot { background: #16a34a; }
-  .scanflow-detect-status.is-fail {
-    border-color: #fcd34d;
-    background: #fffbeb;
-    color: #92400e;
-  }
-  .scanflow-detect-status.is-fail .scanflow-detect-dot { background: #d97706; }
-  @keyframes scanflow-detect-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.35; }
-  }
-  .scanflow-detect-toggle {
-    margin: 6px 0 0;
-    padding: 0;
-    border: none;
-    background: none;
-    color: #1d4ed8;
-    font-size: 0.75rem;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  .scanflow-detect-toggle:hover { text-decoration: underline; }
-  .scanflow-detect-change { margin-top: 6px; }
-  .scanflow-detect-change[hidden] { display: none; }
-
-  .scanflow-scanner-btns {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-    margin-top: 6px;
-  }
-  #scan-from-device[disabled] {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .btn-scanflow-ghost {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 11px;
-    border-radius: 8px;
-    font-weight: 800;
-    font-size: 0.75rem;
-    background: #fff;
-    color: var(--brand-blue);
-    border: 1px solid #b6c9e0;
-    box-shadow: none;
-    min-height: 32px;
-  }
-  .btn-scanflow-ghost:hover { background: #eef4fc; border-color: var(--brand-blue); }
-  .btn-scanflow-ghost svg { width: 14px; height: 14px; flex-shrink: 0; fill: none; stroke: currentColor; }
-  .btn-scanflow-ghost.is-scanning {
-    opacity: 0.7;
-    pointer-events: none;
-  }
-  .scanflow-scan-anim {
-    --scan-accent: #2563eb;
-    --scan-ink: #0f2b5c;
-    --scan-muted: #64748b;
-    --scan-surface: #ffffff;
-    --scan-glass: #e8eef8;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    height: 32px;
-    padding: 0 10px 0 4px;
-    border-radius: 8px;
-    border: 1px solid rgba(37, 99, 235, 0.22);
-    background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
-    vertical-align: middle;
-  }
-  .scanflow-scan-anim[hidden] { display: none !important; }
-  .scanflow-scan-anim.is-done {
-    border-color: rgba(22, 163, 74, 0.28);
-    background: linear-gradient(180deg, #f3fdf6 0%, #e8f8ee 100%);
-  }
-  .scanflow-scan-anim-mark {
-    position: relative;
-    flex-shrink: 0;
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    background: var(--scan-surface);
-    border: 1px solid rgba(15, 43, 92, 0.12);
-    display: grid;
-    place-items: center;
-    overflow: hidden;
-  }
-  .scanflow-scan-anim-glass {
-    position: relative;
-    width: 14px;
-    height: 18px;
-    border-radius: 2px;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 40%),
-      repeating-linear-gradient(
-        180deg,
-        transparent 0 3px,
-        rgba(15, 43, 92, 0.12) 3px 4px
-      ),
-      var(--scan-glass);
-    border: 1px solid rgba(37, 99, 235, 0.28);
-    overflow: hidden;
-  }
-  .scanflow-scan-anim-beam {
-    position: absolute;
-    left: -10%;
-    right: -10%;
-    top: 0;
-    height: 3px;
-    border-radius: 999px;
-    background: var(--scan-accent);
-    box-shadow: 0 0 8px rgba(37, 99, 235, 0.75), 0 0 2px #93c5fd;
-    animation: scanflow-scan-beam 1.15s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-  }
-  .scanflow-scan-anim.is-done .scanflow-scan-anim-beam {
-    animation: none;
-    top: 55%;
-    background: #16a34a;
-    box-shadow: 0 0 8px rgba(22, 163, 74, 0.55);
-  }
-  .scanflow-scan-anim-copy {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 0;
-    min-width: 0;
-    line-height: 1.15;
-  }
-  .scanflow-scan-anim-copy strong {
-    font-size: 0.7rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--scan-ink);
-  }
-  .scanflow-scan-anim-copy span {
-    font-size: 0.64rem;
-    font-weight: 600;
-    color: var(--scan-muted);
-    white-space: nowrap;
-  }
-  .scanflow-scan-anim-dots::after {
-    content: "";
-    display: inline-block;
-    width: 1.1em;
-    text-align: left;
-    animation: scanflow-scan-dots 1.2s steps(4, end) infinite;
-  }
-  .scanflow-scan-anim.is-done .scanflow-scan-anim-dots { display: none; }
-  @keyframes scanflow-scan-beam {
-    0% { transform: translateY(1px); opacity: 0.35; }
-    50% { opacity: 1; }
-    100% { transform: translateY(15px); opacity: 0.35; }
-  }
-  @keyframes scanflow-scan-dots {
-    0% { content: ""; }
-    25% { content: "."; }
-    50% { content: ".."; }
-    75% { content: "..."; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .scanflow-scan-anim-beam { animation: none; top: 50%; opacity: 0.85; }
-    .scanflow-scan-anim-dots::after { animation: none; content: "..."; }
-    .btn-scanflow-primary.is-running,
-    .btn-scanflow-primary.is-running::after,
-    .btn-scanflow-primary .btn-ocr-spin {
-      animation: none;
-    }
-    .btn-scanflow-primary.is-running::after { display: none; }
-  }
-
-  .scanflow-actions-primary #ocr-loading {
-    flex: 0 1 28rem;
-    width: min(100%, 28rem);
-    margin-left: auto;
-  }
-
-  .scanflow-actions-primary {
-    display: flex;
-    flex-wrap: wrap;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-top: 12px;
-    padding: 10px 0 4px;
-    border-top: 1px solid #e8eef6;
-    overflow: visible;
-  }
-  .scanflow-ocr-hint {
-    margin: 0;
-    flex: 1 1 14rem;
-    align-items: flex-start;
-    padding: 0;
-  }
-  .scanflow-ocr-hint .app-note-text {
-    font-size: 0.75rem;
-    font-weight: 600;
-    line-height: 1.35;
-  }
-  .btn-scanflow-primary {
-    width: auto;
-    min-width: 9.5rem;
-    justify-content: center;
-    gap: 8px;
-    padding: 8px 16px;
-    min-height: 38px;
-    border-radius: 8px;
-    font-size: 0.84rem;
-    font-weight: 800;
-    margin-left: 0;
-    position: relative;
-    overflow: hidden;
-  }
-  .scanflow-ocr-btns {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-left: auto;
-  }
-  .btn-scanflow-primary svg { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; }
-  .btn-scanflow-primary.is-running .btn-ocr-idle-ic { display: none; }
-  .btn-scanflow-primary .btn-ocr-spin {
-    display: none;
-    width: 16px;
-    height: 16px;
-    border: 2px solid rgba(255, 255, 255, 0.22);
-    border-top-color: #fff;
-    border-right-color: rgba(255, 255, 255, 0.72);
-    border-radius: 50%;
-    animation: scanflow-ocr-spin 0.72s cubic-bezier(0.45, 0.15, 0.55, 0.85) infinite;
-  }
-  .btn-scanflow-primary.is-running .btn-ocr-spin { display: inline-block; }
-  .btn-scanflow-primary.is-running {
-    animation: scanflow-ocr-btn-glow 1.8s ease-in-out infinite;
-  }
-  .btn-scanflow-primary.is-running::after {
-    content: "";
-    position: absolute;
-    inset: 0 auto 0 -40%;
-    width: 38%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
-    animation: scanflow-ocr-btn-sheen 1.7s ease-in-out infinite;
-    pointer-events: none;
-  }
-  .btn-scanflow-cancel {
-    min-height: 40px;
-    padding: 8px 14px;
-    border-radius: 10px;
-    font-weight: 800;
-    border: 1px solid #fca5a5;
-    background: #fff5f5;
-    color: #991b1b;
-  }
-  .btn-scanflow-cancel:hover {
-    background: #fee2e2;
-    border-color: #f87171;
-  }
-  .btn-scanflow-cancel[hidden] {
-    display: none !important;
-  }
-  #scan-preview-empty[hidden],
-  #scan-preview-viewer-wrap[hidden] {
-    display: none !important;
-  }
-  @keyframes scanflow-ocr-spin {
-    to { transform: rotate(360deg); }
-  }
-  @keyframes scanflow-ocr-btn-glow {
-    0%, 100% { box-shadow: 0 4px 12px rgba(0, 32, 128, 0.28); }
-    50% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18), 0 6px 16px rgba(0, 32, 128, 0.38); }
-  }
-  @keyframes scanflow-ocr-btn-sheen {
-    0% { transform: translateX(0); opacity: 0; }
-    18% { opacity: 1; }
-    100% { transform: translateX(320%); opacity: 0; }
-  }
-
-  input.scanflow-file-native::file-selector-button {
-    margin-right: 10px;
-    padding: 5px 11px;
-    border-radius: 7px;
-    border: 1px solid rgba(0, 32, 128, 0.18);
-    background: #e8eefc;
-    color: var(--brand-blue);
-    font-weight: 800;
-    font-size: 0.75rem;
-    cursor: pointer;
-  }
-  input.scanflow-file-native::-webkit-file-upload-button {
-    margin-right: 10px;
-    padding: 5px 11px;
-    border-radius: 7px;
-    border: 1px solid rgba(0, 32, 128, 0.18);
-    background: #e8eefc;
-    color: var(--brand-blue);
-    font-weight: 800;
-    font-size: 0.75rem;
-    cursor: pointer;
-  }
-  .scanflow-image-in-use {
-    margin: 6px 0 0;
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: #0f2b5c;
-    line-height: 1.35;
-  }
-  [data-theme="dark"] .scanflow-image-in-use {
-    color: #cbd5e1;
-  }
-
-  .scanflow-preview-below-wrap {
-    margin: 8px 14px 14px;
-    padding: 12px 12px 12px;
-    border-top: none;
-    border: 1px solid #e2eaf4;
-    border-radius: 10px;
-    background: #f8fafc;
-    overflow: visible;
-    height: auto;
-    max-height: none;
-  }
-  .scanflow-preview-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-  }
-  .scanflow-preview-head .section-title {
-    margin: 0;
-    font-size: 0.78rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--brand-blue);
-  }
-  .scanflow-preview-head-ic {
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    background: var(--brand-blue);
-    border: 1px solid #001a66;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #ffffff;
-  }
-  .scanflow-preview-head-ic svg { width: 13px; height: 13px; fill: currentColor; }
-  .scanflow-preview-shell {
-    position: relative;
-    border: 1px dashed #94a3b8;
-    border-radius: 8px;
-    padding: 8px;
-    background: #ffffff;
-    box-shadow: none;
-    min-height: 140px;
-    overflow: visible;
-    clip-path: none;
-  }
-  #scan-preview-viewer-wrap {
-    position: relative;
-    z-index: 1;
-  }
-  .ocr-doc-scan {
-    display: none;
-    position: absolute;
-    inset: 8px;
-    z-index: 12;
-    overflow: hidden;
-    border-radius: 8px;
-    pointer-events: none;
-  }
-  body.page-scan-workflow.ocr-busy .ocr-doc-scan,
-  body.page-scan-workflow.is-device-scanning .ocr-doc-scan {
-    display: block;
-    animation: ocr-doc-scan-enter 0.4s ease-out;
-  }
-  #scan-preview-viewer-wrap:not([hidden]) ~ .ocr-doc-scan {
-    top: 54px;
-  }
-  .ocr-doc-scan-veil {
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(90% 50% at 50% 8%, rgba(56, 189, 248, 0.08), transparent 58%),
-      linear-gradient(180deg, rgba(8, 18, 36, 0.04) 0%, rgba(8, 18, 36, 0.16) 100%);
-  }
-  .ocr-doc-scan-grid {
-    position: absolute;
-    inset: -24% 0;
-    opacity: 0.28;
-    background-image:
-      repeating-linear-gradient(to bottom, rgba(125, 211, 252, 0.12) 0 1px, transparent 1px 11px);
-    mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent);
-    animation: ocr-doc-scan-grid 6s linear infinite;
-  }
-  .ocr-doc-scan-fields { display: none; }
-  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-header {
-    position: relative;
-    z-index: 13;
-  }
-  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-pane {
-    position: relative;
-    z-index: 1;
-  }
-  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-image-wrap {
-    position: relative;
-    isolation: isolate;
-  }
-  body.page-scan-workflow #scan-wf-image-wrap > img {
-    display: block;
-    vertical-align: top;
-  }
-  .ocr-doc-targets,
-  .ocr-doc-target,
-  .ocr-doc-target-beam,
-  .ocr-doc-target-sweep,
-  .ocr-doc-target-tag {
-    display: none !important;
-    animation: none !important;
-  }
-  .ocr-doc-scan-mover {
-    position: absolute;
-    left: -2%;
-    right: -2%;
-    top: 0;
-    height: 12%;
-    will-change: transform;
-    animation: ocr-doc-scan-move 2.8s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
-  }
-  .ocr-doc-scan-wash {
-    position: absolute;
-    inset: -50% 0 -50%;
-    background: linear-gradient(
-      180deg,
-      transparent 0%,
-      rgba(56, 189, 248, 0.04) 42%,
-      rgba(165, 243, 252, 0.16) 50%,
-      rgba(56, 189, 248, 0.04) 58%,
-      transparent 100%
-    );
-  }
-  .ocr-doc-scan-beam {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    height: 72px;
-    margin-top: -36px;
-    background: linear-gradient(
-      180deg,
-      transparent 0%,
-      rgba(37, 99, 235, 0.18) 38%,
-      rgba(56, 189, 248, 0.55) 48%,
-      rgba(255, 255, 255, 0.92) 50%,
-      rgba(34, 211, 238, 0.55) 52%,
-      rgba(37, 99, 235, 0.18) 62%,
-      transparent 100%
-    );
-  }
-  .ocr-doc-scan-core {
-    position: absolute;
-    left: 4%;
-    right: 4%;
-    top: 50%;
-    height: 3px;
-    margin-top: -1.5px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent 0%, #fff 10%, #38bdf8 50%, #4ade80 90%, transparent 100%);
-    box-shadow:
-      0 0 10px 2px rgba(56, 189, 248, 0.95),
-      0 0 28px 8px rgba(37, 99, 235, 0.45);
-    animation: ocr-doc-scan-core 1.1s ease-in-out infinite;
-  }
-  .ocr-doc-scan-corner {
-    position: absolute;
-    width: 18px;
-    height: 18px;
-    border: 2px solid rgba(186, 230, 253, 0.9);
-    box-shadow: 0 0 8px rgba(34, 211, 238, 0.28);
-    animation: ocr-doc-scan-corners 2.2s ease-in-out infinite;
-  }
-  .ocr-doc-scan-corner--tl { top: 8px; left: 8px; border-right: 0; border-bottom: 0; border-radius: 3px 0 0 0; }
-  .ocr-doc-scan-corner--tr { top: 8px; right: 8px; border-left: 0; border-bottom: 0; border-radius: 0 3px 0 0; }
-  .ocr-doc-scan-corner--bl { bottom: 8px; left: 8px; border-right: 0; border-top: 0; border-radius: 0 0 0 3px; }
-  .ocr-doc-scan-corner--br { bottom: 8px; right: 8px; border-left: 0; border-top: 0; border-radius: 0 0 3px 0; }
-  .ocr-doc-scan-label {
-    position: absolute;
-    left: 50%;
-    bottom: 12px;
-    z-index: 8;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    transform: translateX(-50%);
-    padding: 7px 12px 7px 10px;
-    border-radius: 999px;
-    background: rgba(8, 15, 30, 0.88);
-    color: #e0f2fe;
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.03em;
-    white-space: nowrap;
-    border: 1px solid rgba(125, 211, 252, 0.45);
-    box-shadow: 0 10px 24px rgba(2, 8, 23, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
-    backdrop-filter: blur(10px);
-  }
-  .ocr-doc-scan-count {
-    display: none;
-    margin-left: 2px;
-    padding: 1px 6px;
-    border-radius: 999px;
-    background: rgba(56, 189, 248, 0.18);
-    color: #bae6fd;
-    font-size: 0.62rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-  }
-  .ocr-doc-scan-count.is-on { display: inline-block; }
-  .ocr-doc-scan-live {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #4ade80;
-    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55);
-    animation: ocr-doc-scan-live 1.4s ease-out infinite;
-  }
-  .ocr-doc-scan-dots::after {
-    content: "";
-    display: inline-block;
-    width: 1.1em;
-    text-align: left;
-    animation: ocr-doc-scan-dots 1.2s steps(4, end) infinite;
-  }
-  body.page-scan-workflow.ocr-busy #scan-preview-viewer-wrap:not([hidden]) .document-viewer-image {
-    animation: ocr-doc-scan-page 3.6s ease-in-out infinite;
-  }
-  @keyframes ocr-doc-scan-enter {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-  @keyframes ocr-doc-scan-move {
-    from { transform: translate3d(0, -20%, 0); }
-    to { transform: translate3d(0, 720%, 0); }
-  }
-  @keyframes ocr-doc-scan-core {
-    0%, 100% { opacity: 0.7; }
-    50% { opacity: 1; }
-  }
-  @keyframes ocr-doc-scan-grid {
-    from { transform: translate3d(0, 0, 0); }
-    to { transform: translate3d(0, 8%, 0); }
-  }
-  @keyframes ocr-doc-scan-corners {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 1; }
-  }
-  @keyframes ocr-doc-scan-live {
-    0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55); }
-    70% { box-shadow: 0 0 0 8px rgba(74, 222, 128, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
-  }
-  @keyframes ocr-doc-scan-dots {
-    0% { content: ""; }
-    25% { content: "."; }
-    50% { content: ".."; }
-    75% { content: "..."; }
-  }
-  @keyframes ocr-doc-scan-page {
-    0%, 100% { filter: brightness(1) saturate(1); }
-    50% { filter: brightness(1.03) saturate(1.05); }
-  }
-  html[data-theme="dark"] .ocr-doc-scan-veil {
-    background:
-      radial-gradient(90% 50% at 50% 8%, rgba(56, 189, 248, 0.1), transparent 58%),
-      linear-gradient(180deg, rgba(8, 18, 36, 0.08) 0%, rgba(8, 18, 36, 0.28) 100%);
-  }
-  html[data-theme="dark"] .ocr-doc-scan-label {
-    background: rgba(2, 8, 23, 0.9);
-    color: #f0f9ff;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .ocr-doc-scan,
-    .ocr-doc-scan-mover,
-    .ocr-doc-scan-grid,
-    .ocr-doc-scan-fields,
-    .ocr-doc-scan-core,
-    .ocr-doc-scan-corner,
-    .ocr-doc-scan-live,
-    .ocr-doc-scan-dots::after,
-    body.page-scan-workflow.ocr-busy #scan-preview-viewer-wrap:not([hidden]) .document-viewer-image {
-      animation: none;
-    }
-    .ocr-doc-scan-mover { top: 42%; transform: none; }
-    .ocr-doc-scan-dots::after { content: "..."; }
-    .ocr-doc-scan-fields { opacity: 0.35; }
-  }
-  .scan-preview-empty.scanflow-preview-empty-inner {
-    margin: 0;
-    padding: 28px 16px;
-    border: none;
-    border-radius: 8px;
-    background: transparent;
-    color: #64748b;
-    font-size: 0.82rem;
-    font-weight: 600;
-    text-align: center;
-  }
-  .scanflow-preview-placeholder-ic {
-    width: 36px;
-    height: 36px;
-    margin: 0 auto 8px;
-    border-radius: 8px;
-    background: #eef2f7;
-    border: 1px solid #e2e8f0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #64748b;
-  }
-  .scanflow-preview-placeholder-ic svg { width: 18px; height: 18px; }
-  .scanflow-preview-filename {
-    margin: 8px 0 0;
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: #475569;
-  }
-  .scanflow-preview-filename[hidden] { display: none !important; }
-
-  body.page-scan-workflow .scan-preview-viewer-inner {
-    margin-top: 0;
-    border: none;
-    border-radius: 8px;
-    background: #f1f5f9;
-    box-shadow: none;
-  }
-  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-title {
-    font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
-    font-size: 0.8rem;
-    color: #1e3a67;
-  }
-  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-pane {
-    background: #ffffff;
-    border-color: #e2e8f0;
-    padding: 0;
-    height: auto;
-    max-height: none;
-    overflow: visible;
-    clip-path: none;
-  }
-  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-image,
-  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-image-wrap {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-    margin: 0;
-  }
-  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-pane.is-zoomed .document-viewer-image,
-  body.page-scan-workflow .scan-preview-viewer-inner .document-viewer-pane.is-zoomed .document-viewer-image-wrap {
-    max-width: none;
-  }
-
-  /* Slim professional scrollbars — Scan Workflow page + Document preview */
-  body.page-scan-workflow .main,
-  body.page-scan-workflow .document-viewer-pane {
-    scrollbar-width: thin;
-    scrollbar-color: #9aa8bc #edf1f7;
-    -ms-overflow-style: auto;
-  }
-  body.page-scan-workflow .main::-webkit-scrollbar,
-  body.page-scan-workflow .document-viewer-pane::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-    display: block !important;
-  }
-  body.page-scan-workflow .main::-webkit-scrollbar-track,
-  body.page-scan-workflow .document-viewer-pane::-webkit-scrollbar-track {
-    background: #edf1f7;
-    border-radius: 999px;
-    margin: 3px 0;
-  }
-  body.page-scan-workflow .main::-webkit-scrollbar-thumb,
-  body.page-scan-workflow .document-viewer-pane::-webkit-scrollbar-thumb {
-    background: #9aa8bc;
-    border-radius: 999px;
-    border: 1.5px solid #edf1f7;
-    background-clip: padding-box;
-    min-height: 36px;
-  }
-  body.page-scan-workflow .main::-webkit-scrollbar-thumb:hover,
-  body.page-scan-workflow .document-viewer-pane::-webkit-scrollbar-thumb:hover {
-    background: #718096;
-  }
-  body.page-scan-workflow .main::-webkit-scrollbar-thumb:active,
-  body.page-scan-workflow .document-viewer-pane::-webkit-scrollbar-thumb:active {
-    background: var(--brand-blue);
-  }
-  body.page-scan-workflow .main::-webkit-scrollbar-corner,
-  body.page-scan-workflow .document-viewer-pane::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-
-  @media (max-width: 900px) {
-    .scanflow-hero-title { font-size: 1rem; }
-    .scanflow-rail-sep { display: none; }
-    .scanflow-form-grid { grid-template-columns: 1fr; }
-    .scanflow-field-row,
-    .scanflow-form-card form > .scanflow-field-row { grid-template-columns: 1fr; }
-    .scanflow-field-label-col { padding-top: 0; }
-    .btn-scanflow-primary { width: 100%; margin-left: 0; }
-    .scanflow-ocr-btns {
-      width: 100%;
-      margin-left: 0;
-    }
-    .btn-scanflow-cancel { width: 100%; }
-    .scanflow-actions-primary #ocr-loading {
-      flex: 1 1 100%;
-      width: 100%;
-      margin-left: 0;
-    }
-  }
-  @media (max-width: 860px) {
-    body.page-scan-workflow .sidebar { width: 100%; box-shadow: none; }
-  }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/scanflow.css') }}?v=scan-layout-2" />
 {% endblock %}
 
 {% block after_theme %}
-<style>
-  /* Compact OCR bar — IDs unchanged; colors follow light / dark. */
-  #ocr-loading {
-    --ocr-load-bg: linear-gradient(180deg, #f7faff 0%, #eef3fa 100%);
-    --ocr-load-border: #c9d6ea;
-    --ocr-load-title: #0f2b5c;
-    --ocr-load-pct: var(--brand-blue);
-    --ocr-load-track: #dce4f0;
-    --ocr-load-fill: linear-gradient(90deg, var(--brand-blue) 0%, #1d4ed8 48%, #0b6b38 100%);
-    --ocr-load-pulse: #2563eb;
-    --ocr-load-page: linear-gradient(180deg, #ffffff 0%, #e8eef8 100%);
-    --ocr-load-page-border: rgba(0, 32, 128, 0.22);
-    --ocr-load-lines: rgba(0, 32, 128, 0.2);
-    --ocr-load-glow: rgba(0, 32, 128, 0.12);
-    display: none !important;
-  }
-  html[data-theme="dark"] #ocr-loading {
-    --ocr-load-bg: linear-gradient(180deg, #1a2b44 0%, #152238 100%);
-    --ocr-load-border: rgba(147, 197, 253, 0.28);
-    --ocr-load-title: #f8fafc;
-    --ocr-load-pct: #93c5fd;
-    --ocr-load-track: #334155;
-    --ocr-load-fill: linear-gradient(90deg, #3b82f6 0%, #22d3ee 50%, #34d399 100%);
-    --ocr-load-pulse: #60a5fa;
-    --ocr-load-page: linear-gradient(180deg, #243b5c 0%, #152238 100%);
-    --ocr-load-page-border: rgba(147, 197, 253, 0.38);
-    --ocr-load-lines: rgba(147, 197, 253, 0.32);
-    --ocr-load-glow: rgba(59, 130, 246, 0.18);
-  }
-  body.ocr-busy #ocr-loading,
-  #ocr-loading.is-on,
-  #ocr-loading[aria-busy="true"] {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    height: auto !important;
-    min-height: 0;
-    width: 100%;
-    max-width: 28rem;
-    box-sizing: border-box;
-    margin: 0 0 0 auto;
-    padding: 8px 10px 9px;
-    border: 1px solid var(--ocr-load-border);
-    border-radius: 10px;
-    background: var(--ocr-load-bg);
-    box-shadow: 0 4px 14px var(--ocr-load-glow);
-    animation: ocr-load-enter 0.38s ease-out;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-row,
-  #ocr-loading.is-on .ocr-loading-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-mark,
-  #ocr-loading.is-on .ocr-loading-mark {
-    flex-shrink: 0;
-    width: 28px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-page,
-  #ocr-loading.is-on .ocr-loading-page {
-    position: relative;
-    width: 22px;
-    height: 28px;
-    border-radius: 3px 7px 3px 3px;
-    background: var(--ocr-load-page);
-    border: 1px solid var(--ocr-load-page-border);
-    overflow: hidden;
-    box-shadow: 0 1px 4px rgba(15, 43, 92, 0.14);
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-lines,
-  #ocr-loading.is-on .ocr-loading-lines {
-    position: absolute;
-    inset: 7px 4px 5px;
-    background: repeating-linear-gradient(
-      to bottom,
-      var(--ocr-load-lines) 0 1.5px,
-      transparent 1.5px 5px
-    );
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-beam,
-  #ocr-loading.is-on .ocr-loading-beam {
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: 6px;
-    background: linear-gradient(180deg, transparent, rgba(56, 189, 248, 0.95), transparent);
-    box-shadow: 0 0 8px rgba(52, 211, 153, 0.55);
-    animation: ocr-load-beam 1.35s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-copy,
-  #ocr-loading.is-on .ocr-loading-copy {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-head,
-  #ocr-loading.is-on .ocr-loading-head {
-    display: flex !important;
-    justify-content: flex-start;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 7px;
-    flex-wrap: nowrap;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-pulse,
-  #ocr-loading.is-on .ocr-loading-pulse {
-    display: inline-block;
-    position: relative;
-    width: 8px;
-    height: 8px;
-    flex-shrink: 0;
-    border-radius: 50%;
-    background: var(--ocr-load-pulse);
-    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45);
-    animation: ocr-load-pulse 1.4s ease-in-out infinite;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-title,
-  #ocr-loading.is-on .ocr-loading-title {
-    margin: 0;
-    flex: 1 1 auto;
-    font-size: 0.75rem;
-    font-weight: 800;
-    letter-spacing: 0.01em;
-    color: var(--ocr-load-title);
-    line-height: 1.2;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-dots::after,
-  #ocr-loading.is-on .ocr-loading-dots::after {
-    content: "";
-    display: inline-block;
-    width: 1.05em;
-    text-align: left;
-    animation: ocr-load-dots 1.2s steps(4, end) infinite;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-percent,
-  #ocr-loading.is-on .ocr-loading-percent {
-    font-size: 0.75rem;
-    font-weight: 800;
-    color: var(--ocr-load-pct);
-    min-width: 2.6rem;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-track,
-  #ocr-loading.is-on .ocr-loading-track {
-    display: block !important;
-    position: relative;
-    width: 100%;
-    height: 6px;
-    border-radius: 999px;
-    background: var(--ocr-load-track);
-    overflow: hidden;
-    border: none;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-fill,
-  #ocr-loading.is-on .ocr-loading-fill {
-    display: block !important;
-    position: relative;
-    height: 100%;
-    min-height: 6px;
-    overflow: hidden;
-    background: var(--ocr-load-fill);
-    background-size: 200% 100%;
-    border-radius: 999px;
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.35);
-    transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
-    animation: ocr-load-fill-shift 2.4s ease-in-out infinite;
-  }
-  body.ocr-busy #ocr-loading .ocr-loading-sheen,
-  #ocr-loading.is-on .ocr-loading-sheen {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: 42%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
-    animation: ocr-load-sheen 1.55s ease-in-out infinite;
-  }
-  @keyframes ocr-load-enter {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes ocr-load-pulse {
-    0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45); }
-    50% { opacity: 0.7; transform: scale(0.92); box-shadow: 0 0 0 6px rgba(37, 99, 235, 0); }
-  }
-  @keyframes ocr-load-beam {
-    0% { top: -8px; opacity: 0; }
-    12% { opacity: 1; }
-    88% { opacity: 1; }
-    100% { top: 100%; opacity: 0; }
-  }
-  @keyframes ocr-load-dots {
-    0% { content: ""; }
-    25% { content: "."; }
-    50% { content: ".."; }
-    75% { content: "..."; }
-  }
-  @keyframes ocr-load-fill-shift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
-  @keyframes ocr-load-sheen {
-    0% { transform: translateX(-120%); }
-    100% { transform: translateX(280%); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    body.ocr-busy #ocr-loading,
-    #ocr-loading.is-on {
-      animation: none;
-    }
-    body.ocr-busy #ocr-loading .ocr-loading-pulse,
-    body.ocr-busy #ocr-loading .ocr-loading-beam,
-    body.ocr-busy #ocr-loading .ocr-loading-fill,
-    body.ocr-busy #ocr-loading .ocr-loading-sheen,
-    body.ocr-busy #ocr-loading .ocr-loading-dots::after,
-    #ocr-loading.is-on .ocr-loading-pulse,
-    #ocr-loading.is-on .ocr-loading-beam,
-    #ocr-loading.is-on .ocr-loading-fill,
-    #ocr-loading.is-on .ocr-loading-sheen,
-    #ocr-loading.is-on .ocr-loading-dots::after {
-      animation: none;
-    }
-    body.ocr-busy #ocr-loading .ocr-loading-dots::after,
-    #ocr-loading.is-on .ocr-loading-dots::after {
-      content: "...";
-    }
-    body.ocr-busy #ocr-loading .ocr-loading-beam,
-    #ocr-loading.is-on .ocr-loading-beam {
-      top: 46%;
-      opacity: 0.9;
-    }
-  }
-
-  /* Old layout: one column — form, OCR bar + progress, then Document preview */
-  body.page-scan-workflow.ocr-busy .scanflow-form-card {
-    display: block;
-  }
-  body.page-scan-workflow.ocr-busy .scanflow-form-card > form {
-    display: block;
-  }
-  body.page-scan-workflow.ocr-busy .scanflow-preview-below-wrap {
-    display: block !important;
-    margin-top: 8px;
-    padding-top: 12px;
-    border-top: none;
-  }
-  body.page-scan-workflow.ocr-busy .scanflow-actions-primary {
-    position: static;
-    margin-top: 12px;
-    padding-top: 10px;
-    background: transparent;
-  }
-  @media (max-width: 900px) {
-    body.ocr-busy #ocr-loading,
-    #ocr-loading.is-on,
-    #ocr-loading[aria-busy="true"] {
-      max-width: 100%;
-      margin-left: 0;
-    }
-  }
-  .scanflow-source {
-    margin: 0 0 12px;
-  }
-  .scanflow-source-heading {
-    margin: 0 0 6px;
-    font-size: 0.68rem;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #0f2b5c;
-  }
-  .scanflow-source-options {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .scanflow-source-card {
-    position: relative;
-    margin: 0;
-    cursor: pointer;
-  }
-  .scanflow-source-card input {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-    margin: 0;
-  }
-  .scanflow-source-card-inner {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 52px;
-    padding: 8px 10px;
-    border: 1px solid #d7e2ef;
-    border-radius: 10px;
-    background: #f8fafc;
-  }
-  .scanflow-source-card:hover .scanflow-source-card-inner {
-    border-color: #9fb6d4;
-    background: #fbfdff;
-  }
-  .scanflow-source-card input:focus-visible + .scanflow-source-card-inner {
-    box-shadow: 0 0 0 3px rgba(0, 32, 128, 0.16);
-  }
-  .scanflow-source-card input:checked + .scanflow-source-card-inner {
-    border-color: var(--brand-blue);
-    background: linear-gradient(180deg, #f4f7ff 0%, #eef4ff 100%);
-    box-shadow: 0 0 0 1px var(--brand-blue);
-  }
-  .scanflow-source-ic {
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: #eef2f8;
-    color: #1f3f73;
-  }
-  .scanflow-source-ic svg {
-    width: 16px;
-    height: 16px;
-  }
-  .scanflow-source-card input:checked + .scanflow-source-card-inner .scanflow-source-ic {
-    background: var(--brand-blue);
-    color: #fff;
-  }
-  .scanflow-source-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    min-width: 0;
-  }
-  .scanflow-source-title {
-    font-size: 0.84rem;
-    font-weight: 800;
-    color: #0f2b5c;
-    line-height: 1.2;
-  }
-  .scanflow-source-desc {
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: #64748b;
-    line-height: 1.3;
-  }
-  body.page-scan-workflow:not(.scan-source-scanner) .scanflow-row-scanner,
-  body.page-scan-workflow:not(.scan-source-scanner) .scanflow-row-scans {
-    display: none !important;
-  }
-  body.page-scan-workflow.scan-source-scanner .scanflow-row-upload {
-    display: none !important;
-  }
-  @media (max-width: 760px) {
-    .scanflow-source-options {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-height: 900px) {
-    body.page-scan-workflow .scanflow-hero-wrap {
-      margin-bottom: 8px;
-    }
-    body.page-scan-workflow .scanflow-hero-main {
-      padding: 8px 12px;
-    }
-    body.page-scan-workflow .scan-workflow-stack > .main-card.scanflow-form-card {
-      padding: 0;
-    }
-    body.ocr-busy #ocr-loading,
-    #ocr-loading.is-on {
-      min-height: 0;
-      padding: 6px 10px 7px;
-      max-width: 100%;
-    }
-  }
-</style>
 {% endblock %}
 
 {% block content %}
@@ -1490,6 +76,17 @@
         <p class="scanflow-card-sub">Select one capture source. Document type is identified automatically.</p>
       </div>
     </div>
+    {% if unsaved_review and unsaved_review.review_url %}
+    <p class="scanflow-ocr-hint app-note" role="status">
+      <span class="app-note-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M11 12h1v4h1"/></svg></span>
+      <span class="app-note-text">This document is not saved yet. <a href="{{ unsaved_review.review_url }}">Open the review</a> and save it, or cancel the review, before scanning another document.</span>
+    </p>
+    {% elif scan_preview %}
+    <p class="scanflow-ocr-hint app-note app-note--quiet" role="note">
+      <span class="app-note-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M11 12h1v4h1"/></svg></span>
+      <span class="app-note-text">Finish this document (Run OCR and save) or click Cancel OCR before adding another.</span>
+    </p>
+    {% endif %}
     <form method="post" action="{{ url_for('index') }}" enctype="multipart/form-data" id="scan-form">
       <div class="scanflow-form-body">
       <div class="scanflow-source" role="radiogroup" aria-label="Capture source">
@@ -1499,7 +96,7 @@
             <input type="radio" name="scan_source" value="upload" id="scan-source-upload" />
             <span class="scanflow-source-card-inner">
               <span class="scanflow-source-ic" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
               </span>
               <span class="scanflow-source-copy">
                 <span class="scanflow-source-title">Upload image</span>
@@ -1511,7 +108,7 @@
             <input type="radio" name="scan_source" value="scanner" id="scan-source-scanner" />
             <span class="scanflow-source-card-inner">
               <span class="scanflow-source-ic" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 21h10"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 21h10"/></svg>
               </span>
               <span class="scanflow-source-copy">
                 <span class="scanflow-source-title">Scanner device</span>
@@ -1691,12 +288,15 @@
   </div>
 </div>
 <script type="application/json" id="ocr-field-guides" data-align-url="{{ url_for('api_ocr_field_guides') }}">{{ ocr_field_guides|default({})|tojson }}</script>
+<script type="application/json" id="scan-desk-lock">{{ {'review_url': (unsaved_review.review_url if unsaved_review else ''), 'locked': true if (unsaved_review or scan_preview) else false}|tojson }}</script>
 
 <script src="{{ url_for('static', filename='js/document-viewer.js') }}?v=preview-zoom-out-6" defer></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+function bootScanWorkflow() {
   var fileInput = document.getElementById('image');
   var scanForm = document.getElementById('scan-form');
+  if (!scanForm || scanForm.getAttribute('data-scanflow-bound') === '1') return;
+  scanForm.setAttribute('data-scanflow-bound', '1');
   var btnOcr = document.getElementById('btn-ocr');
   var ocrLoading = document.getElementById('ocr-loading');
   var ocrProgressFill = document.getElementById('ocr-progress-fill');
@@ -1796,6 +396,59 @@ document.addEventListener('DOMContentLoaded', function() {
     if (hid && hid.value) return true;
     return false;
   }
+
+  var scanLock = { review_url: '', locked: false };
+  try {
+    var scanLockEl = document.getElementById('scan-desk-lock');
+    if (scanLockEl && scanLockEl.textContent) {
+      scanLock = JSON.parse(scanLockEl.textContent) || scanLock;
+    }
+  } catch (e) {}
+
+  function finishCurrentFirst() {
+    var reviewUrl = (scanLock && scanLock.review_url) || '';
+    if (window.DaragaConfirm && typeof window.DaragaConfirm.ask === 'function') {
+      return window.DaragaConfirm.ask({
+        title: reviewUrl ? 'Finish this document first' : 'Document already loaded',
+        message: reviewUrl
+          ? 'This certificate is not saved yet. Open the review and save it, or cancel the review, before scanning another document.'
+          : 'Finish this document first. Run OCR and save it, or click Cancel OCR to discard it, then add a new document.',
+        okLabel: reviewUrl ? 'Open review' : 'OK',
+        cancelLabel: reviewUrl ? 'Stay here' : 'Go back'
+      }).then(function (ok) {
+        if (ok && reviewUrl) window.location = reviewUrl;
+        return false;
+      });
+    }
+    if (reviewUrl) {
+      window.location = reviewUrl;
+    } else if (window.DaragaToast && window.DaragaToast.show) {
+      window.DaragaToast.show({
+        tone: 'warning',
+        title: 'Finish this document first',
+        message: 'Run OCR and save it, or click Cancel OCR, before adding another document.'
+      });
+    }
+    return Promise.resolve(false);
+  }
+
+  function deskHasDocument() {
+    return !!(scanLock && scanLock.review_url) || hasScanDocument();
+  }
+
+  function rejectNewDocument(err) {
+    if (err && err.review_url) {
+      scanLock.review_url = err.review_url;
+    }
+    return finishCurrentFirst();
+  }
+
+  window.DaragaScanLock = {
+    clear: function () {
+      scanLock.review_url = "";
+      scanLock.locked = false;
+    }
+  };
 
   var ocrFakeTimer = null;
   var ocrShownProgress = 8;
@@ -2231,7 +884,19 @@ document.addEventListener('DOMContentLoaded', function() {
     };
   }
 
+  if (fileInput) {
+    fileInput.addEventListener('click', function (event) {
+      if (!deskHasDocument()) return;
+      event.preventDefault();
+      finishCurrentFirst();
+    });
+  }
+
   if (scanBtn) scanBtn.onclick = function() {
+    if (deskHasDocument()) {
+      finishCurrentFirst();
+      return;
+    }
     var sel = document.getElementById('scanner-device-select');
     var btnScan = document.getElementById('scan-from-device');
     if (!scannerDeviceReady()) {
@@ -2292,6 +957,10 @@ document.addEventListener('DOMContentLoaded', function() {
       .catch(function(err){
         setScanning(false);
         setScanFromReady();
+        if (err && (err.code === 'unsaved_review' || err.code === 'staged_document' || err.review_url)) {
+          rejectNewDocument(err);
+          return;
+        }
         if (window.DaragaToast && window.DaragaToast.error) {
           window.DaragaToast.error(err && err.error, "Scan failed. Check the printer and try again.");
         }
@@ -2300,6 +969,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
   fileInput.addEventListener('change', function() {
     if (!(this.files && this.files.length)) return;
+    var hidNow = document.getElementById('image_filename');
+    if ((scanLock && scanLock.review_url) || (hidNow && hidNow.value)) {
+      this.value = '';
+      finishCurrentFirst();
+      return;
+    }
     var file = this.files[0];
     setUploadFileLabel(file.name);
     showScanPreview(URL.createObjectURL(file), file.name);
@@ -2325,6 +1000,10 @@ document.addEventListener('DOMContentLoaded', function() {
       })
       .catch(function(err) {
         fileInput.value = '';
+        if (err && (err.code === 'unsaved_review' || err.code === 'staged_document' || err.review_url)) {
+          rejectNewDocument(err);
+          return;
+        }
         document.getElementById('image_filename').value = '';
         if (typeof clearScanPreview === 'function') clearScanPreview();
         if (window.DaragaToast && window.DaragaToast.error) {
@@ -2367,6 +1046,10 @@ document.addEventListener('DOMContentLoaded', function() {
       })
       .catch(function(err){
         resetOcrLoading();
+        if (err && (err.code === 'unsaved_review' || err.code === 'staged_document' || err.review_url)) {
+          rejectNewDocument(err);
+          return;
+        }
         if (window.DaragaToast && window.DaragaToast.error) {
           window.DaragaToast.error(err && err.error, "Unable to start OCR. Try again.");
         }
@@ -2377,6 +1060,9 @@ document.addEventListener('DOMContentLoaded', function() {
   var btnOcrCancel = document.getElementById('btn-ocr-cancel');
   if (btnOcrCancel) {
     btnOcrCancel.addEventListener('click', function () {
+      if (window.DaragaScanLock && window.DaragaScanLock.clear) {
+        window.DaragaScanLock.clear();
+      }
       if (window.DaragaOcr && window.DaragaOcr.cancel) {
         window.DaragaOcr.cancel();
       } else {
@@ -2399,7 +1085,12 @@ document.addEventListener('DOMContentLoaded', function() {
     detectDocumentType();
   }
   syncOcrReady();
+}
 
-});
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootScanWorkflow);
+} else {
+  bootScanWorkflow();
+}
 </script>
 {% endblock %}

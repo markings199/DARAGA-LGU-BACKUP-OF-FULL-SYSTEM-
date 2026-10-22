@@ -24,19 +24,13 @@
     <span class="pill pill-state">Next: Search or archiving to request a print</span>
   </div>
 
-  <form method="get" action="{{ url_for('my_print_requests') }}" class="request-doc-type-filter staff-doc-type-filter">
-    <label for="staff-print-doc-type-filter">Document type</label>
-    <select name="doc_type" id="staff-print-doc-type-filter" aria-label="Filter by document type" onchange="this.form.submit()">
-      <option value="" {% if not request_doc_type %}selected{% endif %}>All document types</option>
-      {% for key, label in document_types.items() %}
-      <option value="{{ key }}" {% if request_doc_type == key %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-  </form>
+  {% with filter_endpoint='my_print_requests', filter_id='staff-print-doc-type-filter' %}
+    {% include '_staff_request_filters.html' %}
+  {% endwith %}
 
   <div class="main-card staff-requests-card">
     {% if requests_list %}
-      <div class="staff-table-wrap">
+      <div class="staff-table-wrap" data-staff-table-wrap>
         <table class="table staff-requests-table">
           <thead>
             <tr>
@@ -53,7 +47,7 @@
           </thead>
           <tbody>
             {% for req in requests_list %}
-              <tr>
+              <tr data-progress="{% if req.used_at or req.status == 'REJECTED' %}complete{% else %}pending{% endif %}">
                 <td>{{ req.id }}</td>
                 <td>{{ req.record.registry_number or '—' if req.record else '—' }}</td>
                 <td class="col-type">
@@ -73,9 +67,15 @@
                 </td>
                 <td>{{ req.requested_at.strftime('%Y-%m-%d %H:%M') if req.requested_at else '—' }}</td>
                 <td>
-                  <span class="status-badge status-{{ req.status|lower }}">{{ req.status }}</span>
                   {% if req.used_at %}
+                    <span class="status-badge status-complete">Complete</span>
                     <span class="staff-print-done-time" title="Printed {{ req.used_at.strftime('%Y-%m-%d %H:%M') }}">Printed</span>
+                  {% elif req.status == 'REJECTED' %}
+                    <span class="status-badge status-rejected">Rejected</span>
+                  {% elif req.status == 'APPROVED' %}
+                    <span class="status-badge status-approved">Approved</span>
+                  {% else %}
+                    <span class="status-badge status-pending">Pending</span>
                   {% endif %}
                 </td>
                 <td class="col-reason">{% set text = req.reason %}{% set note_kind = 'reason' %}{% include '_expandable_text.html' %}</td>
@@ -92,7 +92,7 @@
                 <td>
                   {% if req.status == 'APPROVED' and req.approval_code and not req.used_at and req.record %}
                     <form method="post" action="{{ url_for('record_verify_print_code', record_id=req.record_id) }}" class="unlock-form">
-                      <input type="hidden" name="next" value="{% if request_doc_type %}{{ url_for('my_print_requests', doc_type=request_doc_type) }}{% else %}{{ url_for('my_print_requests') }}{% endif %}" />
+                      <input type="hidden" name="next" value="{{ url_for('my_print_requests', doc_type=request_doc_type, status=request_progress) }}" />
                       <label class="sr-only" for="staff_print_code_{{ req.id }}">5-digit print code</label>
                       <input
                         id="staff_print_code_{{ req.id }}"
@@ -120,11 +120,15 @@
           </tbody>
         </table>
       </div>
+      <div class="empty-state" data-staff-filter-empty hidden>
+        <p class="empty-state-title">No requests in this status</p>
+        <p class="empty-state-text">Choose All, Pending, or Complete to see your other requests.</p>
+      </div>
     {% else %}
       <div class="empty-state">
-        {% if request_doc_type %}
-          <p class="empty-state-title">No print requests for this document type</p>
-          <p class="empty-state-text">Try another type or <a href="{{ url_for('my_print_requests') }}">show all document types</a>.</p>
+        {% if request_progress or request_doc_type %}
+          <p class="empty-state-title">No {{ request_progress or '' }} print requests{% if request_doc_type %} for this document type{% endif %}</p>
+          <p class="empty-state-text">Try another filter or <a href="{{ url_for('my_print_requests') }}">show all requests</a>.</p>
         {% else %}
           <p class="empty-state-title">No print requests yet</p>
           <p class="empty-state-text">Open <strong>Search Records</strong> or <strong>Archiving</strong>, choose a record, and use <strong>Request print</strong> to submit a request.</p>
@@ -134,3 +138,5 @@
   </div>
 </div>
 {% endblock %}
+
+{% block extra_js %}{% endblock %}

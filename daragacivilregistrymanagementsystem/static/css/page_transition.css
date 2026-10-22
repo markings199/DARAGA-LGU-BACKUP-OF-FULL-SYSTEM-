@@ -1,9 +1,74 @@
-/* Inner page body only. Sidebar, top bar, tabs, and page headers stay still. */
+/* Soft page change: header and sidebar stay. Content eases out, then the next page eases in. */
+
+#cr-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 4000;
+  width: 100%;
+  height: 3px;
+  pointer-events: none;
+  opacity: 0;
+  background: transparent;
+}
+
+#cr-progress.is-on {
+  opacity: 1;
+}
+
+#cr-progress-bar {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(90deg, #008a3a 0%, #f4c431 46%, #1d4ed8 100%);
+  box-shadow: 0 0 12px rgba(29, 78, 216, 0.35);
+  transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#cr-progress.is-done #cr-progress-bar {
+  width: 100% !important;
+  transition-duration: 160ms;
+}
+
+html.cr-navigating,
+html.cr-navigating body {
+  cursor: progress;
+}
+
+#cr-page {
+  pointer-events: auto;
+  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1), transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html.cr-navigating #cr-page.is-leaving {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+
+#cr-page.is-entering {
+  animation: cr-page-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+#admin-panel {
+  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1), transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html.cr-navigating #admin-panel.is-leaving {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+
+#admin-panel.is-entering {
+  animation: cr-page-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
 
 @keyframes cr-page-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -11,74 +76,54 @@
   }
 }
 
-@keyframes cr-page-out {
-  from {
-    opacity: 1;
-    transform: none;
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
+.sidebar-nav a,
+.sidebar-footer .btn-logout,
+.topbar-user,
+.staff-progress-btn {
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
 }
 
-main.main > .admin-shell > *:not(.page-header):not(.admin-tabs),
-main.main > .search-page > *:not(.search-page-header),
-main.main > .page-header ~ *:not(.reg-toolbar):not(.admin-tabs),
-main.main > .scanflow-hero-wrap ~ *,
-main.main > .archiving-hero ~ *,
-main.main > .form-review-hero ~ *,
-main.main > .account-page,
-.login-card-inner {
-  animation: cr-page-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-html.pt-leaving main.main > .admin-shell > *:not(.page-header):not(.admin-tabs),
-html.pt-leaving main.main > .search-page > *:not(.search-page-header),
-html.pt-leaving main.main > .page-header ~ *:not(.reg-toolbar):not(.admin-tabs),
-html.pt-leaving main.main > .scanflow-hero-wrap ~ *,
-html.pt-leaving main.main > .archiving-hero ~ *,
-html.pt-leaving main.main > .form-review-hero ~ *,
-html.pt-leaving main.main > .account-page,
-html.pt-leaving .login-card-inner {
-  animation: cr-page-out 0.16s cubic-bezier(0.4, 0, 0.2, 1) both;
+.sidebar-nav a:active,
+.sidebar-footer .btn-logout:active,
+.topbar-user:active,
+.staff-progress-btn:active {
+  transform: scale(0.985);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  main.main > .admin-shell > *:not(.page-header):not(.admin-tabs),
-  main.main > .search-page > *:not(.search-page-header),
-  main.main > .page-header ~ *:not(.reg-toolbar):not(.admin-tabs),
-  main.main > .scanflow-hero-wrap ~ *,
-  main.main > .archiving-hero ~ *,
-  main.main > .form-review-hero ~ *,
-  main.main > .account-page,
-  .login-card-inner,
-  html.pt-leaving main.main > .admin-shell > *:not(.page-header):not(.admin-tabs),
-  html.pt-leaving main.main > .search-page > *:not(.search-page-header),
-  html.pt-leaving main.main > .page-header ~ *:not(.reg-toolbar):not(.admin-tabs),
-  html.pt-leaving main.main > .scanflow-hero-wrap ~ *,
-  html.pt-leaving main.main > .archiving-hero ~ *,
-  html.pt-leaving main.main > .form-review-hero ~ *,
-  html.pt-leaving main.main > .account-page,
-  html.pt-leaving .login-card-inner {
-    animation: none;
+  #cr-page,
+  #cr-progress-bar {
+    transition: none !important;
+  }
+
+  #cr-page.is-entering {
+    animation: none !important;
+  }
+
+  html.cr-navigating #cr-page.is-leaving,
+  html.cr-navigating #admin-panel.is-leaving {
+    opacity: 1;
+    transform: none;
+  }
+
+  #admin-panel.is-entering {
+    animation: none !important;
+  }
+
+  .sidebar-nav a,
+  .sidebar-footer .btn-logout,
+  .topbar-user,
+  .staff-progress-btn {
+    transition: none;
   }
 }
 
-body.page-registry-reports .reg-status,
-body.page-registry-reports .reg-scroll,
-body.page-registry-reports .reg-pager,
-html.pt-leaving body.page-registry-reports .reg-status,
-html.pt-leaving body.page-registry-reports .reg-scroll,
-html.pt-leaving body.page-registry-reports .reg-pager {
-  animation: none !important;
-  opacity: 1 !important;
-  transform: none !important;
-}
-
 @media print {
-  main.main > *,
-  .login-card-inner {
+  #cr-progress {
+    display: none !important;
+  }
+
+  #cr-page {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;

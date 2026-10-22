@@ -399,19 +399,18 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
 .note-fold summary {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
   cursor: pointer;
   list-style: none;
-  padding: 4px 6px 4px 8px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .note-fold summary:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  background: transparent;
 }
 
 .note-fold summary::-webkit-details-marker,
@@ -426,21 +425,24 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  color: #0f172a;
 }
 
 .note-fold-toggle {
   flex: 0 0 auto;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #e8eefc;
-  color: var(--brand-blue);
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .note-fold-toggle::after {
@@ -454,10 +456,10 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
 .note-fold-panel {
   display: none;
   box-sizing: border-box;
-  padding: 10px 12px 12px;
+  padding: 12px 14px 14px;
   border-radius: 10px;
   background: #ffffff;
-  border: 1px solid #d5e0ee;
+  border: 1px solid #cbd5e1;
   border-left: 3px solid var(--brand-blue);
 }
 
@@ -472,8 +474,8 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
 }
 
 .note-fold--rejection .note-fold-toggle {
-  background: #fee2e2;
-  color: #991b1b;
+  background: transparent;
+  color: #b91c1c;
 }
 
 .note-fold-kicker {
@@ -487,8 +489,8 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
 
 .note-fold-body {
   margin: 0;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 0.88rem;
+  font-weight: 650;
   line-height: 1.5;
   color: #0f172a;
   white-space: pre-wrap;
@@ -496,13 +498,15 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
   word-break: break-word;
 }
 
-[data-theme="dark"] .note-fold summary {
-  background: #121a27;
-  border-color: rgba(148, 163, 184, 0.2);
+[data-theme="dark"] .note-fold summary,
+[data-theme="dark"] .note-fold summary:hover {
+  background: transparent;
+  border: none;
 }
 
-[data-theme="dark"] .note-fold summary:hover {
-  background: #182234;
+[data-theme="dark"] .note-fold-preview {
+  color: #f8fafc;
+  font-weight: 700;
 }
 
 [data-theme="dark"] .date-ocr-hint {
@@ -521,27 +525,32 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
 
 [data-theme="dark"] .note-inline,
 [data-theme="dark"] .note-fold-body {
-  color: #e2e8f0;
+  color: #f8fafc;
 }
 
 [data-theme="dark"] .note-fold-toggle {
-  background: rgba(147, 197, 253, 0.16);
+  background: transparent;
   color: #93c5fd;
 }
 
 [data-theme="dark"] .note-fold--rejection .note-fold-toggle {
-  background: rgba(248, 113, 113, 0.18);
+  background: transparent;
   color: #fca5a5;
 }
 
 [data-theme="dark"] .note-fold-panel {
-  background: #121a27;
-  border-color: rgba(148, 163, 184, 0.18);
+  background: #1e293b;
+  border-color: rgba(148, 163, 184, 0.35);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
 }
 
 [data-theme="dark"] .note-fold--rejection .note-fold-panel {
-  background: #1c1416;
-  border-color: rgba(248, 113, 113, 0.28);
+  background: #2a1719;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+[data-theme="dark"] .note-fold-kicker {
+  color: #cbd5e1;
 }
 
 .admin-user-actions {

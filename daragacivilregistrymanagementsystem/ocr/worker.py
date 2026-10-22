@@ -17,11 +17,15 @@ _PROC = None
 
 
 def _worker_thread_count() -> str:
-    """Use most cores in the OCR process; leave one for Flask and the browser."""
+    """MKLDNN threads. Use more cores on office PCs, but never every core."""
     n = os.cpu_count() or 4
     if n <= 2:
         return "1"
-    return str(min(8, n - 1))
+    if n <= 4:
+        return str(max(2, n - 1))
+    if n <= 6:
+        return "4"
+    return "6"
 
 
 def limit_ocr_cpu_env(force: bool = False, worker: bool = False) -> None:
@@ -43,16 +47,21 @@ def limit_ocr_cpu_env(force: bool = False, worker: bool = False) -> None:
 
 
 def set_below_normal_priority() -> None:
-    """Optional: slightly lower only the current thread, not the whole process."""
+    """Kept for callers. OCR worker uses normal priority so reading stays quick."""
+    return
+
+
+def set_normal_priority() -> None:
     if sys.platform != "win32":
         return
     try:
         import ctypes
 
-        THREAD_PRIORITY_BELOW_NORMAL = -1
+        handle = ctypes.windll.kernel32.GetCurrentProcess()
+        ctypes.windll.kernel32.SetPriorityClass(handle, 0x00000020)
         ctypes.windll.kernel32.SetThreadPriority(
             ctypes.windll.kernel32.GetCurrentThread(),
-            THREAD_PRIORITY_BELOW_NORMAL,
+            0,
         )
     except Exception:
         pass
@@ -61,7 +70,10 @@ def set_below_normal_priority() -> None:
 def run_worker(in_q, out_q) -> None:
     # Do not inherit Flask's 2-thread cap; this process exists to run OCR quickly.
     os.environ.setdefault("OCR_MAX_SIDE", "800")
+    os.environ.setdefault("OCR_REC_BATCH", "24")
+    os.environ.setdefault("FLAGS_conv_workspace_size_limit", "4096")
     limit_ocr_cpu_env(force=True, worker=True)
+    set_normal_priority()
     try:
         import cv2
 

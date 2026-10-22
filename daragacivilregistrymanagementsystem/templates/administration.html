@@ -45,6 +45,7 @@
     <a href="{{ url_for('administration', tab='office_logs') }}" class="admin-tab {% if tab == 'office_logs' %}active{% endif %}">Office logs{% if _ab.get('office_logs') %}<span class="admin-tab-badge is-info" data-admin-badge="office_logs" title="New office activity">{{ _ab.get('office_logs') }}</span>{% else %}<span class="admin-tab-badge is-info" data-admin-badge="office_logs" hidden>0</span>{% endif %}</a>
   </nav>
 
+  <div id="admin-panel">
   {% if tab == 'dashboard' %}
     <div class="admin-dashboard">
       <div class="admin-stats-row">
@@ -240,11 +241,18 @@
       <footer class="admin-dash-footer">
         <div class="admin-dash-footer-user">
           <span class="admin-dash-footer-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></span>
-          <span><strong>{{ current_user.username }}</strong> · {{ (current_user.role or 'USER')|upper }}</span>
+          <span class="admin-dash-footer-who">
+            <strong>{{ current_user.username }}</strong>
+            <span class="admin-dash-footer-role">{{ (current_user.role or 'USER')|upper }}</span>
+          </span>
         </div>
         <div class="admin-dash-footer-time" id="admin-footer-datetime" aria-live="polite">
-          <span class="admin-dash-footer-globe" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></span>
-          <span id="admin-footer-datetime-text">Philippine time…</span>
+          <span class="admin-dash-footer-globe" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg></span>
+          <span class="admin-dash-footer-when">
+            <span id="admin-footer-date">—</span>
+            <span class="admin-dash-footer-dot" aria-hidden="true"></span>
+            <span id="admin-footer-datetime-text">Philippine time…</span>
+          </span>
         </div>
       </footer>
       {% endif %}
@@ -252,6 +260,7 @@
 
     <script>
       (function () {
+        var dateEl = document.getElementById('admin-footer-date');
         var el = document.getElementById('admin-footer-datetime-text');
         if (!el) return;
         var tz = 'Asia/Manila';
@@ -259,10 +268,19 @@
           var now = new Date();
           var d = new Intl.DateTimeFormat('en-PH', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }).format(now);
           var t = new Intl.DateTimeFormat('en-PH', { timeZone: tz, hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).format(now);
-          el.textContent = d + ' · ' + t;
+          if (dateEl) dateEl.textContent = d;
+          el.textContent = t;
         }
         tick();
-        window.setInterval(tick, 1000);
+        if (window.__crAdminClock) window.clearInterval(window.__crAdminClock);
+        window.__crAdminClock = window.setInterval(function () {
+          if (!document.body.contains(el)) {
+            window.clearInterval(window.__crAdminClock);
+            window.__crAdminClock = null;
+            return;
+          }
+          tick();
+        }, 1000);
       })();
     </script>
 
@@ -270,16 +288,9 @@
     <div class="admin-section main-card admin-section--table-scroll">
       <h2 class="section-title">Edit requests</h2>
       <p class="section-desc">Approve or reject staff edit requests. An approved request issues a 5-digit code.</p>
-      <form method="get" action="{{ url_for('administration') }}" class="request-doc-type-filter admin-doc-type-filter">
-        <input type="hidden" name="tab" value="edit_requests" />
-        <label for="admin-document-type-filter">Document type</label>
-        <select name="doc_type" id="admin-document-type-filter" aria-label="Filter by document type" onchange="this.form.submit()">
-          <option value="" {% if not request_doc_type %}selected{% endif %}>All document types</option>
-          {% for key, label in document_types.items() %}
-          <option value="{{ key }}" {% if request_doc_type == key %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </form>
+      {% with filter_endpoint='administration', filter_id='admin-document-type-filter', admin_tab='edit_requests' %}
+        {% include '_staff_request_filters.html' %}
+      {% endwith %}
       {% if edit_requests %}
         <div class="table-wrap admin-requests-table-wrap admin-edit-requests-table-wrap">
           <table class="table admin-requests-table admin-edit-requests-table">
@@ -300,7 +311,7 @@
             </thead>
             <tbody>
               {% for req in edit_requests %}
-                <tr>
+                <tr data-progress="{% if (req.status or '')|upper == 'PENDING' %}pending{% else %}complete{% endif %}">
                   <td class="col-id">{{ req.id }}</td>
                   <td class="col-record">{{ req.record.registry_number or '—' if req.record else '—' }}</td>
                   <td class="col-type">
@@ -352,6 +363,9 @@
             </tbody>
           </table>
         </div>
+        <div class="admin-empty" data-staff-filter-empty hidden>
+          <p>No requests in this status.</p>
+        </div>
       {% else %}
         <div class="admin-empty">
           {% if request_doc_type %}
@@ -368,16 +382,9 @@
     <div class="admin-section main-card admin-section--table-scroll">
       <h2 class="section-title">Print requests</h2>
       <p class="section-desc">Approve or reject staff print requests. Each approval is for one print.</p>
-      <form method="get" action="{{ url_for('administration') }}" class="request-doc-type-filter admin-doc-type-filter">
-        <input type="hidden" name="tab" value="print_requests" />
-        <label for="admin-print-doc-type-filter">Document type</label>
-        <select name="doc_type" id="admin-print-doc-type-filter" aria-label="Filter by document type" onchange="this.form.submit()">
-          <option value="" {% if not request_doc_type %}selected{% endif %}>All document types</option>
-          {% for key, label in document_types.items() %}
-          <option value="{{ key }}" {% if request_doc_type == key %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </form>
+      {% with filter_endpoint='administration', filter_id='admin-print-doc-type-filter', admin_tab='print_requests' %}
+        {% include '_staff_request_filters.html' %}
+      {% endwith %}
       {% if print_requests %}
         <div class="table-wrap admin-requests-table-wrap admin-edit-requests-table-wrap">
           <table class="table admin-requests-table admin-edit-requests-table">
@@ -398,7 +405,7 @@
             </thead>
             <tbody>
               {% for req in print_requests %}
-                <tr>
+                <tr data-progress="{% if (req.status or '')|upper == 'PENDING' %}pending{% else %}complete{% endif %}">
                   <td class="col-id">{{ req.id }}</td>
                   <td class="col-record">{{ req.record.registry_number or '—' if req.record else '—' }}</td>
                   <td class="col-type">
@@ -457,6 +464,9 @@
               {% endfor %}
             </tbody>
           </table>
+        </div>
+        <div class="admin-empty" data-staff-filter-empty hidden>
+          <p>No requests in this status.</p>
         </div>
       {% else %}
         <div class="admin-empty">
@@ -755,7 +765,6 @@
 
   {% endif %}
 
-</div>
 <script type="application/json" id="scan-year-stats">{{ _scan_years|tojson }}</script>
 <script>
   (function () {
@@ -904,4 +913,6 @@
     applyYear(initial, true);
   })();
 </script>
+  </div>
+</div>
 {% endblock %}

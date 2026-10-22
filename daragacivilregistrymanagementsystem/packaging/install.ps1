@@ -97,6 +97,23 @@ $localUploads = Join-Path $AppDir "uploads"
 if (Test-Path $localUploads) {
     Copy-Item -Path (Join-Path $localUploads "*") -Destination $sharedUploads -Recurse -Force -ErrorAction SilentlyContinue
 }
+# If this PC already has scans from the working system, make them visible after install.
+$existingUploads = @(
+    "C:\daragacivilregistrymanagementsystem - 1-PostgreSQL\daragacivilregistrymanagementsystem\uploads",
+    "C:\DaragaCivilRegistry\uploads"
+)
+$sharedHasScans = @(Get-ChildItem $sharedUploads -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '\.(jpg|jpeg|png|tif|tiff)$' }).Count
+if ($sharedHasScans -lt 1) {
+    foreach ($srcUploads in $existingUploads) {
+        if ($srcUploads -eq $localUploads) { continue }
+        if (-not (Test-Path $srcUploads)) { continue }
+        $found = @(Get-ChildItem $srcUploads -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '\.(jpg|jpeg|png|tif|tiff)$' }).Count
+        if ($found -lt 1) { continue }
+        Write-Host "Copying existing certificate scans so Search can open them."
+        Copy-Item -Path (Join-Path $srcUploads "*") -Destination $sharedUploads -Recurse -Force -ErrorAction SilentlyContinue
+        break
+    }
+}
 $settingsFile = Join-Path $AppDir "storage_settings.json"
 if (-not (Test-Path $settingsFile)) {
     '{"data_root":"C:\\CivilRegistryData"}' | Set-Content -Path $settingsFile -Encoding UTF8

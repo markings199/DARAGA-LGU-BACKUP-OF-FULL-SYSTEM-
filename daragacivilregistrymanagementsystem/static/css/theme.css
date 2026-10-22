@@ -197,7 +197,6 @@
   border: 1px solid rgba(0, 32, 128, 0.15);
 }
 .theme-toggle-icon:not(.home-circle-mark) {
-  display: flex;
   width: 22px;
   height: 22px;
   flex-shrink: 0;
@@ -401,7 +400,8 @@
 }
 [data-theme="dark"] .review-required-banner,
 [data-theme="dark"] .form-meta-field.is-missing,
-[data-theme="dark"] .metadata-edit-field.is-missing {
+[data-theme="dark"] .metadata-edit-field.is-missing,
+[data-theme="dark"] body.page-record-detail .rd-meta-field.is-missing {
   color: #fed7aa;
   background: rgba(154, 52, 18, 0.28);
   border-color: #fb923c;
@@ -853,6 +853,41 @@
   background: var(--input-bg);
   border-color: var(--brand-green);
   color: var(--input-text);
+}
+[data-theme="dark"] body.page-administration .staff-progress-btn,
+[data-theme="dark"] body.page-staff-requests .staff-progress-btn {
+  background: #1e293b;
+  border-color: rgba(148, 163, 184, 0.35);
+  color: #e2e8f0;
+}
+[data-theme="dark"] body.page-administration .staff-progress-btn span,
+[data-theme="dark"] body.page-staff-requests .staff-progress-btn span {
+  background: rgba(148, 163, 184, 0.22);
+  color: #f8fafc;
+}
+[data-theme="dark"] body.page-administration .staff-progress-btn:hover,
+[data-theme="dark"] body.page-staff-requests .staff-progress-btn:hover {
+  background: #243044;
+}
+[data-theme="dark"] body.page-administration .staff-progress-btn.is-active,
+[data-theme="dark"] body.page-staff-requests .staff-progress-btn.is-active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+[data-theme="dark"] body.page-administration .staff-progress-btn--pending.is-active,
+[data-theme="dark"] body.page-staff-requests .staff-progress-btn--pending.is-active {
+  background: #b45309;
+  border-color: #b45309;
+}
+[data-theme="dark"] body.page-administration .staff-progress-btn--complete.is-active,
+[data-theme="dark"] body.page-staff-requests .staff-progress-btn--complete.is-active {
+  background: #047857;
+  border-color: #047857;
+}
+[data-theme="dark"] body.page-staff-requests .staff-requests-table .status-badge.status-complete {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
 }
 [data-theme="dark"] body.page-staff-requests .staff-pills .pill {
   background: var(--pill-bg);
@@ -1817,15 +1852,27 @@ body.login-page::-webkit-scrollbar {
 [data-theme="dark"] body.page-administration .admin-dash-footer-user strong {
   color: #ffffff;
 }
+[data-theme="dark"] body.page-administration .admin-dash-footer-role {
+  background: rgba(96, 165, 250, 0.16);
+  border-color: rgba(147, 197, 253, 0.28);
+  color: #bfdbfe;
+}
 [data-theme="dark"] body.page-administration .admin-dash-footer-time {
-  background: linear-gradient(180deg, #1e293b 0%, #172033 100%);
-  border-color: rgba(96, 165, 250, 0.35);
+  background: #152033;
+  border-color: rgba(96, 165, 250, 0.28);
   color: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 [data-theme="dark"] body.page-administration .admin-dash-footer-globe {
+  background: #1e293b;
+  border-color: rgba(147, 197, 253, 0.28);
   color: #93c5fd;
   opacity: 1;
+}
+[data-theme="dark"] body.page-administration .admin-dash-footer-when {
+  color: #e2e8f0;
+}
+[data-theme="dark"] body.page-administration .admin-dash-footer-when #admin-footer-datetime-text {
+  color: #93c5fd;
 }
 [data-theme="dark"] body.page-administration .admin-header-user-badge {
   background: linear-gradient(180deg, #1e293b 0%, #172033 100%);

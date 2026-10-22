@@ -15,6 +15,9 @@
   function setCount(n) {
     var total = Number(n) || 0;
     wrap.setAttribute("data-count", String(total));
+    try {
+      sessionStorage.setItem("cr-notif-count", String(total));
+    } catch (e) {}
     if (countEl) {
       countEl.textContent = total > 99 ? "99+" : String(total);
       countEl.hidden = total < 1;

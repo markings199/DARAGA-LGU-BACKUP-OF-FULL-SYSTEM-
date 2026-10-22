@@ -4,18 +4,19 @@
     <meta charset="utf-8" />
     <script>
       (function () {
-        try {
-          if (localStorage.getItem("cr-theme") === "dark") {
-            document.documentElement.setAttribute("data-theme", "dark");
-          }
-        } catch (e) { /* ignore */ }
+        var dark = false;
+        try { dark = localStorage.getItem("cr-theme") === "dark"; } catch (e) {}
+        var html = document.documentElement;
+        if (dark) html.setAttribute("data-theme", "dark");
+        html.style.backgroundColor = dark ? "#0c1117" : "#dce5f2";
+        html.style.colorScheme = dark ? "dark" : "light";
       })();
     </script>
     <title>Log in – Municipal Civil Registry of Daraga, Albay</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#002080" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/flash.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/page_transition.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/page_transition.css') }}?v=admin-tabs-1" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/layout_fit.css') }}" />
     <style>
       :root {
@@ -630,7 +631,7 @@
       </p>
     </div>
     <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/page_transition.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/page_transition.js') }}?v=scan-safe-1"></script>
     <script>
     (function () {
       var eyeOpen = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';

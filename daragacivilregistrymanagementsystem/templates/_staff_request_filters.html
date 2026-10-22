@@ -1,0 +1,30 @@
+{# Staff edit/print request filters. Expects: filter_endpoint, request_doc_type, request_progress, progress_counts. #}
+{% set _counts = progress_counts|default({'all': 0, 'pending': 0, 'complete': 0}) %}
+<div class="staff-request-filters" data-staff-progress-filters data-initial-status="{{ request_progress or '' }}">
+  <form method="get" action="{{ url_for(filter_endpoint) }}" class="request-doc-type-filter staff-doc-type-filter{% if admin_tab %} admin-doc-type-filter{% endif %}">
+    {% if admin_tab %}
+      <input type="hidden" name="tab" value="{{ admin_tab }}" />
+    {% endif %}
+    {% if request_progress %}
+      <input type="hidden" name="status" value="{{ request_progress }}" />
+    {% endif %}
+    <label for="{{ filter_id|default('staff-document-type-filter') }}">Document type</label>
+    <select name="doc_type" id="{{ filter_id|default('staff-document-type-filter') }}" aria-label="Filter by document type" onchange="this.form.submit()">
+      <option value="" {% if not request_doc_type %}selected{% endif %}>All document types</option>
+      {% for key, label in document_types.items() %}
+      <option value="{{ key }}" {% if request_doc_type == key %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <div class="staff-progress-filters" role="tablist" aria-label="Request progress">
+    <button type="button" class="staff-progress-btn{% if not request_progress %} is-active{% endif %}" data-status="" role="tab" aria-selected="{{ 'true' if not request_progress else 'false' }}">
+      All <span data-count="all">{{ _counts.all }}</span>
+    </button>
+    <button type="button" class="staff-progress-btn staff-progress-btn--pending{% if request_progress == 'pending' %} is-active{% endif %}" data-status="pending" role="tab" aria-selected="{{ 'true' if request_progress == 'pending' else 'false' }}">
+      Pending <span data-count="pending">{{ _counts.pending }}</span>
+    </button>
+    <button type="button" class="staff-progress-btn staff-progress-btn--complete{% if request_progress == 'complete' %} is-active{% endif %}" data-status="complete" role="tab" aria-selected="{{ 'true' if request_progress == 'complete' else 'false' }}">
+      Complete <span data-count="complete">{{ _counts.complete }}</span>
+    </button>
+  </div>
+</div>

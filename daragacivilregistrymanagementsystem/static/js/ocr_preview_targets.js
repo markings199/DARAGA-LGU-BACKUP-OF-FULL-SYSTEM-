@@ -1,13 +1,19 @@
 (function () {
   var guidesEl = document.getElementById("ocr-field-guides");
-  if (!guidesEl) return;
-
   var guides = {};
-  try {
-    guides = JSON.parse(guidesEl.textContent || "{}") || {};
-  } catch (e) {
+
+  function refreshGuides() {
+    guidesEl = document.getElementById("ocr-field-guides");
     guides = {};
+    if (!guidesEl) return;
+    try {
+      guides = JSON.parse(guidesEl.textContent || "{}") || {};
+    } catch (e) {
+      guides = {};
+    }
   }
+
+  refreshGuides();
 
   var layer = null;
   var lastType = "";
@@ -108,7 +114,8 @@
   }
 
   function requestAligned(type) {
-    if (!type) return;
+    if (!guidesEl) refreshGuides();
+    if (!type || !guidesEl) return;
     var key = sourceKey(type);
     if (key === alignedKey && aligned[type] && aligned[type].length) return;
     var url = guidesEl.getAttribute("data-align-url") || "/api/ocr/field-guides";
@@ -198,15 +205,22 @@
     layout: layoutLayer,
   };
 
-  var section = document.getElementById("scan-wf-preview-viewer");
-  if (section) {
-    section.addEventListener("document-viewer-layout", layoutLayer);
+  function bindPreview() {
+    refreshGuides();
+    var section = document.getElementById("scan-wf-preview-viewer");
+    if (section && !section.__ocrTargets) {
+      section.__ocrTargets = 1;
+      section.addEventListener("document-viewer-layout", layoutLayer);
+    }
+    var img = previewImage();
+    if (img && !img.__ocrTargets) {
+      img.__ocrTargets = 1;
+      img.addEventListener("load", layoutLayer);
+    }
+    if (document.body.classList.contains("ocr-busy")) start();
   }
-  var img = previewImage();
-  if (img) {
-    img.addEventListener("load", layoutLayer);
-  }
-  window.addEventListener("resize", layoutLayer);
 
-  if (document.body.classList.contains("ocr-busy")) start();
+  window.addEventListener("resize", layoutLayer);
+  window.addEventListener("cr:page", bindPreview);
+  bindPreview();
 })();

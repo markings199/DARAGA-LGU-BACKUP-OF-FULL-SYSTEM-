@@ -53,10 +53,35 @@ body.page-registry-reports.reg-focus .main {
 
 img,
 video,
-canvas,
-svg {
+canvas {
   max-width: 100%;
   height: auto;
+}
+
+.scanflow-source-ic {
+  width: 32px !important;
+  height: 32px !important;
+  overflow: hidden;
+}
+
+.scanflow-source-ic svg,
+.scanflow-field-ic,
+.scanflow-card-head-icon svg,
+.btn-scanflow-ghost svg,
+.btn-scanflow-primary svg {
+  width: 16px !important;
+  height: 16px !important;
+  max-width: 16px !important;
+  max-height: 16px !important;
+}
+
+.scanflow-hero-mark svg,
+.scanflow-meta-chip svg,
+.scanflow-step-val svg {
+  width: 18px !important;
+  height: 18px !important;
+  max-width: 18px !important;
+  max-height: 18px !important;
 }
 
 .document-viewer-image,
