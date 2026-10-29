@@ -2,12 +2,7 @@
 {% block title %}Scan Workflow{% endblock %}
 {% block body_class %}page-scan-workflow{% if active_ocr %} ocr-busy{% endif %}{% endblock %}
 
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/scanflow.css') }}?v=scan-layout-2" />
-{% endblock %}
-
-{% block after_theme %}
-{% endblock %}
+{% block extra_head %}{% endblock %}
 
 {% block content %}
 <div class="scanflow-hero-wrap">

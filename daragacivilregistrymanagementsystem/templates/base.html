@@ -972,9 +972,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/document_annotation.css') }}?v=annotation-compact-1" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/notifications.css') }}?v=messages-2" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/flash.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/page_transition.css') }}?v=nav-smooth-2" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/page_transition.css') }}?v=nav-smooth-4" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/logout_motion.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout_fit.css') }}?v=messages-4" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout_fit.css') }}?v=nav-smooth-4" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/office_messages.css') }}?v=om-11" />
     <meta name="cr-after-theme" content="" />
     {% block after_theme %}{% endblock %}
@@ -1178,7 +1178,7 @@
     {% include '_flash_toasts.html' %}
     {% include '_app_confirm.html' %}
     <script src="{{ url_for('static', filename='js/theme.js') }}?v=topbar-stable-1"></script>
-    <script src="{{ url_for('static', filename='js/page_transition.js') }}?v=nav-smooth-3"></script>
+    <script src="{{ url_for('static', filename='js/page_transition.js') }}?v=nav-smooth-4"></script>
     {% if current_user %}
       <script src="{{ url_for('static', filename='js/logout_motion.js') }}"></script>
     {% endif %}

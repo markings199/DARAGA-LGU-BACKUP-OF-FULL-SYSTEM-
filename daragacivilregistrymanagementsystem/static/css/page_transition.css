@@ -50,18 +50,24 @@ html.cr-navigating #cr-page.is-leaving,
 html.cr-navigating #admin-panel.is-leaving,
 html.cr-navigating #reg-book.is-leaving,
 html.cr-navigating #search-results.is-leaving {
-  opacity: 1;
+  opacity: 0;
   transform: none;
   pointer-events: none;
+  transition: opacity 140ms ease;
 }
 
 #cr-page.is-entering,
 #admin-panel.is-entering,
 #reg-book.is-entering,
 #search-results.is-entering {
-  animation: none;
+  animation: crPageIn 180ms ease;
   opacity: 1;
   transform: none;
+}
+
+@keyframes crPageIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .sidebar-nav a,

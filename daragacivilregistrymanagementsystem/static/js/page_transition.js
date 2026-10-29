@@ -94,29 +94,49 @@
     });
   }
 
+  function headNodeKey(node) {
+    if (!node || node.nodeType !== 1) return "";
+    if (node.tagName === "LINK") return "link:" + (node.getAttribute("href") || "");
+    if (node.tagName === "STYLE") return "style:" + String(node.textContent || "").replace(/\s+/g, " ").slice(0, 120);
+    return "";
+  }
+
   function replaceHeadSlice(startName, endName, doc) {
     var start = document.querySelector('meta[name="' + startName + '"]');
     var end = document.querySelector('meta[name="' + endName + '"]');
     var srcStart = doc.querySelector('meta[name="' + startName + '"]');
     var srcEnd = doc.querySelector('meta[name="' + endName + '"]');
     if (!start || !end || !srcStart || !srcEnd) return;
+    var live = [];
     while (start.nextSibling && start.nextSibling !== end) {
+      live.push(start.nextSibling);
       start.parentNode.removeChild(start.nextSibling);
     }
+    var reuse = {};
+    live.forEach(function (node) {
+      var key = headNodeKey(node);
+      if (key) reuse[key] = node;
+    });
     var node = srcStart.nextSibling;
     while (node && node !== srcEnd) {
       var next = node.nextSibling;
-      if (!(node.nodeType === 3 && !String(node.textContent || "").trim())) {
-        if (node.nodeType === 1 && (node.tagName === "STYLE" || node.tagName === "LINK")) {
-          var fresh = document.createElement(node.tagName.toLowerCase());
-          Array.prototype.slice.call(node.attributes).forEach(function (attr) {
-            fresh.setAttribute(attr.name, attr.value);
-          });
-          if (node.tagName === "STYLE") fresh.textContent = node.textContent;
-          end.parentNode.insertBefore(fresh, end);
-        } else {
-          end.parentNode.insertBefore(document.importNode(node, true), end);
-        }
+      if (node.nodeType === 3 && !String(node.textContent || "").trim()) {
+        node = next;
+        continue;
+      }
+      var key = headNodeKey(node);
+      if (key && reuse[key]) {
+        end.parentNode.insertBefore(reuse[key], end);
+        delete reuse[key];
+      } else if (node.nodeType === 1 && (node.tagName === "STYLE" || node.tagName === "LINK")) {
+        var fresh = document.createElement(node.tagName.toLowerCase());
+        Array.prototype.slice.call(node.attributes).forEach(function (attr) {
+          fresh.setAttribute(attr.name, attr.value);
+        });
+        if (node.tagName === "STYLE") fresh.textContent = node.textContent;
+        end.parentNode.insertBefore(fresh, end);
+      } else {
+        end.parentNode.insertBefore(document.importNode(node, true), end);
       }
       node = next;
     }
@@ -434,13 +454,13 @@
           );
           return waitForNewStylesheets().then(function () {
             if (myGen !== gen) return;
+            if (parsed.body) document.body.className = parsed.body.className;
+            if (parsed.title) document.title = parsed.title;
             page.innerHTML = nextPage.innerHTML;
             if (scriptsBox) {
               var nextScripts = parsed.getElementById("cr-page-scripts");
               scriptsBox.innerHTML = nextScripts ? nextScripts.innerHTML : "";
             }
-            document.body.className = parsed.body ? parsed.body.className : document.body.className;
-            if (parsed.title) document.title = parsed.title;
             syncChrome(parsed);
             adoptToasts(parsed);
             runScripts(page);

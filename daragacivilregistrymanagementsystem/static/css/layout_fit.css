@@ -60,6 +60,32 @@ canvas {
   height: auto;
 }
 
+/* Chrome marks stay sized even while a page stylesheet is swapping. */
+.topbar-logo-wrap {
+  width: 42px !important;
+  height: 42px !important;
+  overflow: hidden;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.topbar-logo {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.scanflow-hero-mark,
+.form-review-hero-mark,
+.req-edit-hero-mark {
+  width: 36px !important;
+  height: 36px !important;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
 /* Profile photos must stay circular before page-specific CSS arrives. */
 .om-avatar,
 .admin-log-person-photo,
