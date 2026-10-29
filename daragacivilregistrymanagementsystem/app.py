@@ -1172,7 +1172,12 @@ def login_required(f):
             user = db.session.get(User, session["user_id"])
         except OperationalError:
             db.session.rollback()
-            return _login_block("Database is not running. Start PostgreSQL, then try again.")
+            try:
+                db.engine.dispose()
+                user = db.session.get(User, session["user_id"])
+            except OperationalError:
+                db.session.rollback()
+                return _login_block("Database is not running. Start PostgreSQL, then try again.")
         if not user:
             session.clear()
             return _login_block("Please log in to continue.")
@@ -1809,6 +1814,9 @@ _AUDIT_ACTION_LABELS = {
     "AUTO_BACKUP_GET": "Copied backup",
     "BACKUP_FULL": "Manual backup",
     "OFFICE_MESSAGE": "Office message",
+    "OFFICE_MESSAGE_UNSEND": "Unsent office message",
+    "OFFICE_MESSAGE_PIN": "Pinned office message",
+    "OFFICE_MESSAGE_FORWARD": "Forwarded office message",
 }
 
 _AUDIT_KEY_LABELS = {
@@ -2208,9 +2216,7 @@ def account_photo(user_id):
     user = db.session.get(User, user_id)
     if not user or not viewer:
         return ("", 404)
-    same_person = int(viewer.id) == int(user.id)
-    admin_viewer = (viewer.role or "").upper() == "ADMIN"
-    if not same_person and not admin_viewer and not _office_can_message(viewer, user):
+    if not _office_can_view_profile(viewer, user):
         return ("", 403)
     path = _user_photo_file(user)
     if path is None:
@@ -2937,6 +2943,8 @@ def _collect_notifications(user) -> dict:
         unread_msgs = (
             OfficeMessage.query.filter_by(recipient_id=user.id)
             .filter(OfficeMessage.read_at.is_(None))
+            .filter(OfficeMessage.unsent_at.is_(None))
+            .filter(OfficeMessage.hidden_for_recipient.is_(False))
             .order_by(OfficeMessage.id.desc())
             .limit(40)
             .all()
@@ -2957,6 +2965,8 @@ def _collect_notifications(user) -> dict:
             })
         unread_n = OfficeMessage.query.filter_by(recipient_id=user.id).filter(
             OfficeMessage.read_at.is_(None)
+        ).filter(OfficeMessage.unsent_at.is_(None)).filter(
+            OfficeMessage.hidden_for_recipient.is_(False)
         ).count()
         badges["office_messages_unread"] = unread_n
     except Exception:
@@ -5631,42 +5641,140 @@ def _office_can_message(me, peer) -> bool:
     return False
 
 
+def _office_can_view_profile(me, peer) -> bool:
+    if not me or not peer:
+        return False
+    if int(me.id) == int(peer.id):
+        return True
+    mine = (me.role or "").upper()
+    theirs = (peer.role or "").upper()
+    return mine in {"ADMIN", "STAFF"} and theirs in {"ADMIN", "STAFF"}
+
+
+def _office_profile_limited(me, peer) -> bool:
+    """Staff viewing an administrator sees identity only — no office dates."""
+    if not me or not peer or int(me.id) == int(peer.id):
+        return False
+    return (me.role or "").upper() == "STAFF" and (peer.role or "").upper() == "ADMIN"
+
+
 def _office_contacts(me):
     mine = (me.role or "").upper()
-    want = "ADMIN" if mine == "STAFF" else "STAFF"
+    if mine not in {"ADMIN", "STAFF"}:
+        return []
     return (
-        User.query.filter(db.func.upper(User.role) == want)
+        User.query.filter(User.id != me.id)
+        .filter(db.func.upper(User.role).in_(("ADMIN", "STAFF")))
         .order_by(User.username.asc(), User.id.asc())
         .all()
     )
 
 
 def _office_thread_query(me_id: int, peer_id: int):
-    return OfficeMessage.query.filter(
-        or_(
-            and_(OfficeMessage.sender_id == me_id, OfficeMessage.recipient_id == peer_id),
-            and_(OfficeMessage.sender_id == peer_id, OfficeMessage.recipient_id == me_id),
-        )
+    pair = or_(
+        and_(OfficeMessage.sender_id == me_id, OfficeMessage.recipient_id == peer_id),
+        and_(OfficeMessage.sender_id == peer_id, OfficeMessage.recipient_id == me_id),
     )
+    visible = or_(
+        and_(OfficeMessage.sender_id == me_id, OfficeMessage.hidden_for_sender.is_(False)),
+        and_(OfficeMessage.recipient_id == me_id, OfficeMessage.hidden_for_recipient.is_(False)),
+    )
+    return OfficeMessage.query.filter(pair, visible)
 
 
 def _office_mark_read(me_id: int, peer_id: int) -> None:
     (
         OfficeMessage.query.filter_by(sender_id=peer_id, recipient_id=me_id)
         .filter(OfficeMessage.read_at.is_(None))
+        .filter(OfficeMessage.unsent_at.is_(None))
+        .filter(OfficeMessage.hidden_for_recipient.is_(False))
         .update({"read_at": datetime.utcnow()}, synchronize_session=False)
     )
 
 
-def _office_public_message(msg, me_id: int) -> dict:
+def _office_sender_label(msg, me_id: int) -> str:
+    if int(msg.sender_id) == int(me_id):
+        return "You"
+    sender = getattr(msg, "sender", None)
+    return (getattr(sender, "username", None) or "Office").strip() or "Office"
+
+
+def _office_public_message(msg, me_id: int, by_id=None) -> dict:
     created = msg.created_at
+    mine = int(msg.sender_id) == int(me_id)
+    unsent = bool(getattr(msg, "unsent_at", None))
+    reply = None
+    reply_id = getattr(msg, "reply_to_id", None)
+    if reply_id and by_id is not None:
+        parent = by_id.get(int(reply_id))
+        if parent:
+            parent_unsent = bool(getattr(parent, "unsent_at", None))
+            reply = {
+                "id": int(parent.id),
+                "name": _office_sender_label(parent, me_id),
+                "body": "" if parent_unsent else _office_message_preview(parent.body, 90),
+                "unsent": parent_unsent,
+            }
+        else:
+            reply = {"id": int(reply_id), "name": "", "body": "Original message", "unsent": True}
+    forwarded_name = (getattr(msg, "forwarded_from_name", None) or "").strip()
     return {
         "id": int(msg.id),
-        "mine": int(msg.sender_id) == int(me_id),
-        "body": msg.body or "",
-        "at": created.strftime("%b %d · %I:%M %p") if created else "",
-        "iso": created.isoformat() if created else "",
+        "mine": mine,
+        "body": "" if unsent else (msg.body or ""),
+        "unsent": unsent,
+        "pinned": bool(getattr(msg, "pinned_at", None)),
+        "at": created.strftime("%I:%M %p") if created else "",
+        "iso": (created.isoformat() + "Z") if created else "",
+        "can_unsend_everyone": mine and not unsent,
+        "can_unsend_me": True,
+        "reply": reply,
+        "forwarded": bool(getattr(msg, "forwarded_from_id", None) or forwarded_name) and not unsent,
+        "forwarded_from": forwarded_name,
+        "sender_name": _office_sender_label(msg, me_id),
     }
+
+
+def _office_thread_payload(thread, me_id: int):
+    by_id = {int(msg.id): msg for msg in thread}
+    return [_office_public_message(msg, me_id, by_id) for msg in thread]
+
+
+def _office_pinned_message(me_id: int, peer_id: int):
+    return (
+        _office_thread_query(me_id, peer_id)
+        .filter(OfficeMessage.pinned_at.isnot(None))
+        .filter(OfficeMessage.unsent_at.is_(None))
+        .order_by(OfficeMessage.pinned_at.desc(), OfficeMessage.id.desc())
+        .first()
+    )
+
+
+def _office_clear_pins(me_id: int, peer_id: int) -> None:
+    pair = or_(
+        and_(OfficeMessage.sender_id == me_id, OfficeMessage.recipient_id == peer_id),
+        and_(OfficeMessage.sender_id == peer_id, OfficeMessage.recipient_id == me_id),
+    )
+    (
+        OfficeMessage.query.filter(pair)
+        .filter(OfficeMessage.pinned_at.isnot(None))
+        .update({"pinned_at": None}, synchronize_session=False)
+    )
+
+
+def _office_forward_contacts(me, contacts):
+    rows = []
+    for person in contacts:
+        if not _office_can_message(me, person):
+            continue
+        rows.append(
+            {
+                "id": int(person.id),
+                "username": person.username,
+                "photo_url": _user_photo_url(person),
+            }
+        )
+    return rows
 
 
 def _office_contact_rows(me, contacts, active_id=None):
@@ -5674,12 +5782,15 @@ def _office_contact_rows(me, contacts, active_id=None):
     for person in contacts:
         last = (
             _office_thread_query(me.id, person.id)
+            .filter(OfficeMessage.unsent_at.is_(None))
             .order_by(OfficeMessage.id.desc())
             .first()
         )
         unread = (
             OfficeMessage.query.filter_by(sender_id=person.id, recipient_id=me.id)
             .filter(OfficeMessage.read_at.is_(None))
+            .filter(OfficeMessage.unsent_at.is_(None))
+            .filter(OfficeMessage.hidden_for_recipient.is_(False))
             .count()
         )
         rows.append(
@@ -5711,9 +5822,6 @@ def office_messages(peer_id=None):
         if not _office_can_message(user, peer):
             flash("You can only message office staff and administrators.", "error")
             return redirect(url_for("office_messages"))
-    if peer is None and len(contacts) == 1:
-        peer = contacts[0]
-        return redirect(url_for("office_messages", peer_id=peer.id))
     thread = []
     if peer:
         try:
@@ -5727,6 +5835,8 @@ def office_messages(peer_id=None):
             .limit(400)
             .all()
         )
+    thread_json = _office_thread_payload(thread, user.id) if peer else []
+    pinned = _office_pinned_message(user.id, peer.id) if peer else None
     return render_template(
         "office_messages.html",
         current_user=user,
@@ -5735,8 +5845,37 @@ def office_messages(peer_id=None):
         peer=peer,
         peer_photo=_user_photo_url(peer) if peer else "",
         thread=thread,
-        thread_json=[_office_public_message(msg, user.id) for msg in thread],
-        directory_label="Administrators" if (user.role or "").upper() == "STAFF" else "Staff",
+        thread_json=thread_json,
+        pinned_message=_office_public_message(pinned, user.id) if pinned else None,
+        forward_contacts=_office_forward_contacts(user, contacts) if peer else [],
+        directory_label="Office directory",
+    )
+
+
+@app.route("/office-profile/<int:user_id>")
+@login_required
+def office_profile(user_id):
+    viewer = get_current_user()
+    person = db.session.get(User, user_id)
+    if not viewer or not person:
+        flash("That account was not found.", "error")
+        return redirect(url_for("office_messages"))
+    if int(viewer.id) == int(person.id):
+        return redirect(url_for("account"))
+    if not _office_can_view_profile(viewer, person):
+        flash("You can only view office staff and administrator profiles.", "error")
+        return redirect(url_for("office_messages"))
+    limited = _office_profile_limited(viewer, person)
+    person_role = (person.role or "").upper()
+    return render_template(
+        "office_profile.html",
+        current_user=viewer,
+        nav_active="messages",
+        person=person,
+        person_role=person_role,
+        person_photo=_user_photo_url(person),
+        limited_profile=limited,
+        can_message=_office_can_message(viewer, person),
     )
 
 
@@ -5765,13 +5904,176 @@ def office_messages_send(peer_id):
         return redirect(url_for("office_messages", peer_id=peer.id))
     if len(body) > OFFICE_MESSAGE_MAX:
         body = body[:OFFICE_MESSAGE_MAX]
-    row = OfficeMessage(sender_id=user.id, recipient_id=peer.id, body=body)
+    reply_to = None
+    raw_reply = (payload or {}).get("reply_to_id") if isinstance(payload, dict) else request.form.get("reply_to_id")
+    try:
+        reply_id = int(raw_reply or 0)
+    except (TypeError, ValueError):
+        reply_id = 0
+    if reply_id:
+        reply_to = db.session.get(OfficeMessage, reply_id)
+        if (
+            not reply_to
+            or {int(reply_to.sender_id), int(reply_to.recipient_id)} != {int(user.id), int(peer.id)}
+            or reply_to.unsent_at
+        ):
+            reply_to = None
+    row = OfficeMessage(
+        sender_id=user.id,
+        recipient_id=peer.id,
+        body=body,
+        reply_to_id=reply_to.id if reply_to else None,
+    )
     db.session.add(row)
     db.session.commit()
     _log_audit(user.id, "OFFICE_MESSAGE", f"to={peer.username} to_id={peer.id}")
     if wants_json:
-        return jsonify({"ok": True, "message": _office_public_message(row, user.id)})
+        parent = {int(reply_to.id): reply_to} if reply_to else {}
+        return jsonify({"ok": True, "message": _office_public_message(row, user.id, parent)})
     return redirect(url_for("office_messages", peer_id=peer.id))
+
+
+@app.route("/office-messages/<int:peer_id>/unsend", methods=["POST"])
+@login_required
+def office_messages_unsend(peer_id):
+    user = get_current_user()
+    if not user:
+        return jsonify({"ok": False, "error": "Please log in."}), 401
+    peer = db.session.get(User, peer_id)
+    if not _office_can_message(user, peer):
+        return jsonify({"ok": False, "error": "Not allowed."}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        message_id = int(payload.get("message_id") or 0)
+    except (TypeError, ValueError):
+        message_id = 0
+    scope = str(payload.get("scope") or "").strip().lower()
+    if scope not in ("everyone", "me"):
+        return jsonify({"ok": False, "error": "Choose Unsend for everyone or Unsend for me."}), 400
+    row = db.session.get(OfficeMessage, message_id)
+    if (
+        not row
+        or {int(row.sender_id), int(row.recipient_id)} != {int(user.id), int(peer.id)}
+    ):
+        return jsonify({"ok": False, "error": "Message not found."}), 404
+    if scope == "everyone":
+        if int(row.sender_id) != int(user.id):
+            return jsonify({"ok": False, "error": "Only the sender can unsend this for everyone."}), 403
+        if row.unsent_at:
+            return jsonify({"ok": True, "unsent": True, "hidden": False, "message": _office_public_message(row, user.id)})
+        row.body = ""
+        row.unsent_at = datetime.utcnow()
+        row.read_at = row.read_at or datetime.utcnow()
+        row.pinned_at = None
+        row.forwarded_from_id = None
+        row.forwarded_from_name = ""
+    else:
+        if int(row.sender_id) == int(user.id):
+            row.hidden_for_sender = True
+        else:
+            row.hidden_for_recipient = True
+    db.session.commit()
+    _log_audit(user.id, "OFFICE_MESSAGE_UNSEND", f"to_id={peer.id} scope={scope} msg_id={row.id}")
+    return jsonify(
+        {
+            "ok": True,
+            "unsent": bool(row.unsent_at),
+            "hidden": scope == "me",
+            "message": _office_public_message(row, user.id),
+        }
+    )
+
+
+@app.route("/office-messages/<int:peer_id>/pin", methods=["POST"])
+@login_required
+def office_messages_pin(peer_id):
+    user = get_current_user()
+    if not user:
+        return jsonify({"ok": False, "error": "Please log in."}), 401
+    peer = db.session.get(User, peer_id)
+    if not _office_can_message(user, peer):
+        return jsonify({"ok": False, "error": "Not allowed."}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        message_id = int(payload.get("message_id") or 0)
+    except (TypeError, ValueError):
+        message_id = 0
+    pinned = str(payload.get("pinned") if payload.get("pinned") is not None else "1").lower() not in {
+        "0",
+        "false",
+        "no",
+    }
+    row = db.session.get(OfficeMessage, message_id)
+    if (
+        not row
+        or {int(row.sender_id), int(row.recipient_id)} != {int(user.id), int(peer.id)}
+    ):
+        return jsonify({"ok": False, "error": "Message not found."}), 404
+    if row.unsent_at:
+        return jsonify({"ok": False, "error": "An unsent message cannot be pinned."}), 400
+    _office_clear_pins(user.id, peer.id)
+    row.pinned_at = datetime.utcnow() if pinned else None
+    db.session.commit()
+    _log_audit(user.id, "OFFICE_MESSAGE_PIN", f"to_id={peer.id} msg_id={row.id} pinned={int(bool(row.pinned_at))}")
+    return jsonify(
+        {
+            "ok": True,
+            "pinned": _office_public_message(row, user.id) if row.pinned_at else None,
+        }
+    )
+
+
+@app.route("/office-messages/<int:peer_id>/forward", methods=["POST"])
+@login_required
+def office_messages_forward(peer_id):
+    user = get_current_user()
+    if not user:
+        return jsonify({"ok": False, "error": "Please log in."}), 401
+    peer = db.session.get(User, peer_id)
+    if not _office_can_message(user, peer):
+        return jsonify({"ok": False, "error": "Not allowed."}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        message_id = int(payload.get("message_id") or 0)
+        to_user_id = int(payload.get("to_user_id") or 0)
+    except (TypeError, ValueError):
+        message_id = 0
+        to_user_id = 0
+    source = db.session.get(OfficeMessage, message_id)
+    target = db.session.get(User, to_user_id)
+    if (
+        not source
+        or source.unsent_at
+        or {int(source.sender_id), int(source.recipient_id)} != {int(user.id), int(peer.id)}
+    ):
+        return jsonify({"ok": False, "error": "That message cannot be forwarded."}), 404
+    if not _office_can_message(user, target):
+        return jsonify({"ok": False, "error": "Choose an office account you can message."}), 403
+    body = (source.body or "").strip()
+    if not body:
+        return jsonify({"ok": False, "error": "That message cannot be forwarded."}), 400
+    if len(body) > OFFICE_MESSAGE_MAX:
+        body = body[:OFFICE_MESSAGE_MAX]
+    from_name = _office_sender_label(source, user.id)
+    if from_name == "You":
+        from_name = user.username
+    row = OfficeMessage(
+        sender_id=user.id,
+        recipient_id=target.id,
+        body=body,
+        forwarded_from_id=source.id,
+        forwarded_from_name=from_name[:80],
+    )
+    db.session.add(row)
+    db.session.commit()
+    _log_audit(user.id, "OFFICE_MESSAGE_FORWARD", f"from_id={peer.id} to_id={target.id} msg_id={source.id}")
+    return jsonify(
+        {
+            "ok": True,
+            "to_user_id": int(target.id),
+            "message": _office_public_message(row, user.id),
+        }
+    )
 
 
 @app.route("/api/office-messages/<int:peer_id>")
@@ -5795,17 +6097,33 @@ def api_office_messages(peer_id):
         if after_id > 0:
             q = q.filter(OfficeMessage.id > after_id)
         rows = q.order_by(OfficeMessage.id.asc()).limit(200).all()
-        unread = OfficeMessage.query.filter_by(recipient_id=user.id).filter(
-            OfficeMessage.read_at.is_(None)
-        ).count()
+        unsent_ids = [
+            int(msg.id)
+            for msg in _office_thread_query(user.id, peer.id)
+            .filter(OfficeMessage.unsent_at.isnot(None))
+            .all()
+        ]
+        unread = (
+            OfficeMessage.query.filter_by(recipient_id=user.id)
+            .filter(OfficeMessage.read_at.is_(None))
+            .filter(OfficeMessage.unsent_at.is_(None))
+            .filter(OfficeMessage.hidden_for_recipient.is_(False))
+            .count()
+        )
+        pinned = _office_pinned_message(user.id, peer.id)
+        known = {int(msg.id): msg for msg in rows}
+        if pinned:
+            known[int(pinned.id)] = pinned
     except Exception:
         db.session.rollback()
         return jsonify({"ok": False, "error": "Could not load messages."}), 500
     return jsonify(
         {
             "ok": True,
-            "messages": [_office_public_message(msg, user.id) for msg in rows],
+            "messages": [_office_public_message(msg, user.id, known) for msg in rows],
+            "unsent_ids": unsent_ids,
             "unread": unread,
+            "pinned": _office_public_message(pinned, user.id, known) if pinned else None,
         }
     )
 
@@ -6212,6 +6530,43 @@ def _migrate_print_requests():
         db.session.rollback()
 
 
+def _migrate_office_messages():
+    """Add unsend columns without changing existing message bodies."""
+    try:
+        existing = _existing_columns("office_messages")
+    except Exception:
+        return
+    if not existing:
+        return
+    if "unsent_at" not in existing:
+        db.session.execute(db.text("ALTER TABLE office_messages ADD COLUMN unsent_at TIMESTAMP"))
+        db.session.commit()
+    if "hidden_for_sender" not in existing:
+        db.session.execute(
+            db.text("ALTER TABLE office_messages ADD COLUMN hidden_for_sender BOOLEAN DEFAULT FALSE NOT NULL")
+        )
+        db.session.commit()
+    if "hidden_for_recipient" not in existing:
+        db.session.execute(
+            db.text("ALTER TABLE office_messages ADD COLUMN hidden_for_recipient BOOLEAN DEFAULT FALSE NOT NULL")
+        )
+        db.session.commit()
+    if "reply_to_id" not in existing:
+        db.session.execute(db.text("ALTER TABLE office_messages ADD COLUMN reply_to_id INTEGER"))
+        db.session.commit()
+    if "forwarded_from_id" not in existing:
+        db.session.execute(db.text("ALTER TABLE office_messages ADD COLUMN forwarded_from_id INTEGER"))
+        db.session.commit()
+    if "forwarded_from_name" not in existing:
+        db.session.execute(
+            db.text("ALTER TABLE office_messages ADD COLUMN forwarded_from_name VARCHAR(80) DEFAULT '' NOT NULL")
+        )
+        db.session.commit()
+    if "pinned_at" not in existing:
+        db.session.execute(db.text("ALTER TABLE office_messages ADD COLUMN pinned_at TIMESTAMP"))
+        db.session.commit()
+
+
 def _migrate_users():
     """Add session_version so admins can force-logout existing accounts."""
     try:
@@ -6306,6 +6661,10 @@ def _bootstrap_users():
             pass
         try:
             _migrate_users()
+        except Exception:
+            pass
+        try:
+            _migrate_office_messages()
         except Exception:
             pass
         default_passwords = [

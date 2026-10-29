@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ person.username }} · Office profile{% endblock %}
+{% block body_class %}page-account page-office-profile{% endblock %}
+{% block after_theme %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account.css') }}?v=office-profile-fill-1" />
+{% endblock %}
+
+{% block content %}
+{% set uname = person.username or 'User' %}
+{% set role = person_role or (person.role or 'STAFF')|upper %}
+<div class="account-page">
+  <article class="account-shell">
+    <aside class="account-brand" aria-label="Office profile">
+      <p class="account-kicker">Office profile</p>
+      <div class="account-photo-form">
+        <span class="account-avatar{% if person_photo %} account-avatar--photo{% endif %}">
+          {% if person_photo %}
+            <img src="{{ person_photo }}" alt="" width="88" height="88" decoding="async" />
+          {% else %}
+            {{ uname[:1]|upper }}
+          {% endif %}
+        </span>
+      </div>
+      <h1 class="account-username">{{ uname }}</h1>
+      <span class="account-role account-role--{{ role|lower }}">{{ 'Administrator' if role == 'ADMIN' else 'Staff' }}</span>
+      <p class="account-office">Municipality of Daraga · Civil Registry</p>
+      {% if not limited_profile %}
+        {% if person.last_login_at and (current_user.role or '')|upper == 'ADMIN' %}
+          <p class="account-since">Last signed in {{ person.last_login_at.strftime('%Y-%m-%d %H:%M') }}</p>
+        {% elif person.created_at %}
+          <p class="account-since">Since {{ person.created_at.strftime('%b %Y') }}</p>
+        {% endif %}
+      {% endif %}
+    </aside>
+
+    <div class="account-main">
+      <section class="account-panel" aria-labelledby="office-profile-title">
+        <header class="account-panel-head">
+          <span class="account-panel-ic{% if person_photo %} account-panel-ic--photo{% endif %}" aria-hidden="true">
+            {% if person_photo %}
+              <img src="{{ person_photo }}" alt="" width="36" height="36" decoding="async" />
+            {% else %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            {% endif %}
+          </span>
+          <div>
+            <h2 id="office-profile-title">Account</h2>
+            {% if limited_profile %}
+              <p>Administrator details are limited. Staff can see identity only.</p>
+            {% else %}
+              <p>Office identity for this civil registry account.</p>
+            {% endif %}
+          </div>
+        </header>
+        <dl class="account-facts">
+          <div>
+            <dt>Username</dt>
+            <dd>{{ uname }}</dd>
+          </div>
+          <div>
+            <dt>Role</dt>
+            <dd>{{ 'Administrator' if role == 'ADMIN' else 'Staff encoder' }}</dd>
+          </div>
+          {% if not limited_profile %}
+          <div>
+            <dt>Added</dt>
+            <dd>{{ person.created_at.strftime('%Y-%m-%d') if person.created_at else '—' }}</dd>
+          </div>
+          {% endif %}
+        </dl>
+      </section>
+
+      <section class="account-panel">
+        <div class="account-actions">
+          {% if can_message %}
+            <a class="btn btn-primary" href="{{ url_for('office_messages', peer_id=person.id) }}">Open conversation</a>
+          {% endif %}
+          <a class="btn btn-secondary" href="{{ url_for('office_messages') }}">Back to Messages</a>
+        </div>
+      </section>
+    </div>
+  </article>
+</div>
+{% endblock %}

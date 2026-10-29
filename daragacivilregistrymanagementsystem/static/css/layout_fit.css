@@ -41,7 +41,8 @@ body {
 }
 
 body.page-administration .main,
-body.page-office-messages .main {
+body.page-office-messages .main,
+body.page-office-profile .main {
   max-width: none !important;
 }
 

@@ -146,6 +146,13 @@ class OfficeMessage(db.Model):
     body = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
     read_at = db.Column(db.DateTime)
+    unsent_at = db.Column(db.DateTime)
+    hidden_for_sender = db.Column(db.Boolean, nullable=False, default=False)
+    hidden_for_recipient = db.Column(db.Boolean, nullable=False, default=False)
+    reply_to_id = db.Column(db.Integer, db.ForeignKey("office_messages.id", ondelete="SET NULL"), index=True)
+    forwarded_from_id = db.Column(db.Integer)
+    forwarded_from_name = db.Column(db.String(80), nullable=False, default="")
+    pinned_at = db.Column(db.DateTime)
 
     sender = db.relationship("User", foreign_keys=[sender_id])
     recipient = db.relationship("User", foreign_keys=[recipient_id])

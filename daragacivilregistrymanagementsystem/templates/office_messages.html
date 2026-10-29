@@ -13,6 +13,9 @@
     data-peer-name="{{ peer.username }}"
     data-poll-url="{{ url_for('api_office_messages', peer_id=peer.id) }}"
     data-send-url="{{ url_for('office_messages_send', peer_id=peer.id) }}"
+    data-unsend-url="{{ url_for('office_messages_unsend', peer_id=peer.id) }}"
+    data-pin-url="{{ url_for('office_messages_pin', peer_id=peer.id) }}"
+    data-forward-url="{{ url_for('office_messages_forward', peer_id=peer.id) }}"
   {% endif %}
 >
   <div class="om-shell">
@@ -22,7 +25,7 @@
         <h1 class="om-title">Messages</h1>
         <label class="om-search">
           <span class="sr-only">Find a person</span>
-          <input type="search" id="om-find" placeholder="Search {{ directory_label|lower }}" autocomplete="off" />
+          <input type="search" id="om-find" placeholder="Search office directory" autocomplete="off" />
         </label>
       </div>
       {% if contact_rows %}
@@ -30,54 +33,53 @@
           {% for row in contact_rows %}
             {% set person = row.user %}
             <li>
-              <a
-                class="om-person{% if row.active %} is-active{% endif %}"
-                href="{{ url_for('office_messages', peer_id=person.id) }}"
-                data-name="{{ person.username }}"
-              >
-                <span class="om-avatar{% if row.photo_url %} has-photo{% endif %}">
+              <div class="om-person{% if row.active %} is-active{% endif %}" data-name="{{ person.username }}">
+                <a
+                  class="om-avatar{% if row.photo_url %} has-photo{% endif %} om-avatar-link"
+                  href="{{ url_for('office_profile', user_id=person.id) }}"
+                  title="View {{ person.username }} profile"
+                  data-name="{{ person.username }}"
+                >
                   {% if row.photo_url %}
                     <img src="{{ row.photo_url }}" alt="" width="44" height="44" decoding="async" />
                   {% else %}
                     {{ (person.username or '?')[:1]|upper }}
                   {% endif %}
-                </span>
+                </a>
                 <span class="om-person-copy">
                   <span class="om-person-line">
                     <strong>{{ person.username }}</strong>
                     {% if row.last_at %}<time>{{ row.last_at }}</time>{% endif %}
                   </span>
-                  <em>{{ row.last_preview or ('Administrator' if (person.role or '')|upper == 'ADMIN' else 'Staff') }}</em>
+                  <em>{{ row.last_preview or ('Administrator' if (person.role or '')|upper == 'ADMIN' else 'Staff encoder') }}</em>
                 </span>
                 {% if row.unread %}
                   <span class="om-unread">{{ row.unread if row.unread < 100 else '99+' }}</span>
                 {% endif %}
-              </a>
+              </div>
             </li>
           {% endfor %}
         </ul>
-        <p class="om-empty-find" id="om-empty-find" hidden>No matching name.</p>
+        <p class="om-empty-find" id="om-empty-find" hidden>No matching office name.</p>
       {% else %}
-        <p class="om-empty">
-          {% if me_role == 'STAFF' %}
-            No administrator account is available yet.
-          {% else %}
-            No staff account is available yet.
-          {% endif %}
-        </p>
+        <p class="om-empty">No other office accounts are available yet.</p>
       {% endif %}
     </aside>
 
     <section class="om-thread" aria-live="polite">
       {% if peer %}
         <header class="om-thread-head">
-          <span class="om-avatar om-avatar-lg{% if peer_photo %} has-photo{% endif %}">
+          <a
+            class="om-avatar om-avatar-lg{% if peer_photo %} has-photo{% endif %} om-avatar-link"
+            href="{{ url_for('office_profile', user_id=peer.id) }}"
+            title="View {{ peer.username }} profile"
+          >
             {% if peer_photo %}
               <img src="{{ peer_photo }}" alt="" width="46" height="46" decoding="async" />
             {% else %}
               {{ (peer.username or '?')[:1]|upper }}
             {% endif %}
-          </span>
+          </a>
           <div class="om-thread-who">
             <h2>{{ peer.username }}</h2>
             <p>
@@ -86,19 +88,28 @@
             </p>
           </div>
         </header>
+        <div class="om-pin-bar{% if not pinned_message %} is-empty{% endif %}" id="om-pin-bar"{% if not pinned_message %} hidden{% endif %}>
+          <button type="button" class="om-pin-jump" id="om-pin-jump" data-jump="{{ pinned_message.id if pinned_message else '' }}">
+            <span class="om-pin-ic" aria-hidden="true">📌</span>
+            <span class="om-pin-copy">
+              <strong>Pinned message</strong>
+              <em id="om-pin-preview">{{ pinned_message.body if pinned_message else '' }}</em>
+            </span>
+          </button>
+          <button type="button" class="om-pin-clear" id="om-pin-clear" title="Unpin">Unpin</button>
+        </div>
         <div class="om-scroll" id="om-scroll">
           <div class="om-feed" id="om-feed">
-            {% if thread %}
+            {% if thread_json %}
               {% set day_mark = namespace(value='') %}
-              {% for msg in thread %}
-                {% set day = msg.created_at.strftime('%Y-%m-%d') if msg.created_at else '' %}
+              {% for msg in thread_json %}
+                {% set day = (msg.iso[:10] if msg.iso else '') %}
                 {% if day and day != day_mark.value %}
-                  <p class="om-day"><span>{{ msg.created_at.strftime('%b %d, %Y') }}</span></p>
+                  <p class="om-day"><span data-om-day="{{ day }}">{{ day }}</span></p>
                   {% set day_mark.value = day %}
                 {% endif %}
-                {% set mine = msg.sender_id == current_user.id %}
-                <div class="om-row{% if mine %} is-mine{% endif %}" data-msg-id="{{ msg.id }}">
-                  {% if not mine %}
+                <div class="om-row{% if msg.mine %} is-mine{% endif %}{% if msg.pinned %} is-pinned{% endif %}" data-msg-id="{{ msg.id }}">
+                  {% if not msg.mine %}
                     <span class="om-avatar om-avatar-sm{% if peer_photo %} has-photo{% endif %}">
                       {% if peer_photo %}
                         <img src="{{ peer_photo }}" alt="" width="28" height="28" decoding="async" />
@@ -107,12 +118,31 @@
                       {% endif %}
                     </span>
                   {% endif %}
-                  <article class="om-bubble{% if office_emoji_only is defined and office_emoji_only(msg.body) %} is-emoji{% endif %}">
-                    <p>{{ msg.body }}</p>
-                    <time datetime="{{ msg.created_at.isoformat() if msg.created_at else '' }}">
-                      {{ msg.created_at.strftime('%I:%M %p') if msg.created_at else '' }}
-                    </time>
-                  </article>
+                  <div class="om-stack">
+                    {% if msg.reply %}
+                      <button type="button" class="om-quote" data-jump="{{ msg.reply.id }}">
+                        <strong>{{ msg.reply.name or 'Message' }}</strong>
+                        <span>{{ 'Original message was unsent' if msg.reply.unsent else msg.reply.body }}</span>
+                      </button>
+                    {% endif %}
+                    <article class="om-bubble{% if msg.unsent %} is-unsent{% elif office_emoji_only is defined and office_emoji_only(msg.body) %} is-emoji{% endif %}">
+                      {% if msg.forwarded and not msg.unsent %}
+                        <p class="om-fwd">Forwarded{% if msg.forwarded_from %} · {{ msg.forwarded_from }}{% endif %}</p>
+                      {% endif %}
+                      {% if msg.unsent %}
+                        <p class="om-unsent-text">This message was unsent</p>
+                      {% else %}
+                        <p>{{ msg.body }}</p>
+                      {% endif %}
+                      <time datetime="{{ msg.iso }}">{{ msg.at }}</time>
+                    </article>
+                  </div>
+                  <div class="om-actions">
+                    {% if not msg.unsent %}
+                      <button type="button" class="om-act" data-act="reply" title="Reply">Reply</button>
+                    {% endif %}
+                    <button type="button" class="om-act om-msg-more" data-act="more" aria-haspopup="true" aria-expanded="false" title="More">⋯</button>
+                  </div>
                 </div>
               {% endfor %}
             {% else %}
@@ -120,7 +150,15 @@
             {% endif %}
           </div>
         </div>
+        <div class="om-reply-bar" id="om-reply-bar" hidden>
+          <div class="om-reply-copy">
+            <strong>Replying to <span id="om-reply-name"></span></strong>
+            <p id="om-reply-preview"></p>
+          </div>
+          <button type="button" class="om-reply-cancel" id="om-reply-cancel" title="Cancel reply">×</button>
+        </div>
         <form class="om-compose" id="om-compose" method="post" action="{{ url_for('office_messages_send', peer_id=peer.id) }}">
+          <input type="hidden" name="reply_to_id" id="om-reply-id" value="" />
           <div class="om-emoji-wrap">
             <button type="button" class="om-icon-btn" id="om-emoji-btn" aria-expanded="false" aria-controls="om-emoji-panel" title="Emoji">
               <span aria-hidden="true">😊</span>
@@ -142,17 +180,34 @@
             <span class="sr-only">Send</span>
           </button>
         </form>
+        <div class="om-overlay" id="om-forward" hidden>
+          <div class="om-overlay-card" role="dialog" aria-modal="true" aria-labelledby="om-forward-title">
+            <h3 id="om-forward-title">Forward message</h3>
+            <p class="om-overlay-text">Send a copy to another office account you can message.</p>
+            <ul class="om-forward-people" id="om-forward-people"></ul>
+            <button type="button" class="om-overlay-cancel" id="om-forward-cancel">Cancel</button>
+          </div>
+        </div>
+        <script type="application/json" id="om-thread-data">{{ thread_json|tojson }}</script>
+        <script type="application/json" id="om-forward-data">{{ forward_contacts|tojson }}</script>
       {% else %}
         <div class="om-idle">
-          <p class="om-idle-title">Choose a conversation</p>
-          <p class="om-idle-text">Select a person on the left. You can type and send emoji the same way as a messenger app.</p>
+          <p class="om-idle-title">View a profile first</p>
+          <p class="om-idle-text">Click the photo on the left to open that person’s office profile. From the profile you can start the conversation.</p>
         </div>
       {% endif %}
     </section>
   </div>
 </div>
+<div class="om-flyout" id="om-flyout" hidden>
+  <button type="button" data-act="reply">Reply</button>
+  <button type="button" data-act="pin" id="om-flyout-pin">Pin</button>
+  <button type="button" data-act="forward">Forward</button>
+  <button type="button" data-act="unsend-everyone" id="om-flyout-everyone">Unsend for everyone</button>
+  <button type="button" data-act="unsend-me">Unsend for me</button>
+</div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/office_messages.js') }}?v=om-5"></script>
+<script src="{{ url_for('static', filename='js/office_messages.js') }}?v=om-10"></script>
 {% endblock %}
