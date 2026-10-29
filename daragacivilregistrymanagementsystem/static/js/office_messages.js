@@ -62,6 +62,7 @@
   var replyTo = null;
   var pollTimer = 0;
   var onDocClick = null;
+  var onDocDbl = null;
   var onDocKey = null;
   var onEmojiDocClick = null;
 
@@ -152,6 +153,11 @@
   }
 
   function rowHtml(msg) {
+    var replyBtn = msg.unsent
+      ? ""
+      : '<button type="button" class="om-act" data-act="reply" title="Reply" aria-label="Reply">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17l-5-5 5-5"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>' +
+        "</button>";
     return (
       (msg.mine ? "" : avatarHtml()) +
       '<div class="om-stack">' +
@@ -159,8 +165,8 @@
       bubbleHtml(msg) +
       "</div>" +
       '<div class="om-actions">' +
-      (msg.unsent ? "" : '<button type="button" class="om-act" data-act="reply" title="Reply">Reply</button>') +
-      '<button type="button" class="om-act om-msg-more" data-act="more" aria-haspopup="true" aria-expanded="false" title="More">⋯</button>' +
+      replyBtn +
+      '<button type="button" class="om-act om-msg-more" data-act="more" aria-haspopup="true" aria-expanded="false" title="More" aria-label="More">⋯</button>' +
       "</div>"
     );
   }
@@ -205,6 +211,9 @@
     if (!flyout) return;
     flyout.hidden = true;
     menuId = "";
+    page.querySelectorAll(".om-row.is-open").forEach(function (row) {
+      row.classList.remove("is-open");
+    });
     page.querySelectorAll(".om-msg-more").forEach(function (btn) {
       btn.setAttribute("aria-expanded", "false");
     });
@@ -223,6 +232,11 @@
     menuId = String(id);
     flyout.hidden = false;
     btn.setAttribute("aria-expanded", "true");
+    page.querySelectorAll(".om-row.is-open").forEach(function (row) {
+      row.classList.remove("is-open");
+    });
+    var openRow = btn.closest("[data-msg-id]");
+    if (openRow) openRow.classList.add("is-open");
     var box = btn.getBoundingClientRect();
     var menu = flyout.getBoundingClientRect();
     var left = msg.mine ? box.right - menu.width : box.left;
@@ -473,6 +487,15 @@
   };
   document.addEventListener("click", onDocClick);
 
+  onDocDbl = function (event) {
+    var bubble = event.target.closest ? event.target.closest(".om-bubble") : null;
+    if (!bubble || !page.contains(bubble) || bubble.classList.contains("is-unsent")) return;
+    var row = bubble.closest("[data-msg-id]");
+    var msg = row ? store[row.getAttribute("data-msg-id")] : null;
+    if (msg) setReply(msg);
+  };
+  document.addEventListener("dblclick", onDocDbl);
+
   onDocKey = function (event) {
     if (event.key === "Escape") {
       closeFlyout();
@@ -560,6 +583,7 @@
     if (pollTimer) window.clearInterval(pollTimer);
     pollTimer = 0;
     if (onDocClick) document.removeEventListener("click", onDocClick);
+    if (onDocDbl) document.removeEventListener("dblclick", onDocDbl);
     if (onDocKey) document.removeEventListener("keydown", onDocKey);
     if (onEmojiDocClick) document.removeEventListener("click", onEmojiDocClick);
     closeFlyout();

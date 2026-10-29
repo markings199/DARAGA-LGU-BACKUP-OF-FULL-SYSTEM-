@@ -139,9 +139,11 @@
                   </div>
                   <div class="om-actions">
                     {% if not msg.unsent %}
-                      <button type="button" class="om-act" data-act="reply" title="Reply">Reply</button>
+                      <button type="button" class="om-act" data-act="reply" title="Reply" aria-label="Reply">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17l-5-5 5-5"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+                      </button>
                     {% endif %}
-                    <button type="button" class="om-act om-msg-more" data-act="more" aria-haspopup="true" aria-expanded="false" title="More">⋯</button>
+                    <button type="button" class="om-act om-msg-more" data-act="more" aria-haspopup="true" aria-expanded="false" title="More" aria-label="More">⋯</button>
                   </div>
                 </div>
               {% endfor %}
@@ -209,5 +211,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/office_messages.js') }}?v=om-10"></script>
+<script src="{{ url_for('static', filename='js/office_messages.js') }}?v=om-11"></script>
 {% endblock %}

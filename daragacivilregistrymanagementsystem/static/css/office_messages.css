@@ -270,8 +270,9 @@ body.page-office-messages .om-page {
 .om-row {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  max-width: min(78%, 36rem);
+  gap: 10px;
+  max-width: min(92%, 42rem);
+  padding: 4px 0;
 }
 .om-row.is-mine {
   align-self: flex-end;
@@ -372,36 +373,49 @@ body.page-office-messages .om-page {
 .om-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
-  opacity: 0;
-  pointer-events: none;
+  gap: 6px;
+  min-width: 96px;
+  min-height: 44px;
+  opacity: 0.42;
+  pointer-events: auto;
   flex-shrink: 0;
   margin-bottom: 2px;
 }
 .om-row:hover .om-actions,
 .om-row:focus-within .om-actions,
-.om-msg-more[aria-expanded="true"] {
+.om-row.is-open .om-actions {
   opacity: 1;
-  pointer-events: auto;
 }
 .om-act {
-  height: 28px;
+  width: 40px;
+  height: 40px;
   border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #334155;
-  box-shadow: 0 1px 4px rgba(15, 43, 92, 0.12);
-  font: inherit;
-  font-size: 0.68rem;
-  font-weight: 800;
-  padding: 0 9px;
+  border-radius: 50%;
+  background: #fff;
+  color: #1e3a8a;
+  box-shadow: 0 2px 8px rgba(15, 43, 92, 0.16);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   cursor: pointer;
 }
+.om-act svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  pointer-events: none;
+}
+.om-act:hover,
+.om-act:focus-visible {
+  background: #2563eb;
+  color: #fff;
+  outline: none;
+}
 .om-act.om-msg-more {
-  width: 28px;
-  padding: 0;
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 1.2rem;
+  font-weight: 800;
+  line-height: 1;
 }
 .om-flyout {
   position: fixed;
@@ -747,8 +761,13 @@ body.page-office-messages .om-page {
 [data-theme="dark"] .om-emoji-panel button:hover { background: #334155; }
 [data-theme="dark"] .om-unsent-text { color: #94a3b8; }
 [data-theme="dark"] .om-act {
-  background: #1e293b;
+  background: #334155;
   color: #e2e8f0;
+}
+[data-theme="dark"] .om-act:hover,
+[data-theme="dark"] .om-act:focus-visible {
+  background: #2563eb;
+  color: #fff;
 }
 [data-theme="dark"] .om-flyout,
 [data-theme="dark"] .om-overlay-card {
