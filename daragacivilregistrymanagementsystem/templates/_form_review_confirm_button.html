@@ -1,0 +1,19 @@
+{% if image_filename %}
+          <button
+            type="submit"
+            class="btn btn-primary form-review-confirm"
+            data-app-confirm
+            data-confirm-title="{{ confirm_title }}"
+            data-confirm-message="{{ confirm_message }}"
+            data-confirm-ok="Confirm and save"
+            data-confirm-cancel="Review again"
+          >{{ confirm_label }}</button>
+{% else %}
+          <button
+            type="button"
+            class="btn btn-primary form-review-confirm"
+            disabled
+            aria-disabled="true"
+            title="Scan the certificate in Scan Workflow before this record can be archived."
+          >{{ confirm_label }}</button>
+{% endif %}

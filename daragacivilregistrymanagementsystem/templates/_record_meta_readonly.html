@@ -53,18 +53,17 @@
     {{ rd_field('Date of Registration') }}
 
     <div class="metadata-section-title">Deceased</div>
-    <div class="rd-meta-name-row">
+    <div class="rd-meta-name-row rd-meta-name-row--sex">
       {{ rd_field('Name of Deceased') }}
-      {{ rd_field('Age') }}
+      {{ rd_field('Sex') }}
     </div>
-    {{ rd_field('Sex') }}
-    {{ rd_field('Civil Status') }}
-    {{ rd_field('Nationality') }}
-
-    <div class="metadata-section-title">Death</div>
     {{ rd_field('Date of Death') }}
     {{ rd_field('Place of Death') }}
+    {{ rd_field('Age') }}
+    {{ rd_field('Civil Status') }}
+    {{ rd_field('Nationality') }}
     {{ rd_field('Cause of Death') }}
+    {{ rd_field('Remarks') }}
 
   {% elif doc == 'birth' %}
     <div class="metadata-section-title">Record</div>

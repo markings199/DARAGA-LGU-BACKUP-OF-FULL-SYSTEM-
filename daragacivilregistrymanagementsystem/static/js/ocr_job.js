@@ -46,7 +46,7 @@
     if (smoothTimer) return;
     smoothTimer = setInterval(function () {
       if (shownPct >= 90) return;
-      var step = shownPct < 40 ? 4 : 2;
+      var step = shownPct < 40 ? 3 : shownPct < 75 ? 2 : 1;
       setPct(shownPct + step);
     }, 220);
   }

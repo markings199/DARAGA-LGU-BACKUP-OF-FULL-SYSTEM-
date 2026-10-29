@@ -21,8 +21,8 @@
   height: 100%;
   width: 0;
   border-radius: 0 2px 2px 0;
-  background: linear-gradient(90deg, #008a3a 0%, #f4c431 46%, #1d4ed8 100%);
-  box-shadow: 0 0 12px rgba(29, 78, 216, 0.35);
+  background: var(--brand-blue, #002080);
+  box-shadow: none;
   transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -36,72 +36,32 @@ html.cr-navigating body {
   cursor: progress;
 }
 
-#cr-page {
-  pointer-events: auto;
-  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1), transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-html.cr-navigating #cr-page.is-leaving {
-  opacity: 0;
-  transform: translateY(8px);
-  pointer-events: none;
-}
-
-#cr-page.is-entering {
-  animation: cr-page-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-#admin-panel {
-  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1), transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-html.cr-navigating #admin-panel.is-leaving {
-  opacity: 0;
-  transform: translateY(8px);
-  pointer-events: none;
-}
-
-#admin-panel.is-entering {
-  animation: cr-page-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-#reg-book {
-  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1), transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-html.cr-navigating #reg-book.is-leaving {
-  opacity: 0;
-  transform: translateY(8px);
-  pointer-events: none;
-}
-
-#reg-book.is-entering {
-  animation: cr-page-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
+#cr-page,
+#admin-panel,
+#reg-book,
 #search-results {
-  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1), transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: auto;
+  opacity: 1;
+  transform: none;
+  animation: none;
 }
 
+html.cr-navigating #cr-page.is-leaving,
+html.cr-navigating #admin-panel.is-leaving,
+html.cr-navigating #reg-book.is-leaving,
 html.cr-navigating #search-results.is-leaving {
-  opacity: 0;
-  transform: translateY(8px);
+  opacity: 1;
+  transform: none;
   pointer-events: none;
 }
 
+#cr-page.is-entering,
+#admin-panel.is-entering,
+#reg-book.is-entering,
 #search-results.is-entering {
-  animation: cr-page-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes cr-page-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  animation: none;
+  opacity: 1;
+  transform: none;
 }
 
 .sidebar-nav a,

@@ -116,7 +116,8 @@
   function missingRequiredMeta(btn) {
     var missing = [];
     var seen = {};
-    document.querySelectorAll("[data-review-required='1'], [data-required-meta-field]").forEach(function (wrap) {
+    var liveWraps = document.querySelectorAll("[data-review-required='1'], [data-required-meta-field]");
+    liveWraps.forEach(function (wrap) {
       var key = wrap.getAttribute("data-required-meta-field") || wrapLabel(wrap);
       var empty = !reviewWrapFilled(wrap);
       wrap.classList.toggle("is-missing", empty);
@@ -129,7 +130,7 @@
         key: key,
       });
     });
-    if (!missing.length && btn) {
+    if (!missing.length && !liveWraps.length && btn) {
       try {
         var stored = JSON.parse(btn.getAttribute("data-missing-meta") || "[]") || [];
         stored.forEach(function (key) {
@@ -161,7 +162,8 @@
     }
     if (box) box.classList.toggle("is-hidden", !missing.length);
     if (btn) {
-      btn.setAttribute("aria-disabled", missing.length ? "true" : "false");
+      btn.removeAttribute("disabled");
+      btn.removeAttribute("aria-disabled");
       btn.setAttribute("data-missing-meta", JSON.stringify(missing.map(function (row) {
         return row.key || row.label;
       })));
@@ -472,32 +474,61 @@
       });
   }
 
-  var printUiBound = false;
+  function isAdminPrinter(btn) {
+    return ((btn && btn.getAttribute("data-print-role")) || "").toUpperCase() === "ADMIN";
+  }
+
+  function handlePrintButton(btn) {
+    if (!btn) return;
+    if (btn.getAttribute("data-can-print") !== "1") {
+      if (window.DaragaToast && window.DaragaToast.show) {
+        window.DaragaToast.show({
+          tone: "warning",
+          title: "Please check",
+          message: "Admin approval is required before you can print this document.",
+        });
+      }
+      return;
+    }
+    var missingMeta = missingRequiredMeta(btn);
+    if (missingMeta.length && !isAdminPrinter(btn)) {
+      notifyRequiredMeta(missingMeta);
+      return;
+    }
+    if (certPrintNeedsBlanks()) {
+      var missing = missingCertBlanks();
+      if (missing.length) {
+        notifyCertBlanksRequired(missing);
+        return;
+      }
+    }
+    runPrint(btn);
+  }
+
+  window.DaragaPrint = {
+    fromButton: handlePrintButton,
+  };
 
   function bindPrintUi() {
     var btn = document.getElementById("btn-print-document");
-    if (!btn || printUiBound || window.__dcrPrintUiBound) return;
-    printUiBound = true;
-    window.__dcrPrintUiBound = true;
-
     var mode = selectedPrintMode();
     setActivePrintSurface(mode);
     applyPrintLayout();
     var fontSel = document.getElementById("print-font-family");
-    if (fontSel) fontSel.addEventListener("change", applyPrintLayout);
+    if (fontSel && !fontSel.getAttribute("data-print-bound")) {
+      fontSel.setAttribute("data-print-bound", "1");
+      fontSel.addEventListener("change", applyPrintLayout);
+    }
     var paperSel = document.getElementById("print-paper-size");
-    if (paperSel) paperSel.addEventListener("change", applyPrintLayout);
+    if (paperSel && !paperSel.getAttribute("data-print-bound")) {
+      paperSel.setAttribute("data-print-bound", "1");
+      paperSel.addEventListener("change", applyPrintLayout);
+    }
     restoreCertBlanks();
-    updatePrintMetaBanner(missingRequiredMeta(btn));
-    document.addEventListener("input", function (event) {
-      if (!event.target || !event.target.closest("[data-review-required='1']")) return;
-      updatePrintMetaBanner(missingRequiredMeta(btn));
-    });
-    document.addEventListener("change", function (event) {
-      if (!event.target || !event.target.closest("[data-review-required='1']")) return;
-      updatePrintMetaBanner(missingRequiredMeta(btn));
-    });
+    if (btn) updatePrintMetaBanner(missingRequiredMeta(btn));
     document.querySelectorAll("[data-cert-blank-input]").forEach(function (input) {
+      if (input.getAttribute("data-print-bound")) return;
+      input.setAttribute("data-print-bound", "1");
       input.addEventListener("input", function () {
         storeCertBlanks();
         syncCertBlanksFromPanel();
@@ -515,36 +546,39 @@
       }
       radio.disabled = false;
       if (card) card.classList.remove("is-disabled");
-      radio.addEventListener("change", function () {
-        setActivePrintSurface(selectedPrintMode());
-      });
+      if (!radio.getAttribute("data-print-bound")) {
+        radio.setAttribute("data-print-bound", "1");
+        radio.addEventListener("change", function () {
+          setActivePrintSurface(selectedPrintMode());
+        });
+      }
     });
+  }
 
-    btn.addEventListener("click", function (event) {
-      event.preventDefault();
-      if (btn.getAttribute("data-can-print") !== "1") {
-        if (window.DaragaToast && window.DaragaToast.show) {
-          window.DaragaToast.show({
-            tone: "warning",
-            title: "Please check",
-            message: "Admin approval is required before you can print this document.",
-          });
-        }
-        return;
-      }
-      var missingMeta = missingRequiredMeta(btn);
-      if (missingMeta.length) {
-        notifyRequiredMeta(missingMeta);
-        return;
-      }
-      if (certPrintNeedsBlanks()) {
-        var missing = missingCertBlanks();
-        if (missing.length) {
-          notifyCertBlanksRequired(missing);
-          return;
-        }
-      }
-      runPrint(btn);
+  if (!window.__dcrPrintClickBound) {
+    window.__dcrPrintClickBound = true;
+    document.addEventListener(
+      "click",
+      function (event) {
+        var btn = event.target && event.target.closest
+          ? event.target.closest("#btn-print-document, .btn-print-document")
+          : null;
+        if (!btn) return;
+        event.preventDefault();
+        event.stopPropagation();
+        handlePrintButton(btn);
+      },
+      true
+    );
+    document.addEventListener("input", function (event) {
+      if (!event.target || !event.target.closest("[data-review-required='1']")) return;
+      var btn = document.getElementById("btn-print-document");
+      if (btn) updatePrintMetaBanner(missingRequiredMeta(btn));
+    });
+    document.addEventListener("change", function (event) {
+      if (!event.target || !event.target.closest("[data-review-required='1']")) return;
+      var btn = document.getElementById("btn-print-document");
+      if (btn) updatePrintMetaBanner(missingRequiredMeta(btn));
     });
   }
 

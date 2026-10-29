@@ -179,6 +179,12 @@
           <span><strong>{{ staff_queue.print_ready }}</strong> ready to print</span>
         </span>
       </a>
+      <a class="account-work-card" href="{{ url_for('office_messages') }}">
+        <span class="account-work-label">Messages</span>
+        <span class="account-work-nums">
+          <span>Talk with an administrator</span>
+        </span>
+      </a>
     </div>
   </section>
   {% endif %}

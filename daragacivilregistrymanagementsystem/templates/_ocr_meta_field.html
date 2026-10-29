@@ -1,6 +1,6 @@
-{% set val = data.get(key, '') or '' %}
-{% set conf = confidence.get(key, 'LOW') %}
-{% set src = source.get(key, 'layout') %}
+{% set val = (data or {}).get(key, '') or '' %}
+{% set conf = (confidence|default({})).get(key, 'LOW') %}
+{% set src = (source|default({})).get(key, 'layout') %}
 {% set iso = date_input_value(val) if key in DATE_FIELD_KEYS else '' %}
 {% set _shown = display_label if display_label is defined and display_label else metadata_display_label(key) %}
 {% set _required = doc_type is defined and is_required_review_field(doc_type, key) %}

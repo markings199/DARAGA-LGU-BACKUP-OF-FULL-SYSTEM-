@@ -27,7 +27,8 @@
     var adminNav = document.querySelector('.sidebar-nav a[data-nav="admin"] .nav-badge');
     var editNav = document.querySelector('.sidebar-nav a[data-nav="my_edit_requests"] .nav-badge');
     var printNav = document.querySelector('.sidebar-nav a[data-nav="my_print_requests"] .nav-badge');
-    return { adminNav: adminNav, editNav: editNav, printNav: printNav };
+    var msgNav = document.querySelector('.sidebar-nav a[data-nav="messages"] .nav-badge');
+    return { adminNav: adminNav, editNav: editNav, printNav: printNav, msgNav: msgNav };
   }
 
   function setNavBadge(el, n) {
@@ -72,6 +73,7 @@
     setNavBadge(nav.adminNav, (badges.admin_pending_edit_requests || 0) + (badges.admin_pending_print_requests || 0));
     setNavBadge(nav.editNav, (badges.staff_my_requests_pending || 0) + (badges.staff_my_requests_approved_ready || 0));
     setNavBadge(nav.printNav, (badges.staff_print_pending || 0) + (badges.staff_print_requests_approved_ready || 0));
+    setNavBadge(nav.msgNav, badges.office_messages_unread || 0);
     document.querySelectorAll("[data-admin-badge]").forEach(function (el) {
       var key = el.getAttribute("data-admin-badge");
       var total = Number(badges[key] || 0);

@@ -402,20 +402,24 @@ body.page-registry-reports.reg-focus.reg-is-fitted .reg-scroll {
   overflow-x: auto !important;
   overflow-y: auto !important;
 }
-body.page-registry-reports.reg-focus.reg-is-fitted .reg-zoom-stage,
-body.page-registry-reports.reg-focus.reg-is-fitted .reg-form,
-body.page-registry-reports.reg-focus.reg-is-fitted .reg-table,
-body.page-registry-reports.reg-focus.reg-is-fitted #register-birth.reg-form,
-body.page-registry-reports.reg-focus.reg-is-fitted #register-birth .reg-table,
-body.page-registry-reports.reg-focus.reg-is-fitted #register-death.reg-form,
-body.page-registry-reports.reg-focus.reg-is-fitted #register-death .reg-table,
-body.page-registry-reports.reg-focus.reg-is-fitted #register-marriage.reg-form,
-body.page-registry-reports.reg-focus.reg-is-fitted #register-marriage .reg-table {
+body.page-registry-reports.reg-focus.reg-is-fitted:not(.reg-manual-zoom) .reg-zoom-stage,
+body.page-registry-reports.reg-focus.reg-is-fitted:not(.reg-manual-zoom) .reg-form,
+body.page-registry-reports.reg-focus.reg-is-fitted:not(.reg-manual-zoom) .reg-table,
+body.page-registry-reports.reg-focus.reg-is-fitted:not(.reg-manual-zoom) #register-birth.reg-form,
+body.page-registry-reports.reg-focus.reg-is-fitted:not(.reg-manual-zoom) #register-birth .reg-table,
+body.page-registry-reports.reg-focus.reg-is-fitted:not(.reg-manual-zoom) #register-death.reg-form,
+body.page-registry-reports.reg-focus.reg-is-fitted:not(.reg-manual-zoom) #register-death .reg-table,
+body.page-registry-reports.reg-focus.reg-is-fitted:not(.reg-manual-zoom) #register-marriage.reg-form,
+body.page-registry-reports.reg-focus.reg-is-fitted:not(.reg-manual-zoom) #register-marriage .reg-table {
   min-width: 0 !important;
   width: 100% !important;
   max-width: 100% !important;
   zoom: 1 !important;
   transform: none !important;
+}
+body.page-registry-reports.reg-manual-zoom .reg-zoom-stage,
+body.page-registry-reports.reg-manual-zoom .reg-form {
+  zoom: unset !important;
 }
 body.page-registry-reports.reg-focus.reg-is-fitted .reg-zoom-stage,
 body.page-registry-reports.reg-focus.reg-is-fitted .reg-form {
@@ -515,14 +519,28 @@ body.page-registry-reports.reg-focus .reg-zoom-row .btn.is-zoom-on {
 .reg-form-meta {
   font-size: 12px;
   text-align: right;
-  min-width: 210px;
+  min-width: 240px;
+}
+.reg-form-meta .reg-place {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
+  line-height: 1.4;
+}
+.reg-form-meta .reg-place-k {
+  white-space: nowrap;
 }
 .reg-form-meta .reg-line {
-  border-bottom: 1px solid #111;
-  min-width: 140px;
   display: inline-block;
+  box-sizing: border-box;
+  min-width: 9.4em;
+  border-bottom: 1px solid #111;
+  text-align: center;
+  padding: 0 8px 1px;
   min-height: 14px;
-  padding: 0 4px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .reg-table {
@@ -1051,6 +1069,11 @@ body.page-registry-reports.reg-focus #register-marriage .reg-table tbody td {
   #register-death .reg-form-id,
   #register-death .reg-form-meta {
     font-size: 8px;
+  }
+  #register-death .reg-form-meta .reg-line,
+  #register-marriage .reg-form-meta .reg-line {
+    min-width: 8.4em;
+    text-align: center;
   }
   #register-death .reg-table {
     font-size: 7px;

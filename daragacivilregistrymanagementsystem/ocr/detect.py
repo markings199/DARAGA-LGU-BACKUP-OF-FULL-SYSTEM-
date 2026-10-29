@@ -13,7 +13,6 @@ import cv2
 import numpy as np
 
 from ocr.engine import detect_document_type_detail, document_type_label
-from ocr.shared import imread_bgr
 
 
 TITLE_TEMPLATE_DIR = Path(__file__).resolve().parent / "title_templates"
@@ -68,31 +67,16 @@ def _iter_official_pages(key: str) -> List[np.ndarray]:
     pages: List[np.ndarray] = []
     src = TITLE_TEMPLATE_DIR / "source"
     if src.is_dir():
-        for path in sorted(src.glob(f"{key}*")):
-            if path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
-                continue
+        for path in sorted(src.glob(f"{key}.jpg")) + sorted(src.glob(f"{key}.jpeg")):
             img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
             if img is not None:
                 pages.append(img)
-    png = TITLE_TEMPLATE_DIR / f"{key}.png"
-    if png.exists():
-        img = cv2.imread(str(png), cv2.IMREAD_GRAYSCALE)
-        if img is not None:
-            pages.append(img)
     return pages
 
 
 def _title_crops_from_page(page: np.ndarray) -> List[np.ndarray]:
-    if page.shape[0] >= 700:
-        return [
-            _crop_frac(page, 0.048, 0.095, 0.18, 0.82),
-            _crop_frac(page, 0.040, 0.110, 0.12, 0.88),
-            _crop_frac(page, 0.048, 0.095, 0.48, 0.86),
-        ]
-    return [
-        _crop_frac(page, 0.22, 0.58, 0.10, 0.90),
-        _crop_frac(page, 0.22, 0.58, 0.45, 0.92),
-    ]
+    """The large centered line: CERTIFICATE OF LIVE BIRTH / MARRIAGE / DEATH."""
+    return [_crop_frac(page, 0.062, 0.122, 0.12, 0.88)]
 
 
 def _load_templates() -> Dict[str, List[np.ndarray]]:
@@ -103,10 +87,10 @@ def _load_templates() -> Dict[str, List[np.ndarray]]:
     packed: Dict[str, List[np.ndarray]] = {}
     for key in _DOC_KEYS:
         crops: List[np.ndarray] = []
-        for page in _iter_official_pages(key):
-            crops.extend(_title_crops_from_page(page))
+        for page in _iter_official_pages(key)[:1]:
+            crops.extend(_title_crops_from_page(page)[:1])
         if crops:
-            packed[key] = crops
+            packed[key] = [_resize_width(crop, 320) for crop in crops[:1]]
     _TEMPLATE_CACHE = packed
     return _TEMPLATE_CACHE
 
@@ -144,6 +128,26 @@ def _pick(scores: Dict[str, float], min_score: float, min_margin: float) -> Opti
     return None
 
 
+def _imread_detect(path: str):
+    """Load a scan only large enough to read the printed title."""
+    data = np.fromfile(str(path), dtype=np.uint8)
+    if data.size == 0:
+        return None
+    img = cv2.imdecode(data, cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+    height, width = img.shape[:2]
+    longest = max(height, width)
+    if longest > 960:
+        scale = 960.0 / float(longest)
+        img = cv2.resize(
+            img,
+            (max(80, int(round(width * scale))), max(80, int(round(height * scale)))),
+            interpolation=cv2.INTER_AREA,
+        )
+    return img
+
+
 def match_title_templates(img) -> Dict[str, Any]:
     """
     Fast visual match against the official top heading, then unique field labels.
@@ -161,37 +165,33 @@ def match_title_templates(img) -> Dict[str, Any]:
         return empty
 
     gray = _as_gray(img)
-    h, w = gray.shape[:2]
-    if max(h, w) > 1400:
-        scale = 1400.0 / float(max(h, w))
-        gray = cv2.resize(
-            gray,
-            (max(80, int(round(w * scale))), max(80, int(round(h * scale)))),
-            interpolation=cv2.INTER_AREA,
-        )
-        h, w = gray.shape[:2]
-
-    bands = [
-        _resize_width(_crop_frac(gray, 0.0, 0.20, 0.0, 1.0), 480),
-        _resize_width(_crop_frac(gray, 0.03, 0.12, 0.10, 0.90), 480),
-    ]
-    if h < 900:
-        bands.append(_resize_width(_crop_frac(gray, 0.0, 0.65, 0.0, 1.0), 480))
-
-    scales = (0.55, 0.65, 0.75, 0.85)
+    bands = (
+        _resize_width(_crop_frac(gray, 0.035, 0.155, 0.08, 0.92), 480),
+    )
+    scales = (0.82, 0.90, 0.96)
     scores = {key: -1.0 for key in templates}
     for band in bands:
         for key, crops in templates.items():
             for crop in crops:
                 scores[key] = max(scores[key], _score(band, crop, scales))
+        hit_early = _pick(scores, 0.58, 0.12)
+        if hit_early:
+            doc_type, best_score, _margin = hit_early
+            return {
+                "doc_type": doc_type,
+                "label": document_type_label(doc_type),
+                "confidence": "high" if best_score >= 0.70 else "medium",
+                "reason": _TITLE_REASONS[doc_type],
+                "scores": {k: round(v, 3) for k, v in scores.items()},
+            }
 
-    hit = _pick(scores, 0.55, 0.08)
+    hit = _pick(scores, 0.50, 0.10)
     if hit:
         doc_type, best_score, _margin = hit
         return {
             "doc_type": doc_type,
             "label": document_type_label(doc_type),
-            "confidence": "high" if best_score >= 0.68 else "medium",
+            "confidence": "high" if best_score >= 0.66 else "medium",
             "reason": _TITLE_REASONS[doc_type],
             "scores": {k: round(v, 3) for k, v in scores.items()},
         }
@@ -204,36 +204,33 @@ def _ocr_title_band(img) -> Dict[str, Any]:
     from ocr.shared import run_ocr_on_image
 
     height, width = img.shape[:2]
-    y2 = max(48, int(height * 0.16))
+    y2 = max(48, int(height * 0.18))
     crop = img[0:y2, 0:width]
-    if crop.shape[1] > 400:
-        scale = 400.0 / float(crop.shape[1])
-        crop = cv2.resize(
-            crop,
-            (400, max(40, int(round(crop.shape[0] * scale)))),
-            interpolation=cv2.INTER_AREA,
-        )
     pages = run_ocr_on_image(crop, max_side=400)
     header_text = _pages_to_text(pages)
     detail = detect_document_type_detail(header_text, header_only=True)
     if not detail.get("doc_type"):
+        detail = detect_document_type_detail(header_text, header_only=False)
+    if detail.get("doc_type"):
         return {
-            "doc_type": None,
-            "label": "",
-            "confidence": "none",
-            "reason": detail.get("reason") or "Could not read the certificate heading",
+            "doc_type": detail["doc_type"],
+            "label": detail.get("label") or document_type_label(detail["doc_type"]),
+            "confidence": detail.get("confidence") or "medium",
+            "reason": detail.get("reason") or "",
             "header_text": header_text,
         }
     return {
-        "doc_type": detail["doc_type"],
-        "label": detail.get("label") or document_type_label(detail["doc_type"]),
-        "confidence": detail.get("confidence") or "medium",
-        "reason": detail.get("reason") or "",
+        "doc_type": None,
+        "label": "",
+        "confidence": "none",
+        "reason": detail.get("reason") or "Could not read the certificate heading",
         "header_text": header_text,
     }
 
 
-def detect_from_image(path: str, ocr_fallback: bool = True) -> Dict[str, Any]:
+def detect_from_image(
+    path: str, ocr_fallback: bool = True, skip_visual: bool = False
+) -> Dict[str, Any]:
     """
     Identify a civil-registry certificate from the printed title at the top.
     Visual matching of the official formats runs first (no OCR).
@@ -245,18 +242,21 @@ def detect_from_image(path: str, ocr_fallback: bool = True) -> Dict[str, Any]:
         "reason": "Could not read the certificate heading",
         "header_text": "",
     }
-    img = imread_bgr(path)
+    img = _imread_detect(path)
     if img is None:
         empty["reason"] = "Could not open the image"
         return empty
 
-    visual = match_title_templates(img)
-    if visual.get("doc_type"):
-        visual["header_text"] = visual.get("reason") or ""
-        return visual
+    if not skip_visual:
+        visual = match_title_templates(img)
+        if visual.get("doc_type"):
+            visual["header_text"] = visual.get("reason") or ""
+            return visual
+        if not ocr_fallback:
+            visual["header_text"] = ""
+            return visual
 
     if not ocr_fallback:
-        visual["header_text"] = ""
-        return visual
+        return empty
 
     return _ocr_title_band(img)

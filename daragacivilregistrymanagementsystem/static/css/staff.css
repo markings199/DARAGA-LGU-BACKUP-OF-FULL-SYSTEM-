@@ -853,6 +853,12 @@ body.page-record-edit .record-edit-form-col .review-required-banner {
     width: 100%;
   }
 }
+body.page-form-review .form-review-confirm:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: grayscale(0.15);
+  pointer-events: none;
+}
 
 /* Archived record — extracted metadata (read-only) */
 body.page-record-detail .rd-meta-head-aside {

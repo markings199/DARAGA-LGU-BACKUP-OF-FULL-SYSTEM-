@@ -1,0 +1,15 @@
+{# Compact person cell for admin log tables. Expects: actor (User or none). #}
+{% set _name = (actor.username if actor else 'System') %}
+{% set _role = ((actor.role or '')|upper if actor else 'SYSTEM') %}
+{% set _photo = user_photo_url(actor) if actor else '' %}
+{% set _initial = (_name[:1] or '?')|upper %}
+<div class="admin-log-person">
+  <span
+    class="admin-log-person-photo{% if _photo %} is-photo{% endif %}{% if not actor %} is-system{% endif %}"
+    aria-hidden="true"
+  >{% if _photo %}<img src="{{ _photo }}" alt="" width="36" height="36" decoding="async" />{% else %}{{ _initial }}{% endif %}</span>
+  <span class="admin-log-person-text">
+    <span class="admin-log-person-name">{{ _name }}</span>
+    <span class="admin-log-person-role">{{ 'Administrator' if _role == 'ADMIN' else ('Staff' if _role == 'STAFF' else 'System') }}</span>
+  </span>
+</div>

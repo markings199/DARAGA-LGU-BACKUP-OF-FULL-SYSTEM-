@@ -1,5 +1,6 @@
 import os
 import threading
+import time
 import warnings
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from importlib.util import find_spec
@@ -18,9 +19,13 @@ os.environ.setdefault("MKL_NUM_THREADS", _ocr_threads)
 os.environ.setdefault("OPENBLAS_NUM_THREADS", _ocr_threads)
 os.environ.setdefault("NUMEXPR_NUM_THREADS", _ocr_threads)
 os.environ.setdefault("FLAGS_omp_num_threads", _ocr_threads)
+os.environ.setdefault("PADDLE_NUM_THREADS", _ocr_threads)
 os.environ.setdefault("FLAGS_use_mkldnn", "1")
 os.environ.setdefault("FLAGS_enable_pir_in_executor", "0")
 os.environ.setdefault("FLAGS_conv_workspace_size_limit", "4096")
+os.environ.setdefault("FLAGS_eager_delete_tensor_gb", "0.0")
+os.environ.setdefault("FLAGS_fast_eager_deletion_mode", "1")
+os.environ.setdefault("KMP_BLOCKTIME", "0")
 
 import cv2
 import numpy as np
@@ -39,11 +44,11 @@ class OCREngineNotFoundError(Exception):
 
 
 def _ocr_max_side() -> int:
-    """Longest side sent to PaddleOCR. 800 keeps handwriting readable; extra full-page passes are avoided for speed."""
+    """Longest side sent to PaddleOCR. 736 is the PP-OCRv4 detector size and targets a 20–25s page read."""
     try:
-        value = int(os.environ.get("OCR_MAX_SIDE") or "800")
+        value = int(os.environ.get("OCR_MAX_SIDE") or "736")
     except ValueError:
-        value = 800
+        value = 736
     return max(720, min(960, value))
 
 
@@ -175,17 +180,24 @@ def get_ocr():
     PaddleOCR = _load_paddleocr()
     cpu_n = os.cpu_count() or 4
     try:
-        requested = int(os.environ.get("OCR_CPU_THREADS") or "4")
+        requested = int(os.environ.get("OCR_CPU_THREADS") or "10")
     except ValueError:
-        requested = 4
-    # Dedicated OCR process may use up to 8 cores. Flask in-process jobs stay at OCR_CPU_THREADS=2.
-    cap = 8 if cpu_n >= 10 else 6 if cpu_n >= 6 else max(1, cpu_n - 1 if cpu_n > 2 else 1)
+        requested = 10
+    # Dedicated OCR process may use every core. Flask jobs stay at their env cap (usually 2).
+    if os.environ.get("OCR_WORKER", "").strip() == "1":
+        cap = max(1, min(16, cpu_n))
+    elif cpu_n <= 2:
+        cap = 1
+    elif cpu_n <= 4:
+        cap = max(2, cpu_n - 1)
+    else:
+        cap = min(10, cpu_n - 1)
     cpu_threads = max(1, min(cap, requested))
     max_side = _ocr_max_side()
     try:
-        rec_batch = max(8, min(32, int(os.environ.get("OCR_REC_BATCH") or "32")))
+        rec_batch = max(8, min(64, int(os.environ.get("OCR_REC_BATCH") or "64")))
     except ValueError:
-        rec_batch = 32
+        rec_batch = 48
     use_gpu = False
     try:
         import paddle
@@ -206,6 +218,10 @@ def get_ocr():
         det_limit_type="max",
         rec_batch_num=rec_batch,
         drop_score=0.45,
+        det_db_score_mode="fast",
+        ir_optim=True,
+        use_mp=False,
+        total_process_num=1,
         show_log=False,
     )
     kwargs_v3 = dict(
@@ -252,13 +268,77 @@ def get_ocr():
     return _OCR_INSTANCE
 
 
-def warmup_ocr() -> None:
-    """Compile CPU kernels on a portrait form so the first certificate is not the slow one."""
+def warmup_ocr(abort_event=None, blocking: bool = False) -> None:
+    """Compile CPU kernels on a dummy page. Same models and 736 cap as live OCR."""
     global _OCR_WARMED
     if _OCR_WARMED:
         return
+    if abort_event is not None and getattr(abort_event, "is_set", lambda: False)():
+        return
+    acquired = _OCR_LOCK.acquire(blocking=True, timeout=45) if blocking else _OCR_LOCK.acquire(blocking=False)
+    if not acquired:
+        return
+    try:
+        if _OCR_WARMED:
+            return
+        if abort_event is not None and getattr(abort_event, "is_set", lambda: False)():
+            return
+        _warmup_ocr_locked()
+    finally:
+        _OCR_LOCK.release()
+
+
+def trim_scanner_bed(img):
+    """Drop empty scanner lid only. The certificate itself stays complete."""
+    if img is None or getattr(img, "size", 0) == 0:
+        return img
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    height, width = gray.shape[:2]
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    pts = cv2.findNonZero(mask)
+    if pts is None:
+        return img
+    x, y, bw, bh = cv2.boundingRect(pts)
+    pad = 12
+    x0 = max(0, x - pad)
+    y0 = max(0, y - pad)
+    x1 = min(width, x + bw + pad)
+    y1 = min(height, y + bh + pad)
+    if (x1 - x0) < int(0.82 * width) or (y1 - y0) < int(0.82 * height):
+        return img
+    if x0 <= 2 and y0 <= 2 and x1 >= width - 2 and y1 >= height - 2:
+        return img
+    return img[y0:y1, x0:x1]
+
+
+def _warmup_sample_images():
+    """Official PSA pages (marriage first — densest). Same 736 cap as live OCR."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    names = (
+        os.path.join(here, "templates", "marriage_form97.jpg"),
+        os.path.join(here, "title_templates", "source", "marriage.jpg"),
+        os.path.join(here, "templates", "birth_form102.jpg"),
+        os.path.join(here, "templates", "death_form103.jpg"),
+    )
+    seen = set()
+    images = []
+    for path in names:
+        if path in seen or not os.path.isfile(path):
+            continue
+        seen.add(path)
+        img = imread_bgr(path)
+        if img is None or getattr(img, "size", 0) == 0:
+            continue
+        images.append(trim_scanner_bed(img))
+        # One official marriage page is enough: same PP-OCRv4 kernels, faster ready.
+        if images:
+            break
+    return images
+
+
+def _warmup_dummy_page():
     side = _ocr_max_side()
-    # Same 32-aligned portrait as a resized PSA form so the first real scan reuses MKLDNN kernels.
     height = side - (side % 32)
     width = max(320, (int(round(side * 0.76)) // 32) * 32)
     img = np.full((height, width, 3), 255, dtype=np.uint8)
@@ -276,15 +356,52 @@ def warmup_ocr() -> None:
     for line in lines:
         cv2.putText(img, line, (14, y), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (0, 0, 0), 1, cv2.LINE_AA)
         y += 36
-    try:
-        with _quiet_stdio():
-            run_ocr_on_image(img)
-    except Exception:
+    return img
+
+
+def _warmup_shape_pages():
+    """Compile MKLDNN on the official birth/death/marriage pages at the live 736 cap."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    names = (
+        os.path.join(here, "templates", "birth_form102.jpg"),
+        os.path.join(here, "templates", "death_form103.jpg"),
+        os.path.join(here, "templates", "marriage_form97.jpg"),
+    )
+    pages = []
+    for path in names:
+        if not os.path.isfile(path):
+            continue
+        img = imread_bgr(path)
+        if img is None or getattr(img, "size", 0) == 0:
+            continue
+        pages.append(_resize_for_ocr(trim_scanner_bed(img), max_side=_ocr_max_side())[0])
+    if pages:
+        return pages
+    samples = _warmup_sample_images()
+    if samples:
+        return [_resize_for_ocr(samples[0], max_side=_ocr_max_side())[0]]
+    return [_warmup_dummy_page()]
+
+
+def _warmup_ocr_locked() -> None:
+    global _OCR_WARMED
+    if _OCR_WARMED:
+        return
+    pages = _warmup_shape_pages()
+    ran = False
+    for img in pages:
         try:
-            run_ocr_on_image(img)
+            with _quiet_stdio():
+                _run_ocr_unlocked(img)
+            ran = True
         except Exception:
-            return
-    _OCR_WARMED = True
+            try:
+                _run_ocr_unlocked(img)
+                ran = True
+            except Exception:
+                continue
+    if ran:
+        _OCR_WARMED = True
 
 
 def _page_to_dict(page):
@@ -387,56 +504,17 @@ def _texts_from_rec_only(raw) -> list:
     return texts
 
 
-def run_ocr_text_only(img, max_side=400) -> str:
-    """Recognize text in a pre-cropped cell. Skips page detection so age/date crops stay fast."""
-    if img is None or getattr(img, "size", 0) == 0:
-        return ""
-    ocr_img, _scale = _resize_for_ocr(img, max_side=max_side)
-    with _OCR_LOCK:
-        ocr = get_ocr()
-        if hasattr(ocr, "ocr"):
-            try:
-                raw = ocr.ocr(ocr_img, det=False, rec=True, cls=False)
-                texts = _texts_from_rec_only(raw)
-                if texts:
-                    return " ".join(texts).strip()
-            except TypeError:
-                try:
-                    raw = ocr.ocr(ocr_img, det=False, cls=False)
-                    texts = _texts_from_rec_only(raw)
-                    if texts:
-                        return " ".join(texts).strip()
-                except TypeError:
-                    pass
-        if hasattr(ocr, "predict"):
-            raw = ocr.predict(ocr_img)
-            parts = []
-            for page in _normalize_ocr_pages(raw):
-                for text in page.get("rec_texts") or []:
-                    if text:
-                        parts.append(str(text))
-            return " ".join(parts).strip()
-    return ""
+def _looks_like_dict_pages(raw) -> bool:
+    if raw is None:
+        return False
+    if isinstance(raw, dict):
+        return True
+    if isinstance(raw, list) and raw and (isinstance(raw[0], dict) or hasattr(raw[0], "get")):
+        return True
+    return hasattr(raw, "get") and not isinstance(raw, (list, tuple))
 
 
-def run_ocr_on_image(img, max_side=None):
-    """
-    Run PaddleOCR on an in-memory image (numpy array, BGR).
-    Returns the same "dict per page" structure as run_ocr_on_image_path.
-    Boxes are returned in the original image coordinates.
-    """
-    if img is None:
-        raise ValueError("Image is None")
-    ocr_img, scale = _resize_for_ocr(img, max_side=max_side)
-    with _OCR_LOCK:
-        ocr = get_ocr()
-        if hasattr(ocr, "predict"):
-            raw = ocr.predict(ocr_img)
-        else:
-            raw = ocr.ocr(ocr_img, cls=False)
-        if hasattr(ocr, "predict"):
-            pages = _normalize_ocr_pages(raw)
-            return _scale_pages_to_original(pages, scale)
+def _pages_from_line_lists(raw):
     pages = []
     for page in raw or []:
         rec_texts, rec_scores, dt_polys = [], [], []
@@ -448,7 +526,93 @@ def run_ocr_on_image(img, max_side=None):
             rec_scores.append(float(score))
             dt_polys.append(box)
         pages.append({"rec_texts": rec_texts, "rec_scores": rec_scores, "dt_polys": dt_polys})
-    return _scale_pages_to_original(pages, scale)
+    return pages
+
+
+def _pages_from_raw(raw):
+    if _looks_like_dict_pages(raw):
+        return _normalize_ocr_pages(raw)
+    return _pages_from_line_lists(raw)
+
+
+def _paddle_page_raw(ocr, ocr_img):
+    """Prefer classic .ocr() (det+rec only). .predict() can run extra PaddleX document models."""
+    if hasattr(ocr, "ocr"):
+        try:
+            return ocr.ocr(ocr_img, det=True, rec=True, cls=False)
+        except TypeError:
+            try:
+                return ocr.ocr(ocr_img, cls=False)
+            except TypeError:
+                try:
+                    return ocr.ocr(ocr_img)
+                except TypeError:
+                    pass
+    if hasattr(ocr, "predict"):
+        return ocr.predict(ocr_img)
+    raise RuntimeError("PaddleOCR has neither ocr() nor predict()")
+
+
+def _recognize_crop_unlocked(ocr, img, max_side=400) -> str:
+    if img is None or getattr(img, "size", 0) == 0:
+        return ""
+    ocr_img, _scale = _resize_for_ocr(img, max_side=max_side)
+    if hasattr(ocr, "ocr"):
+        try:
+            raw = ocr.ocr(ocr_img, det=False, rec=True, cls=False)
+            texts = _texts_from_rec_only(raw)
+            if texts:
+                return " ".join(texts).strip()
+        except TypeError:
+            try:
+                raw = ocr.ocr(ocr_img, det=False, cls=False)
+                texts = _texts_from_rec_only(raw)
+                if texts:
+                    return " ".join(texts).strip()
+            except TypeError:
+                pass
+    return ""
+
+
+def run_ocr_text_only(img, max_side=400) -> str:
+    """Recognize text in a pre-cropped cell. Recognition-only — never a second full-page detect."""
+    with _OCR_LOCK:
+        return _recognize_crop_unlocked(get_ocr(), img, max_side=max_side)
+
+
+def run_ocr_text_only_many(images, max_side=480) -> list:
+    """Recognize many write-in cells under one lock. Same rec model as a full page."""
+    if not images:
+        return []
+    with _OCR_LOCK:
+        ocr = get_ocr()
+        return [_recognize_crop_unlocked(ocr, img, max_side=max_side) for img in images]
+
+
+def _run_ocr_unlocked(img, max_side=None):
+    if img is None:
+        raise ValueError("Image is None")
+    started = time.time()
+    ocr_img, scale = _resize_for_ocr(img, max_side=max_side)
+    ocr = get_ocr()
+    raw = _paddle_page_raw(ocr, ocr_img)
+    pages = _scale_pages_to_original(_pages_from_raw(raw), scale)
+    print(
+        f"Paddle page {ocr_img.shape[1]}x{ocr_img.shape[0]} in {time.time() - started:.1f}s "
+        f"threads={os.environ.get('OCR_CPU_THREADS') or '?'}",
+        flush=True,
+    )
+    return pages
+
+
+def run_ocr_on_image(img, max_side=None):
+    """
+    Run PaddleOCR on an in-memory image (numpy array, BGR).
+    Returns the same "dict per page" structure as run_ocr_on_image_path.
+    Boxes are returned in the original image coordinates.
+    """
+    with _OCR_LOCK:
+        return _run_ocr_unlocked(img, max_side=max_side)
 
 
 def run_ocr_on_image_path(img_path: str):

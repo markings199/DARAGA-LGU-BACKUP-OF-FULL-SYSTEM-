@@ -109,6 +109,8 @@ class AuditLog(db.Model):
     details = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    user = db.relationship("User", foreign_keys=[user_id])
+
 
 class PrintLog(db.Model):
     """Log of staff printing documents (viewable by admin)."""
@@ -133,6 +135,20 @@ class BackupRun(db.Model):
     record_count = db.Column(db.Integer, nullable=False, default=0)
     message = db.Column(db.Text, nullable=False, default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class OfficeMessage(db.Model):
+    """Direct office message between a staff account and an administrator."""
+    __tablename__ = "office_messages"
+    id = db.Column(db.Integer, primary_key=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    recipient_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    read_at = db.Column(db.DateTime)
+
+    sender = db.relationship("User", foreign_keys=[sender_id])
+    recipient = db.relationship("User", foreign_keys=[recipient_id])
 
 
 class NotificationRead(db.Model):

@@ -4,7 +4,7 @@
 {% block body_class %}page-registry-reports{% if focus %} reg-focus reg-is-fitted{% endif %}{% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/civil_registry_reports.css') }}?v=birth-print-25-1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/civil_registry_reports.css') }}?v=zoom-fix-1" />
 {% endblock %}
 
 {% block content %}
@@ -89,18 +89,16 @@
         <option value="0" {% if per_page == 0 %}selected{% endif %}>All</option>
       </select>
     </label>
-    {% if focus %}
     <div class="reg-zoom-controls" aria-label="Form zoom">
       <span class="reg-doc-label">Zoom</span>
       <div class="reg-zoom-row">
         <button type="button" class="btn btn-secondary" id="reg-zoom-out" title="Zoom out">−</button>
         <button type="button" class="btn btn-secondary" id="reg-zoom-fit" title="See the full register width">Fit</button>
-        <span class="reg-zoom-pct" id="reg-zoom-pct">Fit</span>
+        <span class="reg-zoom-pct" id="reg-zoom-pct">{{ 'Fit' if focus else '100%' }}</span>
         <button type="button" class="btn btn-secondary" id="reg-zoom-in" title="Zoom in">+</button>
         <button type="button" class="btn btn-secondary" id="reg-zoom-100">100%</button>
       </div>
     </div>
-    {% endif %}
     <div class="reg-actions">
       {% if focus %}
         <a class="btn btn-secondary" href="{{ url_for('civil_registry_reports', doc_type=doc_type, focus=1) }}">Clear</a>
@@ -169,5 +167,5 @@
 {% endblock %}
 
 {% block extra_js %}
-  <script src="{{ url_for('static', filename='js/civil_registry_reports.js') }}?v=year-type-1"></script>
+  <script src="{{ url_for('static', filename='js/civil_registry_reports.js') }}?v=zoom-fix-1"></script>
 {% endblock %}

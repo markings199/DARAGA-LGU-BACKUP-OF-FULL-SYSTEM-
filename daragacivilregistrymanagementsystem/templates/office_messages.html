@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Messages{% endblock %}
+{% block body_class %}page-office-messages{% endblock %}
+
+{% block content %}
+{% set me_role = (current_user.role or '')|upper %}
+<div
+  class="om-page"
+  id="om-page"
+  {% if peer %}
+    data-peer-id="{{ peer.id }}"
+    data-peer-photo="{{ peer_photo or '' }}"
+    data-peer-name="{{ peer.username }}"
+    data-poll-url="{{ url_for('api_office_messages', peer_id=peer.id) }}"
+    data-send-url="{{ url_for('office_messages_send', peer_id=peer.id) }}"
+  {% endif %}
+>
+  <div class="om-shell">
+    <aside class="om-list" aria-label="{{ directory_label }}">
+      <div class="om-list-head">
+        <p class="om-kicker">Office chat</p>
+        <h1 class="om-title">Messages</h1>
+        <label class="om-search">
+          <span class="sr-only">Find a person</span>
+          <input type="search" id="om-find" placeholder="Search {{ directory_label|lower }}" autocomplete="off" />
+        </label>
+      </div>
+      {% if contact_rows %}
+        <ul class="om-people" id="om-people">
+          {% for row in contact_rows %}
+            {% set person = row.user %}
+            <li>
+              <a
+                class="om-person{% if row.active %} is-active{% endif %}"
+                href="{{ url_for('office_messages', peer_id=person.id) }}"
+                data-name="{{ person.username }}"
+              >
+                <span class="om-avatar{% if row.photo_url %} has-photo{% endif %}">
+                  {% if row.photo_url %}
+                    <img src="{{ row.photo_url }}" alt="" width="44" height="44" decoding="async" />
+                  {% else %}
+                    {{ (person.username or '?')[:1]|upper }}
+                  {% endif %}
+                </span>
+                <span class="om-person-copy">
+                  <span class="om-person-line">
+                    <strong>{{ person.username }}</strong>
+                    {% if row.last_at %}<time>{{ row.last_at }}</time>{% endif %}
+                  </span>
+                  <em>{{ row.last_preview or ('Administrator' if (person.role or '')|upper == 'ADMIN' else 'Staff') }}</em>
+                </span>
+                {% if row.unread %}
+                  <span class="om-unread">{{ row.unread if row.unread < 100 else '99+' }}</span>
+                {% endif %}
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+        <p class="om-empty-find" id="om-empty-find" hidden>No matching name.</p>
+      {% else %}
+        <p class="om-empty">
+          {% if me_role == 'STAFF' %}
+            No administrator account is available yet.
+          {% else %}
+            No staff account is available yet.
+          {% endif %}
+        </p>
+      {% endif %}
+    </aside>
+
+    <section class="om-thread" aria-live="polite">
+      {% if peer %}
+        <header class="om-thread-head">
+          <span class="om-avatar om-avatar-lg{% if peer_photo %} has-photo{% endif %}">
+            {% if peer_photo %}
+              <img src="{{ peer_photo }}" alt="" width="46" height="46" decoding="async" />
+            {% else %}
+              {{ (peer.username or '?')[:1]|upper }}
+            {% endif %}
+          </span>
+          <div class="om-thread-who">
+            <h2>{{ peer.username }}</h2>
+            <p>
+              <span class="om-presence" aria-hidden="true"></span>
+              {{ 'Administrator · Office of the MCR' if (peer.role or '')|upper == 'ADMIN' else 'Staff encoder · Office of the MCR' }}
+            </p>
+          </div>
+        </header>
+        <div class="om-scroll" id="om-scroll">
+          <div class="om-feed" id="om-feed">
+            {% if thread %}
+              {% set day_mark = namespace(value='') %}
+              {% for msg in thread %}
+                {% set day = msg.created_at.strftime('%Y-%m-%d') if msg.created_at else '' %}
+                {% if day and day != day_mark.value %}
+                  <p class="om-day"><span>{{ msg.created_at.strftime('%b %d, %Y') }}</span></p>
+                  {% set day_mark.value = day %}
+                {% endif %}
+                {% set mine = msg.sender_id == current_user.id %}
+                <div class="om-row{% if mine %} is-mine{% endif %}" data-msg-id="{{ msg.id }}">
+                  {% if not mine %}
+                    <span class="om-avatar om-avatar-sm{% if peer_photo %} has-photo{% endif %}">
+                      {% if peer_photo %}
+                        <img src="{{ peer_photo }}" alt="" width="28" height="28" decoding="async" />
+                      {% else %}
+                        {{ (peer.username or '?')[:1]|upper }}
+                      {% endif %}
+                    </span>
+                  {% endif %}
+                  <article class="om-bubble{% if office_emoji_only is defined and office_emoji_only(msg.body) %} is-emoji{% endif %}">
+                    <p>{{ msg.body }}</p>
+                    <time datetime="{{ msg.created_at.isoformat() if msg.created_at else '' }}">
+                      {{ msg.created_at.strftime('%I:%M %p') if msg.created_at else '' }}
+                    </time>
+                  </article>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="om-thread-empty" id="om-thread-empty">No messages yet. Write below to start.</p>
+            {% endif %}
+          </div>
+        </div>
+        <form class="om-compose" id="om-compose" method="post" action="{{ url_for('office_messages_send', peer_id=peer.id) }}">
+          <div class="om-emoji-wrap">
+            <button type="button" class="om-icon-btn" id="om-emoji-btn" aria-expanded="false" aria-controls="om-emoji-panel" title="Emoji">
+              <span aria-hidden="true">😊</span>
+              <span class="sr-only">Insert emoji</span>
+            </button>
+            <div class="om-emoji-panel" id="om-emoji-panel" hidden role="listbox" aria-label="Emoji"></div>
+          </div>
+          <label class="sr-only" for="om-body">Message</label>
+          <textarea
+            id="om-body"
+            name="body"
+            rows="1"
+            maxlength="2000"
+            required
+            placeholder="Type a message…"
+          ></textarea>
+          <button type="submit" class="om-send" title="Send">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            <span class="sr-only">Send</span>
+          </button>
+        </form>
+      {% else %}
+        <div class="om-idle">
+          <p class="om-idle-title">Choose a conversation</p>
+          <p class="om-idle-text">Select a person on the left. You can type and send emoji the same way as a messenger app.</p>
+        </div>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/office_messages.js') }}?v=om-5"></script>
+{% endblock %}

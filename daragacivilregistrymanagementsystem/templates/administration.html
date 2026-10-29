@@ -312,7 +312,7 @@
             </thead>
             <tbody>
               {% for req in edit_requests %}
-                <tr data-progress="{% if (req.status or '')|upper == 'PENDING' %}pending{% else %}complete{% endif %}">
+                <tr data-progress="{% if req.code_used_at or (req.status or '')|upper == 'REJECTED' %}complete{% else %}pending{% endif %}">
                   <td class="col-id">{{ req.id }}</td>
                   <td class="col-record">{{ req.record.registry_number or '—' if req.record else '—' }}</td>
                   <td class="col-type">
@@ -410,7 +410,7 @@
             </thead>
             <tbody>
               {% for req in print_requests %}
-                <tr data-progress="{% if (req.status or '')|upper == 'PENDING' %}pending{% else %}complete{% endif %}">
+                <tr data-progress="{% if req.used_at or (req.status or '')|upper == 'REJECTED' %}complete{% else %}pending{% endif %}">
                   <td class="col-id">{{ req.id }}</td>
                   <td class="col-record">{{ req.record.registry_number or '—' if req.record else '—' }}</td>
                   <td class="col-type">
@@ -486,14 +486,14 @@
   {% elif tab == 'print_logs' %}
     <div class="admin-section main-card">
       <h2 class="section-title">Print logs</h2>
-      <p class="section-desc">Who printed, when, and which record.</p>
+      <p class="section-desc">Every print from staff and administrators. Newest first. This list updates as soon as a document is printed.</p>
       {% if print_logs %}
         <div class="table-wrap admin-log-table-wrap">
           <table class="table admin-log-table">
             <thead>
               <tr>
                 <th class="col-time">Time</th>
-                <th class="col-staff">Staff</th>
+                <th class="col-person">Person</th>
                 <th class="col-record">Record</th>
                 <th class="col-type">Document type</th>
               </tr>
@@ -502,7 +502,7 @@
               {% for pl in print_logs %}
                 <tr>
                   <td class="col-time">{{ pl.printed_at.strftime('%Y-%m-%d %H:%M') if pl.printed_at else '—' }}</td>
-                  <td class="col-staff">{{ pl.user.username if pl.user else '—' }}</td>
+                  <td class="col-person">{% with actor=pl.user %}{% include '_admin_log_person.html' %}{% endwith %}</td>
                   <td class="col-record">
                     {% if pl.record %}
                       <a href="{{ url_for('record_detail', record_id=pl.record_id) }}">{{ pl.record.registry_number or pl.record_id }}</a>
@@ -516,6 +516,7 @@
             </tbody>
           </table>
         </div>
+        {% include '_admin_request_pager.html' %}
       {% else %}
         <div class="admin-empty">
           <p>No print activity yet.</p>
@@ -526,28 +527,45 @@
   {% elif tab == 'audit' %}
     <div class="admin-section main-card">
       <h2 class="section-title">Audit log</h2>
-      <p class="section-desc">Sign-in, edits, and system activity.</p>
+      <p class="section-desc">Sign-in, saved records, edits, prints, requests, backups, and other office activity. Newest first.</p>
       {% if audit_logs %}
         <div class="table-wrap admin-log-table-wrap">
           <table class="table admin-log-table">
             <thead>
               <tr>
                 <th class="col-time">Time</th>
+                <th class="col-person">Person</th>
                 <th class="col-action">Action</th>
                 <th class="col-details">Details</th>
               </tr>
             </thead>
             <tbody>
               {% for log in audit_logs %}
+                {% set audit_view = format_audit_log(log.action, log.details) %}
                 <tr>
                   <td class="col-time">{{ log.created_at.strftime('%Y-%m-%d %H:%M') if log.created_at else '—' }}</td>
-                  <td class="col-action"><code class="audit-action">{{ log.action }}</code></td>
-                  <td class="col-details cell-details">{{ log.details or '—' }}</td>
+                  <td class="col-person">{% with actor=log.user %}{% include '_admin_log_person.html' %}{% endwith %}</td>
+                  <td class="col-action"><span class="audit-action">{{ audit_view.action }}</span></td>
+                  <td class="col-details">
+                    {% if audit_view.chips %}
+                      <div class="audit-details">
+                        {% for chip in audit_view.chips %}
+                          <span class="audit-detail-chip">
+                            <span class="audit-detail-k">{{ chip.label }}</span>
+                            <span class="audit-detail-v">{{ chip.value }}</span>
+                          </span>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <span class="audit-detail-empty">—</span>
+                    {% endif %}
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
+        {% include '_admin_request_pager.html' %}
       {% else %}
         <div class="admin-empty">
           <p>No audit entries yet.</p>

@@ -6,19 +6,24 @@
 <div class="admin-section main-card backup-restore-page backup-auto-page backup-hub">
   <header class="bh-hero">
     <div class="bh-hero-copy">
+      <p class="bh-kicker">Office archive</p>
       <h2 class="section-title">Backup and restore</h2>
-      <p class="bh-lead">Official copies are stored on the <strong>Daraga LGU server</strong>, not in an administrator Windows account. {{ backup_schedule_hint or "" }}</p>
+      <p class="bh-lead">Official copies are stored on the <strong>Daraga LGU server</strong>, not in a Windows user folder. {{ backup_schedule_hint or "" }}</p>
     </div>
     <div class="bh-hero-aside">
       {% if abs.last_run_at %}
-        <span class="bh-chip {% if abs.last_run_status == 'error' %}is-warn{% else %}is-ok{% endif %}">Last {{ abs.last_run_at }}</span>
+        <span class="bh-chip {% if abs.last_run_status == 'error' %}is-warn{% else %}is-ok{% endif %}">
+          <span class="bh-chip-k">Last backup</span>
+          <span class="bh-chip-v">{{ abs.last_run_at }}</span>
+        </span>
       {% endif %}
       <span class="bh-chip {% if br.server_writable %}is-ok{% else %}is-warn{% endif %}" title="{{ br.server_message or '' }}">
-        {% if br.server_writable %}Daraga server ready{% else %}Daraga server not connected{% endif %}
+        <span class="bh-chip-k">Server</span>
+        <span class="bh-chip-v">{% if br.server_writable %}Connected{% else %}Not connected{% endif %}</span>
       </span>
       <label class="auto-backup-switch ab-master-switch bh-switch" for="auto_backup_enabled">
         <span class="ab-master-copy">
-          <strong>Auto</strong>
+          <strong>Automatic</strong>
           <span>{{ 'On' if abs.enabled else 'Off' }}</span>
         </span>
         <input type="checkbox" form="auto-backup-form" name="auto_backup_enabled" id="auto_backup_enabled" value="1" {% if abs.enabled %}checked{% endif %} />
@@ -28,22 +33,25 @@
     </div>
   </header>
 
-  <div class="bh-board">
+  <div class="bh-setup">
     <form method="post" action="{{ url_for('administration_auto_backup_settings') }}" class="auto-backup-form ab-form bh-form" id="auto-backup-form">
       <section class="bh-card" aria-labelledby="bh-when-title">
-        <h3 id="bh-when-title">Schedule</h3>
+        <div class="bh-card-head">
+          <h3 id="bh-when-title">Schedule</h3>
+          <p>Choose how often official copies are created.</p>
+        </div>
         <div class="bh-freq">
           <label class="bh-freq-card">
             <input type="radio" name="auto_backup_frequency" value="daily" {% if freq == 'daily' %}checked{% endif %} />
-            <span><strong>Daily</strong></span>
+            <span><strong>Daily</strong><em>Every day</em></span>
           </label>
           <label class="bh-freq-card">
             <input type="radio" name="auto_backup_frequency" value="weekly" {% if freq == 'weekly' %}checked{% endif %} />
-            <span><strong>Weekly</strong></span>
+            <span><strong>Weekly</strong><em>One weekday</em></span>
           </label>
           <label class="bh-freq-card">
             <input type="radio" name="auto_backup_frequency" value="monthly" {% if freq == 'monthly' %}checked{% endif %} />
-            <span><strong>Monthly</strong></span>
+            <span><strong>Monthly</strong><em>One day each month</em></span>
           </label>
         </div>
         <div class="bh-when-grid">
@@ -72,40 +80,46 @@
       </section>
 
       <section class="bh-card" aria-labelledby="bh-where-title">
-        <h3 id="bh-where-title">Daraga LGU server</h3>
+        <div class="bh-card-head">
+          <h3 id="bh-where-title">Daraga LGU server</h3>
+          <p>Official folder on the office server. Copies are not saved in an administrator account.</p>
+        </div>
         <label class="bh-field bh-field-wide">
-          <span>Official backup folder on the office server</span>
+          <span>Shared folder</span>
           <input
             type="text"
             name="auto_backup_destination"
             id="auto_backup_destination"
+            class="bh-path-input"
             value="{{ abs.destination_path or br.server_path or '' }}"
             placeholder="\\WIN-HIL0JNDFJIIN\CivilRegistryBackups"
             autocomplete="off"
             spellcheck="false"
           />
           <small class="bh-field-hint">
-            On the Daraga server use <strong>C:\CivilRegistryBackups</strong>.
-            From another office PC use the shared folder
-            <strong>\\WIN-HIL0JNDFJIIN\CivilRegistryBackups</strong>.
-            Backups are not stored in the admin login or this laptop’s user account.
+            On the Daraga server use <code>C:\CivilRegistryBackups</code>.
+            From another office PC use <code>\\WIN-HIL0JNDFJIIN\CivilRegistryBackups</code>.
           </small>
           {% if br.server_message %}
-            <small class="bh-field-hint {% if br.server_writable %}bh-hint-ok{% else %}bh-hint-warn{% endif %}">{{ br.server_message }}</small>
+            <small class="bh-status-note {% if br.server_writable %}is-ok{% else %}is-warn{% endif %}">{{ br.server_message }}</small>
           {% endif %}
         </label>
       </section>
 
       {% if current_user and (current_user.role or '')|upper == 'ADMIN' %}
       <section class="bh-card bh-actions-card">
+        <div class="bh-card-head">
+          <h3>Actions</h3>
+          <p>Create a scheduled copy, send waiting files, or save the plan.</p>
+        </div>
         <div class="bh-btn-row">
           <button type="submit" class="btn btn-primary" name="backup_kind" value="{{ freq }}" formaction="{{ url_for('administration_auto_backup_run_now') }}" formmethod="post" data-backup-run="period">Backup now</button>
           <button type="submit" class="btn btn-secondary" formaction="{{ url_for('administration_auto_backup_get_now') }}" formmethod="post" data-backup-run="copy" title="Send any waiting copies to the Daraga LGU server folder.">Send to Daraga server</button>
-          <button type="submit" class="btn btn-primary" formaction="{{ url_for('administration_auto_backup_settings') }}">Save schedule</button>
+          <button type="submit" class="btn btn-secondary" formaction="{{ url_for('administration_auto_backup_settings') }}">Save schedule</button>
         </div>
         <div class="bh-full-backup">
           <p class="bh-full-backup-title">Full system backup</p>
-          <p class="bh-full-backup-hint">One zip with the whole system: certificates, scans, users, logs, and database records. If the Daraga server is online, it is saved there. If the share is offline, the zip is still created here and you can send it later with <strong>Send to Daraga server</strong>. Restore with <strong>Full rebuild</strong>.</p>
+          <p class="bh-full-backup-hint">Creates one zip of certificates, scans, users, logs, and database records. It is saved on the Daraga server when connected, or held here until you send it. Restore with <strong>Full rebuild</strong>.</p>
           <button
             type="submit"
             class="btn btn-primary bh-full-backup-btn"
@@ -131,7 +145,10 @@
 
     <div class="bh-side">
       <section class="bh-card bh-restore" aria-labelledby="bh-restore-title">
-        <h3 id="bh-restore-title">Restore</h3>
+        <div class="bh-card-head">
+          <h3 id="bh-restore-title">Restore</h3>
+          <p>Choose a zip, then restore documents or rebuild the system.</p>
+        </div>
         <form
           method="post"
           action="{{ url_for('administration_restore') }}"
@@ -149,7 +166,7 @@
                 data-confirm-danger="1" />
               <span>
                 <strong>Documents</strong>
-                Certificates and scans
+                <em>Certificates and scans only</em>
               </span>
             </label>
             <label class="bh-mode">
@@ -160,88 +177,141 @@
                 data-confirm-danger="1" />
               <span>
                 <strong>Full rebuild</strong>
-                Users, logs, and files from a full system zip
+                <em>Users, logs, and files from a full zip</em>
               </span>
             </label>
           </div>
           <div class="bh-restore-row">
-            <input type="file" name="backup_file" accept=".zip" required class="restore-file-input" />
+            <label class="bh-file-box">
+              <span class="bh-file-label">Backup zip</span>
+              <input type="file" name="backup_file" accept=".zip" required class="restore-file-input" />
+            </label>
             <button type="submit" class="btn btn-secondary">Restore</button>
           </div>
         </form>
       </section>
 
-      <section class="bh-card bh-history" aria-labelledby="bh-history-title">
-        <div class="ab-history-head">
-          <h3 id="bh-history-title">History</h3>
-          {% if backup_history %}
-            <span class="ab-history-count">{{ backup_history|length }}</span>
-          {% endif %}
-        </div>
-        {% if backup_history %}
-          <div class="table-wrap auto-backup-table-wrap">
-            <table class="table auto-backup-table auto-backup-history-table">
-              <colgroup>
-                <col class="ab-col-when" />
-                <col class="ab-col-type" />
-                <col class="ab-col-docs" />
-                <col class="ab-col-status" />
-                <col class="ab-col-actions" />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th scope="col" class="ab-col-when">When</th>
-                  <th scope="col" class="ab-col-type">Type</th>
-                  <th scope="col" class="ab-col-docs">Docs</th>
-                  <th scope="col" class="ab-col-status">Status</th>
-                  <th scope="col" class="ab-col-actions"> </th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for h in backup_history %}
-                  <tr>
-                    <td class="ab-col-when" title="{{ h.created_at }}">{{ h.created_at }}</td>
-                    <td class="ab-col-type">{% if (h.kind or '')|lower == 'full' %}Full system{% else %}{{ h.kind|capitalize }}{% endif %}</td>
-                    <td class="ab-col-docs">{{ h.record_count }}</td>
-                    <td class="ab-col-status">
-                      {% if h.status == 'success' %}
-                        <span class="auto-backup-pill auto-backup-pill-ok">OK</span>
-                      {% elif h.status == 'partial' %}
-                        <span class="auto-backup-pill auto-backup-pill-warn">Partial</span>
-                      {% elif h.status == 'skipped' %}
-                        <span class="auto-backup-pill">Skip</span>
-                      {% else %}
-                        <span class="auto-backup-pill auto-backup-pill-err">Failed</span>
-                      {% endif %}
-                    </td>
-                    <td class="ab-col-actions">
-                      <div class="auto-backup-row-actions">
-                        {% if h.file_rel %}
-                          <a href="{{ url_for('administration_auto_backup_download_period', path=h.file_rel) }}" class="btn btn-secondary btn-sm" data-no-page-transition="1">Get</a>
-                        {% endif %}
-                        {% if h.status in ('error', 'partial') %}
-                          <form method="post" action="{{ url_for('administration_auto_backup_retry', run_id=h.id) }}" class="auto-backup-delete-form">
-                            <button type="submit" class="btn btn-secondary btn-sm">Retry</button>
-                          </form>
-                        {% endif %}
-                        {% if current_user and (current_user.role or '')|upper == 'ADMIN' %}
-                          <form method="post" action="{{ url_for('administration_auto_backup_delete_run', run_id=h.id) }}" class="auto-backup-delete-form" data-app-confirm data-confirm-danger="1" data-confirm-title="Delete backup" data-confirm-message="Delete this backup zip? Registry records will not be changed." data-confirm-ok="Delete backup" data-confirm-cancel="Go back">
-                            <button type="submit" class="btn-delete-sm">Delete</button>
-                          </form>
-                        {% endif %}
-                      </div>
-                    </td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% else %}
-          <p class="auto-backup-empty">No backups yet.</p>
-        {% endif %}
-      </section>
-    </div>
+      </div>
   </div>
+
+  <section class="bh-card bh-history" aria-labelledby="bh-history-title">
+    <div class="ab-history-head">
+      <div class="bh-card-head">
+        <h3 id="bh-history-title">Backup history</h3>
+        <p>Official copies for this office. Search and page through the list when many files accumulate.</p>
+      </div>
+      {% if backup_history %}
+        <span class="ab-history-count" id="bh-hist-count">{{ backup_history|length }}</span>
+      {% endif %}
+    </div>
+    {% if backup_history %}
+      <div class="bh-hist-tools">
+        <label class="bh-field bh-hist-search">
+          <span>Find</span>
+          <input type="search" id="bh-hist-q" placeholder="Date, type, or status" autocomplete="off" />
+        </label>
+        <label class="bh-field">
+          <span>Type</span>
+          <select id="bh-hist-kind">
+            <option value="">All types</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="full">Full system</option>
+          </select>
+        </label>
+        <label class="bh-field">
+          <span>Status</span>
+          <select id="bh-hist-status">
+            <option value="">All statuses</option>
+            <option value="success">OK</option>
+            <option value="partial">Partial</option>
+            <option value="skipped">Skipped</option>
+            <option value="error">Failed</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-wrap auto-backup-table-wrap">
+        <table class="table auto-backup-table auto-backup-history-table" id="bh-hist-table">
+          <colgroup>
+            <col class="ab-col-when" />
+            <col class="ab-col-type" />
+            <col class="ab-col-docs" />
+            <col class="ab-col-status" />
+            <col class="ab-col-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col" class="ab-col-when">Date and time</th>
+              <th scope="col" class="ab-col-type">Type</th>
+              <th scope="col" class="ab-col-docs">Records</th>
+              <th scope="col" class="ab-col-status">Status</th>
+              <th scope="col" class="ab-col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in backup_history %}
+              {% set kind = (h.kind or '')|lower %}
+              {% set when = h.created_at or '' %}
+              <tr
+                data-when="{{ when }}"
+                data-kind="{{ kind }}"
+                data-status="{{ h.status or '' }}"
+                data-type-label="{% if kind == 'full' %}Full system{% else %}{{ h.kind|capitalize }}{% endif %}"
+              >
+                <td class="ab-col-when" title="{{ when }}">
+                  <span class="bh-when">
+                    <strong>{{ when.split(' ')[0] }}</strong>
+                    {% if ' ' in when %}<em>{{ when.split(' ', 1)[1] }}</em>{% endif %}
+                  </span>
+                </td>
+                <td class="ab-col-type">{% if kind == 'full' %}Full system{% else %}{{ h.kind|capitalize }}{% endif %}</td>
+                <td class="ab-col-docs">{{ h.record_count }}</td>
+                <td class="ab-col-status">
+                  {% if h.status == 'success' %}
+                    <span class="auto-backup-pill auto-backup-pill-ok">OK</span>
+                  {% elif h.status == 'partial' %}
+                    <span class="auto-backup-pill auto-backup-pill-warn">Partial</span>
+                  {% elif h.status == 'skipped' %}
+                    <span class="auto-backup-pill">Skip</span>
+                  {% else %}
+                    <span class="auto-backup-pill auto-backup-pill-err">Failed</span>
+                  {% endif %}
+                </td>
+                <td class="ab-col-actions">
+                  <div class="auto-backup-row-actions">
+                    {% if h.file_rel %}
+                      <a href="{{ url_for('administration_auto_backup_download_period', path=h.file_rel) }}" class="btn btn-secondary btn-sm" data-no-page-transition="1">Get copy</a>
+                    {% endif %}
+                    {% if h.status in ('error', 'partial') %}
+                      <form method="post" action="{{ url_for('administration_auto_backup_retry', run_id=h.id) }}" class="auto-backup-delete-form">
+                        <button type="submit" class="btn btn-secondary btn-sm">Retry</button>
+                      </form>
+                    {% endif %}
+                    {% if current_user and (current_user.role or '')|upper == 'ADMIN' %}
+                      <form method="post" action="{{ url_for('administration_auto_backup_delete_run', run_id=h.id) }}" class="auto-backup-delete-form" data-app-confirm data-confirm-danger="1" data-confirm-title="Delete backup" data-confirm-message="Delete this backup zip? Registry records will not be changed." data-confirm-ok="Delete backup" data-confirm-cancel="Go back">
+                        <button type="submit" class="btn-delete-sm">Delete</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="auto-backup-empty bh-hist-empty" id="bh-hist-empty" hidden>No backups match this search.</p>
+      <div class="bh-hist-pager" id="bh-hist-pager">
+        <p class="bh-hist-range" id="bh-hist-range"></p>
+        <div class="bh-hist-nav">
+          <button type="button" class="btn btn-secondary btn-sm" id="bh-hist-prev">Previous</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="bh-hist-next">Next</button>
+        </div>
+      </div>
+    {% else %}
+      <p class="auto-backup-empty">No backups yet.</p>
+    {% endif %}
+  </section>
 
   <script>
     (function() {
@@ -267,6 +337,70 @@
         el.addEventListener('change', syncFreq);
       });
       syncFreq();
+
+      var table = document.getElementById('bh-hist-table');
+      if (table) {
+        var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+        var qEl = document.getElementById('bh-hist-q');
+        var kindEl = document.getElementById('bh-hist-kind');
+        var statusEl = document.getElementById('bh-hist-status');
+        var prevBtn = document.getElementById('bh-hist-prev');
+        var nextBtn = document.getElementById('bh-hist-next');
+        var rangeEl = document.getElementById('bh-hist-range');
+        var emptyEl = document.getElementById('bh-hist-empty');
+        var wrap = table.closest('.auto-backup-table-wrap');
+        var pager = document.getElementById('bh-hist-pager');
+        var pageSize = 8;
+        var page = 1;
+
+        function applyHistory() {
+          var q = ((qEl && qEl.value) || '').trim().toLowerCase();
+          var kind = ((kindEl && kindEl.value) || '').toLowerCase();
+          var status = ((statusEl && statusEl.value) || '').toLowerCase();
+          var matched = rows.filter(function(tr) {
+            if (kind && (tr.getAttribute('data-kind') || '') !== kind) return false;
+            if (status && (tr.getAttribute('data-status') || '') !== status) return false;
+            if (!q) return true;
+            var hay = [
+              tr.getAttribute('data-when') || '',
+              tr.getAttribute('data-kind') || '',
+              tr.getAttribute('data-type-label') || '',
+              tr.getAttribute('data-status') || '',
+              tr.textContent || ''
+            ].join(' ').toLowerCase();
+            return hay.indexOf(q) !== -1;
+          });
+          var pages = Math.max(1, Math.ceil(matched.length / pageSize));
+          if (page > pages) page = pages;
+          var start = (page - 1) * pageSize;
+          var end = start + pageSize;
+          rows.forEach(function(tr) { tr.hidden = true; });
+          matched.forEach(function(tr, i) {
+            tr.hidden = i < start || i >= end;
+          });
+          if (wrap) wrap.hidden = matched.length === 0;
+          if (emptyEl) emptyEl.hidden = matched.length !== 0;
+          if (pager) pager.hidden = matched.length === 0;
+          if (rangeEl) {
+            if (!matched.length) {
+              rangeEl.textContent = 'No matching copies';
+            } else {
+              var from = start + 1;
+              var to = Math.min(end, matched.length);
+              rangeEl.textContent = 'Showing ' + from + '–' + to + ' of ' + matched.length;
+            }
+          }
+          if (prevBtn) prevBtn.disabled = page <= 1;
+          if (nextBtn) nextBtn.disabled = page >= pages || matched.length === 0;
+        }
+
+        if (qEl) qEl.addEventListener('input', function() { page = 1; applyHistory(); });
+        if (kindEl) kindEl.addEventListener('change', function() { page = 1; applyHistory(); });
+        if (statusEl) statusEl.addEventListener('change', function() { page = 1; applyHistory(); });
+        if (prevBtn) prevBtn.addEventListener('click', function() { page -= 1; applyHistory(); });
+        if (nextBtn) nextBtn.addEventListener('click', function() { page += 1; applyHistory(); });
+        applyHistory();
+      }
     })();
   </script>
   <div

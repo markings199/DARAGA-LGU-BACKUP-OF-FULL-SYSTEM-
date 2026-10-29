@@ -962,19 +962,20 @@
         }
       }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}?v=requests-filters-1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/staff.css') }}?v=blank-form-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}?v=backup-layout-3" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/staff.css') }}?v=scan-required-1" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/scanflow.css') }}?v=scan-layout-2" />
     <meta name="cr-extra-head" content="" />
     {% block extra_head %}{% endblock %}
     <meta name="cr-extra-head-end" content="" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}?v=requests-fit-3" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}?v=backup-layout-3" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/document_annotation.css') }}?v=annotation-compact-1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/notifications.css') }}?v=reason-table-2" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/notifications.css') }}?v=messages-2" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/flash.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/page_transition.css') }}?v=birth-scroll-print-1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/page_transition.css') }}?v=nav-smooth-2" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/logout_motion.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout_fit.css') }}?v=scan-icons-2" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout_fit.css') }}?v=messages-3" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/office_messages.css') }}?v=om-5" />
     <meta name="cr-after-theme" content="" />
     {% block after_theme %}{% endblock %}
     <meta name="cr-after-theme-end" content="" />
@@ -1057,7 +1058,7 @@
                   <button type="button" class="notif-mark-all" id="notif-mark-all" hidden>Mark all as read</button>
                 </div>
                 <div class="notif-list" id="notif-list"></div>
-                <p class="notif-empty" id="notif-empty">No new notifications</p>
+                <p class="notif-empty" id="notif-empty">No edit or print requests yet</p>
               </div>
             </div>
           {% endif %}
@@ -1107,6 +1108,13 @@
             <span class="nav-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg></span>
             <span class="nav-label">Search Records</span>
           </a>
+          {% if current_user %}
+            <a href="{{ url_for('office_messages') }}" data-nav="messages" class="{% if nav_active == 'messages' %}active{% endif %}">
+              <span class="nav-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
+              <span class="nav-label">Messages</span>
+              <span class="nav-badge" hidden>0</span>
+            </a>
+          {% endif %}
           {% if current_user and (current_user.role or '')|upper == 'STAFF' %}
             <p class="sidebar-nav-kicker">My queue</p>
             <a href="{{ url_for('my_edit_requests') }}" data-nav="my_edit_requests" class="{% if nav_active == 'my_edit_requests' %}active{% endif %}">
@@ -1170,7 +1178,7 @@
     {% include '_flash_toasts.html' %}
     {% include '_app_confirm.html' %}
     <script src="{{ url_for('static', filename='js/theme.js') }}?v=topbar-stable-1"></script>
-    <script src="{{ url_for('static', filename='js/page_transition.js') }}?v=search-live-1"></script>
+    <script src="{{ url_for('static', filename='js/page_transition.js') }}?v=nav-smooth-3"></script>
     {% if current_user %}
       <script src="{{ url_for('static', filename='js/logout_motion.js') }}"></script>
     {% endif %}
@@ -1179,11 +1187,11 @@
     <script src="{{ url_for('static', filename='js/app_confirm.js') }}"></script>
     <script src="{{ url_for('static', filename='js/document_annotation.js') }}"></script>
     {% if current_user %}
-      <script src="{{ url_for('static', filename='js/ocr_job.js') }}?v=ocr-fast-1"></script>
+      <script src="{{ url_for('static', filename='js/ocr_job.js') }}?v=ocr-20s-1"></script>
       <script src="{{ url_for('static', filename='js/ocr_preview_targets.js') }}?v=nav-soft-1"></script>
-      <script src="{{ url_for('static', filename='js/notifications.js') }}?v=notif-stable-1"></script>
+      <script src="{{ url_for('static', filename='js/notifications.js') }}?v=messages-2"></script>
       <script src="{{ url_for('static', filename='js/note_fold.js') }}?v=reason-portal-1"></script>
-      <script src="{{ url_for('static', filename='js/staff_request_filter.js') }}?v=progress-click-3"></script>
+      <script src="{{ url_for('static', filename='js/staff_request_filter.js') }}?v=request-all-1"></script>
       <script src="{{ url_for('static', filename='js/search_records.js') }}?v=type-live-2"></script>
     {% endif %}
     <div id="cr-page-scripts">

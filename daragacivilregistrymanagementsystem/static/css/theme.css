@@ -684,6 +684,42 @@
   background: rgba(59, 130, 246, 0.22);
   color: #bfdbfe;
 }
+[data-theme="dark"] body.page-administration .audit-detail-chip {
+  background: #0f172a;
+  border-color: rgba(148, 163, 184, 0.18);
+}
+[data-theme="dark"] body.page-administration .audit-detail-k {
+  color: #94a3b8;
+}
+[data-theme="dark"] body.page-administration .audit-detail-v {
+  color: #e2e8f0;
+}
+[data-theme="dark"] body.page-administration .audit-detail-empty {
+  color: #64748b;
+}
+[data-theme="dark"] body.page-administration .admin-log-person-photo:not(.is-photo) {
+  color: #dbeafe;
+  background: linear-gradient(180deg, #1e3a5f 0%, #1e293b 100%);
+  border-color: rgba(148, 163, 184, 0.28);
+}
+[data-theme="dark"] body.page-administration .admin-log-person-photo.is-photo {
+  background: #0f172a;
+  border-color: rgba(226, 232, 240, 0.22);
+}
+[data-theme="dark"] body.page-administration .admin-log-person-photo.is-photo img {
+  opacity: 1;
+  filter: none;
+}
+[data-theme="dark"] body.page-administration .admin-log-person-photo.is-system {
+  color: #cbd5e1;
+  background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+}
+[data-theme="dark"] body.page-administration .admin-log-person-name {
+  color: #f8fafc;
+}
+[data-theme="dark"] body.page-administration .admin-log-person-role {
+  color: #94a3b8;
+}
 [data-theme="dark"] body.page-administration .admin-requests-table .reject-input {
   background: #1e293b;
   border-color: rgba(148, 163, 184, 0.45);
@@ -2431,15 +2467,43 @@ body.login-page::-webkit-scrollbar {
 [data-theme="dark"] body.page-administration .bh-chip {
   background: #0f172a;
   border-color: rgba(148, 163, 184, 0.3);
-  color: #cbd5e1;
+  color: #e2e8f0;
+}
+[data-theme="dark"] body.page-administration .bh-chip-k {
+  color: #94a3b8;
 }
 [data-theme="dark"] body.page-administration .bh-chip.is-ok {
   background: rgba(22, 163, 74, 0.18);
+}
+[data-theme="dark"] body.page-administration .bh-chip.is-ok .bh-chip-v {
   color: #86efac;
 }
 [data-theme="dark"] body.page-administration .bh-chip.is-warn {
   background: rgba(217, 119, 6, 0.18);
+}
+[data-theme="dark"] body.page-administration .bh-chip.is-warn .bh-chip-v {
   color: #fdba74;
+}
+[data-theme="dark"] body.page-administration .bh-card-head p,
+[data-theme="dark"] body.page-administration .bh-file-label {
+  color: #94a3b8;
+}
+[data-theme="dark"] body.page-administration .bh-field-hint code {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+[data-theme="dark"] body.page-administration .bh-status-note.is-ok {
+  background: rgba(22, 163, 74, 0.16);
+  color: #86efac;
+}
+[data-theme="dark"] body.page-administration .bh-status-note.is-warn {
+  background: rgba(217, 119, 6, 0.16);
+  color: #fdba74;
+}
+[data-theme="dark"] body.page-administration .bh-full-backup,
+[data-theme="dark"] body.page-administration .bh-file-box {
+  background: #0f172a;
+  border-color: rgba(148, 163, 184, 0.22);
 }
 [data-theme="dark"] body.page-administration .bh-mode {
   background: #0f172a;
@@ -2465,6 +2529,13 @@ body.login-page::-webkit-scrollbar {
 }
 [data-theme="dark"] body.page-administration .ol-lead,
 [data-theme="dark"] body.page-administration .ol-stat em,
+[data-theme="dark"] body.page-administration .ol-recent-who,
+[data-theme="dark"] body.page-administration .ol-recent-what {
+  color: #e2e8f0;
+}
+[data-theme="dark"] body.page-administration .ol-recent-list li {
+  border-bottom-color: rgba(148, 163, 184, 0.16);
+}
 [data-theme="dark"] body.page-administration .ol-card-head p,
 [data-theme="dark"] body.page-administration .ol-toggle-copy em,
 [data-theme="dark"] body.page-administration .ol-list {
@@ -2538,10 +2609,22 @@ body.login-page::-webkit-scrollbar {
   background: rgba(217, 119, 6, 0.15);
 }
 [data-theme="dark"] body.page-administration .bh-field input,
-[data-theme="dark"] body.page-administration .bh-field select {
+[data-theme="dark"] body.page-administration .bh-field select,
+[data-theme="dark"] body.page-administration .bh-hist-search input[type="search"] {
   background: #0f172a;
   border-color: rgba(148, 163, 184, 0.45);
   color: #fff;
+}
+[data-theme="dark"] body.page-administration .bh-when strong {
+  color: #f8fafc;
+}
+[data-theme="dark"] body.page-administration .bh-when em,
+[data-theme="dark"] body.page-administration .bh-hist-range {
+  color: #94a3b8;
+}
+[data-theme="dark"] body.page-administration .bh-history .auto-backup-table-wrap {
+  background: #0f172a;
+  border-color: rgba(148, 163, 184, 0.25);
 }
 
 @media print {

@@ -40,7 +40,8 @@ body {
   max-width: min(1180px, 100%) !important;
 }
 
-body.page-administration .main {
+body.page-administration .main,
+body.page-office-messages .main {
   max-width: none !important;
 }
 
@@ -56,6 +57,41 @@ video,
 canvas {
   max-width: 100%;
   height: auto;
+}
+
+/* Profile photos must stay circular before page-specific CSS arrives. */
+.om-avatar,
+.admin-log-person-photo,
+.topbar-user-avatar {
+  overflow: hidden;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.om-avatar {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.om-avatar-sm {
+  width: 28px;
+  height: 28px;
+}
+.om-avatar-lg {
+  width: 46px;
+  height: 46px;
+}
+.om-avatar img,
+.om-avatar-sm img,
+.om-avatar-lg img,
+.admin-log-person-photo img,
+.topbar-user-avatar img {
+  display: block;
+  max-width: none !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
 }
 
 .scanflow-source-ic {

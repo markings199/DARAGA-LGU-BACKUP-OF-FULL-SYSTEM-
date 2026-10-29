@@ -115,7 +115,7 @@
 }
 
 .notif-list {
-  max-height: 380px;
+  max-height: min(70vh, 560px);
   overflow: auto;
 }
 
@@ -663,6 +663,9 @@ html[data-theme="dark"] .notif-item.is-read .notif-item-dot {
   font-size: 0.68rem;
   font-weight: 800;
   line-height: 18px;
+}
+.nav-badge[hidden] {
+  display: none !important;
 }
 
 .sidebar-nav a {

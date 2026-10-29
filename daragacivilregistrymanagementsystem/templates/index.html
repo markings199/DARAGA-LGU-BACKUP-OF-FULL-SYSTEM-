@@ -688,7 +688,7 @@ function bootScanWorkflow() {
       return;
     }
     var seq = ++detectSeq;
-    setDocTypeStatus('is-busy', 'Identifying document type…');
+    setDocTypeStatus('is-busy', 'Identifying document type from the certificate…');
     syncOcrReady();
     fetch('{{ url_for("api_detect_document_type") }}', {
       method: 'POST',

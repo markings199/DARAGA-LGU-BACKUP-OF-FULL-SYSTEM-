@@ -7,8 +7,8 @@
 {% block content %}
   {% set review_title = 'Review Birth Certificate' %}
   {% if not image_filename %}
-    {% set hero_kicker = 'Manual entry' %}
-    {% set review_sub = 'No scan is required. Fill the fields, then confirm to save. Original certificate can stay empty.' %}
+    {% set hero_kicker = 'Scan required' %}
+    {% set review_sub = 'A scanned certificate from Scan Workflow is required. This page cannot archive a record without that scan.' %}
   {% endif %}
   {% include '_form_review_hero.html' %}
   {% include '_blank_form_type_nav.html' %}
@@ -68,15 +68,10 @@
             Cancel
           </button>
           {% include '_staff_ocr_print_request.html' %}
-          <button
-            type="submit"
-            class="btn btn-primary form-review-confirm"
-            data-app-confirm
-            data-confirm-title="Confirm birth record"
-            data-confirm-message="Please check every field against the original certificate. Saving adds this birth record to the official civil registry."
-            data-confirm-ok="Confirm and save"
-            data-confirm-cancel="Review again"
-          >Confirm birth data</button>
+          {% set confirm_label = 'Confirm birth data' %}
+          {% set confirm_title = 'Confirm birth record' %}
+          {% set confirm_message = 'Please check every field against the original certificate. Saving adds this birth record to the official civil registry.' %}
+          {% include '_form_review_confirm_button.html' %}
         </div>
       </div>
     </div>

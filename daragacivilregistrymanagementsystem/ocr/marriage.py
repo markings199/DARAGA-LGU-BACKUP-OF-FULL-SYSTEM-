@@ -9,7 +9,7 @@ from typing import Dict, Any, List
 
 import cv2
 import numpy as np
-from ocr.shared import imread_bgr, run_ocr_on_image, run_ocr_text_only
+from ocr.shared import imread_bgr, run_ocr_on_image, run_ocr_text_only, trim_scanner_bed
 from ocr.engine import extract_from_ocr_text, ocr_pages_to_text
 from ocr.field_boxes import extract_field_boxes
 from ocr.sex import sex_from_ocr_text
@@ -1104,12 +1104,19 @@ def extract_form97_ages(items, img_w, img_h, split_x=None, dob_label=None, img=N
     if not wife and wife_years:
         wife = column_right_of_year(wife_years[-1], img_w * 0.999)
 
-    if img is not None:
+    if img is not None and (not hus or not wife):
         crop_h, crop_w = read_form97_age_crops(
-            img, items, img_w, img_h, split_x, dob_label, need_hus=True, need_wife=True
+            img,
+            items,
+            img_w,
+            img_h,
+            split_x,
+            dob_label,
+            need_hus=not bool(hus),
+            need_wife=not bool(wife),
         )
-        hus = crop_h or hus
-        wife = crop_w or wife
+        hus = hus or crop_h
+        wife = wife or crop_w
     return hus, wife
 
 
@@ -1692,6 +1699,7 @@ def extract_marriage_data(img_path: str) -> Dict[str, Any]:
     if img is None:
         raise FileNotFoundError(f"Could not read image: {img_path}")
 
+    img = trim_scanner_bed(img)
     img = preprocess_image(img)
 
     if DEBUG_PREPROCESS:
@@ -1964,7 +1972,7 @@ def extract_marriage_data(img_path: str) -> Dict[str, Any]:
         img_h,
         split_x,
         dob_label,
-        img=img,
+        img=None,
     )
     hus_computed = compute_age_from_dates(
         data["husband"].get("Date of Birth") or "", marriage_date_text
@@ -2115,7 +2123,7 @@ def extract_marriage_data(img_path: str) -> Dict[str, Any]:
                 continue
             v = parsed
         out[k] = v
-    linked_h, linked_w = extract_form97_ages(items, img_w, img_h, split_x, dob_label, img=img)
+    linked_h, linked_w = extract_form97_ages(items, img_w, img_h, split_x, dob_label, img=None)
     hus_computed = compute_age_from_dates(
         data["husband"].get("Date of Birth") or "", marriage_date_text
     )

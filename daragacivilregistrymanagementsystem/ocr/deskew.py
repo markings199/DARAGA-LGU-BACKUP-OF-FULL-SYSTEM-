@@ -21,7 +21,7 @@ def _imread(path: Path):
 def _imwrite(path: Path, img) -> bool:
     suffix = path.suffix.lower()
     if suffix in (".jpg", ".jpeg"):
-        params = [int(cv2.IMWRITE_JPEG_QUALITY), 98]
+        params = [int(cv2.IMWRITE_JPEG_QUALITY), 95]
         ext = ".jpg"
     else:
         params = [int(cv2.IMWRITE_PNG_COMPRESSION), 2]
@@ -82,7 +82,7 @@ def _median_angle(angles: list[float]) -> float:
     return float(angles[len(angles) // 2])
 
 
-def _working_gray(gray, max_side: int = 1100):
+def _working_gray(gray, max_side: int = 800):
     height, width = gray.shape[:2]
     longest = max(height, width)
     if longest <= max_side:
@@ -99,7 +99,7 @@ def _working_gray(gray, max_side: int = 1100):
 def _hough_skew_angle(gray) -> float:
     height, width = gray.shape
     longest = max(height, width)
-    scale = 1100.0 / longest if longest > 1100 else 1.0
+    scale = 800.0 / longest if longest > 800 else 1.0
     small = (
         cv2.resize(gray, (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_AREA)
         if scale < 1
@@ -112,7 +112,6 @@ def _hough_skew_angle(gray) -> float:
     for c1, c2, thr, min_frac in (
         (50, 150, 50, 0.08),
         (40, 120, 40, 0.06),
-        (30, 90, 30, 0.05),
     ):
         edges = cv2.Canny(clahe, c1, c2)
         min_len = max(28, int(min(small.shape) * min_frac))
@@ -255,7 +254,7 @@ def _warp_quad(img, quad):
         img,
         matrix,
         (max_w, max_h),
-        flags=cv2.INTER_CUBIC,
+        flags=cv2.INTER_LINEAR,
         borderMode=cv2.BORDER_CONSTANT,
         borderValue=(255, 255, 255),
     )
@@ -275,7 +274,7 @@ def _rotate_keep_quality(img, angle: float):
         img,
         matrix,
         (new_w, new_h),
-        flags=cv2.INTER_CUBIC,
+        flags=cv2.INTER_LINEAR,
         borderMode=cv2.BORDER_CONSTANT,
         borderValue=(255, 255, 255),
     )

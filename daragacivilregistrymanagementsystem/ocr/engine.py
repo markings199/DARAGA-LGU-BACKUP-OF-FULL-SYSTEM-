@@ -26,9 +26,16 @@ def _iter_json_templates(folder: Path) -> Iterable[Path]:
     return sorted([p for p in folder.glob("*.json") if p.is_file()])
 
 
+_REGEX_CACHE: Dict[str, re.Pattern] = {}
+_TEMPLATE_CACHE: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+
+
 def _compile_regex(pattern: str) -> re.Pattern:
-    # Templates store regex strings; compile with MULTILINE/IGNORECASE by default.
-    return re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+    cached = _REGEX_CACHE.get(pattern)
+    if cached is None:
+        cached = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+        _REGEX_CACHE[pattern] = cached
+    return cached
 
 
 def _first_capture(regex: re.Pattern, text: str) -> Optional[str]:
@@ -59,15 +66,15 @@ class MatchResult:
 
 
 _FORM_BIRTH = re.compile(
-    r"\b(?:MUNICIPAL\s+)?FORM\s*(?:NO\.?|NUMBER|#)?\s*102\b",
+    r"\b(?:MUNICIPAL\s+)?FORM\s*(?:NO\.?|N0\.?|NUMBER|#)?\s*1[0O]2\b",
     re.IGNORECASE,
 )
 _FORM_MARRIAGE = re.compile(
-    r"\b(?:MUNICIPAL\s+)?FORM\s*(?:NO\.?|NUMBER|#)?\s*97\b",
+    r"\b(?:MUNICIPAL\s+)?FORM\s*(?:NO\.?|N0\.?|NUMBER|#)?\s*9[7T]\b",
     re.IGNORECASE,
 )
 _FORM_DEATH = re.compile(
-    r"\b(?:MUNICIPAL\s+)?FORM\s*(?:NO\.?|NUMBER|#)?\s*103\b",
+    r"\b(?:MUNICIPAL\s+)?FORM\s*(?:NO\.?|N0\.?|NUMBER|#)?\s*1[0O]3\b",
     re.IGNORECASE,
 )
 
@@ -111,11 +118,17 @@ def detect_document_type_detail(ocr_text: str, header_only: bool = False) -> Dic
             "label": document_type_label(doc_type),
         }
 
-    if "CERTIFICATEOFLIVEBIRTH" in squash or "LIVEBIRTH" in squash or "LIVEB1RTH" in squash:
+    if (
+        "CERTIFICATEOFLIVEBIRTH" in squash
+        or "LIVEBIRTH" in squash
+        or "LIVEB1RTH" in squash
+        or "LIVEBIRIH" in squash
+        or "OFLIVEBIRTH" in squash
+    ):
         return _hit("birth", "high", "Certificate of Live Birth")
-    if "CERTIFICATEOFDEATH" in squash or "OFDEATH" in squash or "OFDEA1H" in squash:
+    if "CERTIFICATEOFDEATH" in squash or "OFDEATH" in squash or "OFDEA1H" in squash or "OFDEAITH" in squash:
         return _hit("death", "high", "Certificate of Death")
-    if "CERTIFICATEOFMARRIAGE" in squash or "OFMARRIAGE" in squash or "OFMARRLAGE" in squash:
+    if "CERTIFICATEOFMARRIAGE" in squash or "OFMARRIAGE" in squash or "OFMARRLAGE" in squash or "OFMARRIACE" in squash:
         return _hit("marriage", "high", "Certificate of Marriage")
     if "CERTIF" in squash and "MARRIAG" in squash and "LIVEBIRTH" not in squash:
         return _hit("marriage", "high", "Marriage certificate heading")
@@ -124,9 +137,9 @@ def detect_document_type_detail(ocr_text: str, header_only: bool = False) -> Dic
     if "CERTIF" in squash and "LIVE" in squash and "BIRTH" in t:
         return _hit("birth", "high", "Certificate of Live Birth")
 
-    if _FORM_BIRTH.search(t) or "FORMNO102" in squash or "MUNICIPALFORMNO102" in squash:
+    if _FORM_BIRTH.search(t) or "FORMNO102" in squash or "FORMNO1O2" in squash or "MUNICIPALFORMNO102" in squash:
         return _hit("birth", "high", "Municipal Form No. 102")
-    if _FORM_DEATH.search(t) or "FORMNO103" in squash or "MUNICIPALFORMNO103" in squash:
+    if _FORM_DEATH.search(t) or "FORMNO103" in squash or "FORMNO1O3" in squash or "MUNICIPALFORMNO103" in squash:
         return _hit("death", "high", "Municipal Form No. 103")
     if _FORM_MARRIAGE.search(t) or "FORMNO97" in squash or "MUNICIPALFORMNO97" in squash:
         return _hit("marriage", "high", "Municipal Form No. 97")
@@ -191,6 +204,10 @@ def detect_document_type(ocr_text: str) -> Optional[str]:
 
 
 def load_templates(doc_type: str, template_root: Path = TEMPLATE_ROOT) -> List[Dict[str, Any]]:
+    key = ((doc_type or "").strip().lower(), str(template_root))
+    cached = _TEMPLATE_CACHE.get(key)
+    if cached is not None:
+        return cached
     folder = template_root / doc_type
     templates: List[Dict[str, Any]] = []
     for p in _iter_json_templates(folder):
@@ -198,6 +215,7 @@ def load_templates(doc_type: str, template_root: Path = TEMPLATE_ROOT) -> List[D
             t = json.load(f)
         t["_path"] = str(p)
         templates.append(t)
+    _TEMPLATE_CACHE[key] = templates
     return templates
 
 

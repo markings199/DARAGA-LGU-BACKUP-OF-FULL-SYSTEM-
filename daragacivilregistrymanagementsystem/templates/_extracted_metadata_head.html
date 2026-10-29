@@ -14,7 +14,9 @@
     Clear
   </button>
 </div>
-{% if missing_fields is defined and missing_fields %}
+{% if not image_filename %}
+<p class="review-required-banner" role="alert">Archive is locked until a certificate is scanned in Scan Workflow. Typing fields here will not save a record.</p>
+{% elif missing_fields is defined and missing_fields %}
 <p class="review-required-banner" role="alert">Fill every required field marked in red before saving. Empty Age, dates, and names must be typed from the certificate.</p>
 {% endif %}
 <script src="{{ url_for('static', filename='js/extracted_metadata.js') }}?v=required-review-1" defer></script>

@@ -178,11 +178,12 @@
         id="btn-print-document"
         data-print-log-url="{{ print_log_url or '' }}"
         data-can-print="1"
+        data-print-role="{{ (current_user.role or '')|upper if current_user else '' }}"
         data-sync-form="{{ '1' if sync_from_form|default(false) else '0' }}"
         data-locked-print-format="{{ _locked }}"
         data-default-print-mode="{{ _default_mode }}"
         data-missing-meta="{{ _missing_meta | tojson }}"
-        {% if _missing_meta %}aria-disabled="true"{% endif %}
+        onclick="if (window.DaragaPrint) { window.DaragaPrint.fromButton(this); return false; }"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
         Print

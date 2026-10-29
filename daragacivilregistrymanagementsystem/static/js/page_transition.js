@@ -66,13 +66,7 @@
     if (/\.(pdf|png|jpe?g|gif|webp|zip|xlsx|csv|docx?)(\?|$)/i.test(url.pathname)) return false;
     if (/\/logout\b/i.test(url.pathname)) return false;
     if (/\/login\b/i.test(url.pathname)) return false;
-    if (isScanPath(url)) return false;
     return true;
-  }
-
-  function isScanPath(url) {
-    var path = String(url.pathname || "").replace(/\/+$/, "") || "/";
-    return path === "/" || path === "/index";
   }
 
   function shouldInterceptAnchor(anchor) {
@@ -134,6 +128,31 @@
 
   function replaceAfterTheme(doc) {
     replaceHeadSlice("cr-after-theme", "cr-after-theme-end", doc);
+  }
+
+  function waitForNewStylesheets() {
+    var links = Array.prototype.filter.call(
+      document.querySelectorAll('link[rel="stylesheet"]'),
+      function (link) {
+        try {
+          return !link.sheet;
+        } catch (e) {
+          return true;
+        }
+      }
+    );
+    if (!links.length) return Promise.resolve();
+    return Promise.race([
+      Promise.all(
+        links.map(function (link) {
+          return new Promise(function (resolve) {
+            link.addEventListener("load", resolve, { once: true });
+            link.addEventListener("error", resolve, { once: true });
+          });
+        })
+      ),
+      wait(250),
+    ]);
   }
 
   function runScriptsBetween(start, end) {
@@ -310,7 +329,7 @@
     }
     startProgress();
 
-    var leaveMs = reducedMotion() ? 0 : 160;
+    var leaveMs = 0;
     var fetchOpts = {
       method: "GET",
       credentials: "same-origin",
@@ -413,20 +432,29 @@
             document.querySelector('meta[name="cr-extra-head"]'),
             document.querySelector('meta[name="cr-extra-head-end"]')
           );
-          page.innerHTML = nextPage.innerHTML;
-          if (scriptsBox) {
-            var nextScripts = parsed.getElementById("cr-page-scripts");
-            scriptsBox.innerHTML = nextScripts ? nextScripts.innerHTML : "";
-          }
-          document.body.className = parsed.body ? parsed.body.className : document.body.className;
-          if (parsed.title) document.title = parsed.title;
-          syncChrome(parsed);
-          adoptToasts(parsed);
-          runScripts(page);
-          runScripts(scriptsBox);
-          page.scrollTop = 0;
-          page.classList.remove("is-leaving");
-          page.classList.add("is-entering");
+          return waitForNewStylesheets().then(function () {
+            if (myGen !== gen) return;
+            page.innerHTML = nextPage.innerHTML;
+            if (scriptsBox) {
+              var nextScripts = parsed.getElementById("cr-page-scripts");
+              scriptsBox.innerHTML = nextScripts ? nextScripts.innerHTML : "";
+            }
+            document.body.className = parsed.body ? parsed.body.className : document.body.className;
+            if (parsed.title) document.title = parsed.title;
+            syncChrome(parsed);
+            adoptToasts(parsed);
+            runScripts(page);
+            runScripts(scriptsBox);
+            page.scrollTop = 0;
+            page.classList.remove("is-leaving");
+            page.classList.add("is-entering");
+            if (opts.replace) {
+              history.replaceState({ crNav: 1 }, "", payload.finalUrl.href);
+            } else if (!opts.pop) {
+              history.pushState({ crNav: 1 }, "", payload.finalUrl.href);
+            }
+            window.dispatchEvent(new CustomEvent("cr:page", { detail: { href: payload.finalUrl.href } }));
+          });
         }
         if (opts.replace) {
           history.replaceState({ crNav: 1 }, "", payload.finalUrl.href);

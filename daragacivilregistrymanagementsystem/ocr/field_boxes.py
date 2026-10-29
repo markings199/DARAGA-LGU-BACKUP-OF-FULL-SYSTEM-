@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 
 from ocr.person_name import WIDE_FML_NAME_KEYS
-from ocr.shared import imread_bgr, run_ocr_on_image, run_ocr_text_only
+from ocr.shared import imread_bgr, run_ocr_on_image, run_ocr_text_only, run_ocr_text_only_many
 from ocr.sex import sex_from_ocr_text
 
 _CAUSE_JUNK = (
@@ -161,6 +161,18 @@ def _list_box_paths(doc_type: str) -> List[Path]:
     return paths
 
 
+def warmup_box_specs() -> None:
+    """Load official box maps and ORB features once so the first scan is not paying that cost."""
+    for key in _DOC_FILES:
+        for path in _list_box_paths(key):
+            spec = _load_spec_file(path)
+            if spec:
+                try:
+                    _template_orb(spec)
+                except Exception:
+                    pass
+
+
 def _load_spec_file(path: Path) -> Optional[Dict[str, Any]]:
     try:
         ident = str(path.resolve())
@@ -248,7 +260,7 @@ def _choose_box_spec(
     blob = _ocr_blob(pages, items)
     sh, sw = img.shape[:2]
     best_spec = specs[0]
-    best_h = _find_homography(img, best_spec)
+    best_h = None
     best_filled: Optional[Dict[str, str]] = None
     best_score = -1.0
     for spec in specs:
@@ -304,19 +316,35 @@ def _template_orb(spec: Dict[str, Any]):
         return packed
     t_gray = cv2.cvtColor(spec["_image"], cv2.COLOR_BGR2GRAY)
     t_small, scale_t = _gray_max_side(t_gray)
-    detector = cv2.ORB_create(nfeatures=900, fastThreshold=12)
+    detector = cv2.ORB_create(nfeatures=700, fastThreshold=14)
     kp_t, des_t = detector.detectAndCompute(t_small, None)
     packed = (kp_t, des_t, scale_t)
     spec["_orb"] = packed
     return packed
 
 
-def _find_homography(scan, spec: Dict[str, Any]) -> Optional[Any]:
-    kp_t, des_t, scale_t = _template_orb(spec)
-    detector = cv2.ORB_create(nfeatures=900, fastThreshold=12)
+_SCAN_ORB: Dict[int, Tuple[Any, Any, float]] = {}
+
+
+def _scan_orb(scan) -> Tuple[Any, Any, float]:
+    key = id(scan)
+    packed = _SCAN_ORB.get(key)
+    if packed is not None:
+        return packed
+    detector = cv2.ORB_create(nfeatures=700, fastThreshold=14)
     s_gray = cv2.cvtColor(scan, cv2.COLOR_BGR2GRAY)
     s_small, scale_s = _gray_max_side(s_gray)
     kp_s, des_s = detector.detectAndCompute(s_small, None)
+    packed = (kp_s, des_s, scale_s)
+    if len(_SCAN_ORB) > 4:
+        _SCAN_ORB.clear()
+    _SCAN_ORB[key] = packed
+    return packed
+
+
+def _find_homography(scan, spec: Dict[str, Any]) -> Optional[Any]:
+    kp_t, des_t, scale_t = _template_orb(spec)
+    kp_s, des_s, scale_s = _scan_orb(scan)
     if des_t is None or des_s is None or len(kp_t) < 12 or len(kp_s) < 12:
         return None
     matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
@@ -1007,6 +1035,126 @@ def extract_field_boxes(
 
     items_template = _project_items_to_template(items, homography, sw, sh, tw, th)
     return _fill_boxes(spec, items_template)
+
+
+_READY_KEYS = {
+    "birth": ("Registry Number", "Name of Child", "Date of Birth", "Name of Mother"),
+    "death": ("Registry Number", "Name of Deceased", "Date of Death", "Cause of Death"),
+    "marriage": ("Registry Number", "Husband Name", "Wife Name", "Date of Marriage", "Place of Marriage"),
+}
+
+
+def _prepare_writein_crop(crop):
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return None
+    pad = 10
+    out = cv2.copyMakeBorder(crop, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(255, 255, 255))
+    height, width = out.shape[:2]
+    longest = max(height, width)
+    if longest < 36:
+        return None
+    if longest < 280:
+        scale = min(3.2, 280.0 / float(longest))
+        out = cv2.resize(
+            out,
+            (max(32, int(round(width * scale))), max(32, int(round(height * scale)))),
+            interpolation=cv2.INTER_CUBIC,
+        )
+    return out
+
+
+def box_map_is_ready(filled: Dict[str, str], doc_type: str) -> bool:
+    """True when official write-in boxes already produced a usable review form."""
+    if not filled:
+        return False
+    values = [str(v).strip() for v in filled.values() if str(v or "").strip()]
+    if len(values) >= 4:
+        return True
+    keys = _READY_KEYS.get((doc_type or "").strip().lower()) or ()
+    hits = sum(1 for key in keys if str(filled.get(key) or "").strip())
+    return hits >= 2
+
+
+def extract_boxes_rec_only(img, doc_type: str) -> Dict[str, str]:
+    """
+    Read only the official write-in cells (recognition, no full-page detect).
+    Same PP-OCRv4 rec model. Used when the scan aligns to the PSA form.
+    """
+    if img is None:
+        return {}
+    spec, homography, _picked = _choose_box_spec(doc_type, img, None, None)
+    if spec is None:
+        return {}
+    template = spec.get("_image")
+    if template is None:
+        return {}
+    th, tw = template.shape[:2]
+    sh, sw = img.shape[:2]
+    if homography is None and sw > 8 and sh > 8:
+        homography = np.array(
+            [[tw / float(sw), 0.0, 0.0], [0.0, th / float(sh), 0.0], [0.0, 0.0, 1.0]],
+            dtype=np.float64,
+        )
+    if homography is None:
+        return {}
+    wanted = set(_FORM_METADATA_KEYS.get((doc_type or "").strip().lower()) or ())
+    wanted.update(_REFINE_KEYS.get((doc_type or "").strip().lower()) or ())
+    wanted.update(_BOX_KEY_TO_FORM.keys())
+    work_w, work_h = tw, th
+    longest = max(tw, th)
+    if longest > 1100:
+        scale = 1100.0 / float(longest)
+        work_w = max(32, int(round(tw * scale)))
+        work_h = max(32, int(round(th * scale)))
+        homography = (
+            np.array([[scale, 0.0, 0.0], [0.0, scale, 0.0], [0.0, 0.0, 1.0]], dtype=np.float64)
+            @ homography
+        )
+    try:
+        aligned = cv2.warpPerspective(img, homography, (work_w, work_h))
+    except cv2.error:
+        return {}
+    fields = []
+    crops = []
+    for field in spec.get("fields") or []:
+        key = field.get("key") or ""
+        if wanted and key not in wanted and _BOX_KEY_TO_FORM.get(key) not in wanted:
+            continue
+        box = field.get("box") or []
+        if not box or len(box) < 4:
+            continue
+        x0, y0, x1, y1 = [float(v) for v in box[:4]]
+        xa = max(0, int((x0 - 0.004) * work_w))
+        ya = max(0, int((y0 - 0.006) * work_h))
+        xb = min(work_w, int((x1 + 0.004) * work_w))
+        yb = min(work_h, int((y1 + 0.008) * work_h))
+        if xb - xa < 12 or yb - ya < 10:
+            continue
+        crop = _prepare_writein_crop(aligned[ya:yb, xa:xb])
+        if crop is None:
+            continue
+        fields.append(field)
+        crops.append(crop)
+    if not crops:
+        return {}
+    try:
+        texts = run_ocr_text_only_many(crops, max_side=400)
+    except Exception:
+        return {}
+    filled: Dict[str, str] = {}
+    for field, raw in zip(fields, texts):
+        key = field.get("key") or ""
+        kind = field.get("kind") or "text"
+        if not key or not raw:
+            continue
+        if kind == "sex":
+            value = sex_from_ocr_text(raw)
+        else:
+            value = _subtract_printed(raw, field.get("printed") or "")
+            value = _clean_value(kind, value)
+        if value and key not in filled:
+            filled[key] = value
+    return _compose_party_full_names(filled)
 
 
 # Keys shown on OCR review metadata forms (not every printed box on the certificate).

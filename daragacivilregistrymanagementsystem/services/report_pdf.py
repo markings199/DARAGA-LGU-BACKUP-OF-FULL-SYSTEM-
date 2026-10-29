@@ -48,7 +48,7 @@ class RegisterPDF:
             pdf.set_y(8)
             pdf.set_draw_color(0, 0, 0)
             pdf.set_text_color(0, 0, 0)
-            left, title, sub, right = _masthead_copy(doc_type)
+            left, title, sub, places = _masthead_copy(doc_type)
             col = pdf.epw / 3.0
             pdf.set_font("Times", "I", 7)
             pdf.set_xy(pdf.l_margin, 8)
@@ -60,9 +60,8 @@ class RegisterPDF:
                 pdf.set_xy(pdf.l_margin + col, 13)
                 pdf.set_font("Times", "I", 8)
                 pdf.cell(col, 4, _pdf_text(sub), align="C")
-            pdf.set_xy(pdf.l_margin + col * 2, 8)
-            pdf.set_font("Times", "", 8)
-            pdf.multi_cell(col, 3.4, _pdf_text(right), align="R")
+            if places:
+                _draw_place_lines(pdf, pdf.l_margin + col * 2, 8, col, places)
             pdf.set_y(20)
 
         def footer() -> None:
@@ -117,28 +116,44 @@ class RegisterPDF:
         return out.getvalue()
 
 
-def _masthead_copy(doc_type: str) -> tuple[str, str, str, str]:
-    right = "Province of Albay\nMunicipality of Daraga"
+def _masthead_copy(doc_type: str) -> tuple[str, str, str, list[tuple[str, str]]]:
     if doc_type == "death":
         return (
             "(Municipal Form No. 71, Revised 1984)",
             "REGISTER OF DEATH / FETAL DEATH",
             "",
-            "Municipality of Daraga",
+            [("Municipality of", "Daraga")],
         )
     if doc_type == "marriage":
         return (
             "MUNICIPAL Form No. 25 - (Revised, 1958)\nFormulario Municipal No. 25 - (Revisado, 1958)",
             "REGISTER OF MARRIAGES",
             "Registro de Casamientos",
-            right,
+            [("Province of", "Albay"), ("Municipality of", "Daraga")],
         )
     return (
         "(Municipal Form No. 26-1, Revised 1984)",
         "REGISTER OF LIVE BIRTHS",
         "",
-        "Municipality of Daraga",
+        [],
     )
+
+
+def _draw_place_lines(pdf, x: float, y: float, width: float, places: list[tuple[str, str]]) -> None:
+    """Draw 'Municipality of ______' with the place name centered on the underline."""
+    line_w = min(36.0, max(28.0, width * 0.46))
+    for label, value in places:
+        pdf.set_xy(x, y)
+        pdf.set_font("Times", "", 8)
+        label_text = _pdf_text(label)
+        label_w = pdf.get_string_width(label_text + " ")
+        start = x + width - line_w - label_w
+        pdf.set_xy(start, y)
+        pdf.cell(label_w, 3.6, label_text, align="L")
+        pdf.cell(line_w, 3.6, _pdf_text(value), align="C")
+        underline_y = y + 3.3
+        pdf.line(start + label_w, underline_y, start + label_w + line_w, underline_y)
+        y += 4.2
 
 
 def _table_kwargs(pdf, widths: Sequence[float], heading_size: float = 5.5):

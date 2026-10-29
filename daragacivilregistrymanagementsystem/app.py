@@ -88,13 +88,15 @@ from io import BytesIO
 from pathlib import Path
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, send_file, jsonify
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, inspect as sa_inspect, or_
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm.exc import ObjectDeletedError
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from models import db, User, Record, RecordAttachment, EditRequest, AuditLog, PrintLog, PrintRequest, BackupRun, NotificationRead
+from models import db, User, Record, RecordAttachment, EditRequest, AuditLog, PrintLog, PrintRequest, BackupRun, NotificationRead, OfficeMessage
 from services.record_files import (
     certificate_in_client_folder,
     client_folder_rel,
@@ -439,6 +441,11 @@ def _existing_upload_relpath(rel: str) -> str:
     return _normalize_upload_relpath(rel)
 
 
+def _scanned_certificate_relpath(image_filename) -> str:
+    """Confirm/save is allowed only when a scanned certificate file exists."""
+    return _existing_upload_relpath((image_filename or "").strip())
+
+
 def _ensure_record_client_folder(record: Record) -> str:
     """Create this record's office folder: files/{type}/{id}_{name}/supporting/."""
     rel = client_folder_rel(record)
@@ -489,12 +496,36 @@ def _list_record_attachments(record_id: int):
     )
 
 
+def _record_pk(record: Record):
+    """Primary key without refreshing an expired/deleted row (avoids ObjectDeletedError)."""
+    try:
+        ident = sa_inspect(record).identity
+    except Exception:
+        ident = None
+    if ident:
+        return ident[0]
+    return None
+
+
 def _supporting_template_vars(record: Record) -> dict:
-    _repair_record_image_path(record)
-    return {
-        "attachments": _list_record_attachments(record.id),
+    record_id = _record_pk(record)
+    empty = {
+        "attachments": [],
         "attachment_kinds": ATTACHMENT_KINDS,
-        "client_folder": _place_certificate_in_client_folder(record),
+        "client_folder": "",
+    }
+    if record_id is None:
+        return empty
+    try:
+        _repair_record_image_path(record)
+        folder = _place_certificate_in_client_folder(record)
+    except ObjectDeletedError:
+        db.session.rollback()
+        return empty
+    return {
+        "attachments": _list_record_attachments(int(record_id)),
+        "attachment_kinds": ATTACHMENT_KINDS,
+        "client_folder": folder,
     }
 
 
@@ -733,12 +764,12 @@ def _paged_admin_requests(model, doc_type, progress, page_arg):
     if doc_type:
         q = q.filter(model.record.has(Record.document_type == doc_type))
     all_count = q.order_by(None).count()
-    pending_count = q.filter(model.status == "PENDING").order_by(None).count()
-    listed = q
-    if progress == "pending":
-        listed = listed.filter(model.status == "PENDING")
-    elif progress == "complete":
-        listed = listed.filter(model.status != "PENDING")
+    if model is EditRequest:
+        pending_count = _filter_staff_edit_progress(q, "pending").order_by(None).count()
+        listed = _filter_staff_edit_progress(q, progress)
+    else:
+        pending_count = _filter_staff_print_progress(q, "pending").order_by(None).count()
+        listed = _filter_staff_print_progress(q, progress)
     try:
         page = int(page_arg or 1)
     except (TypeError, ValueError):
@@ -774,6 +805,35 @@ def _paged_admin_requests(model, doc_type, progress, page_arg):
         "complete": max(0, all_count - pending_count),
     }
     return rows, counts, pager
+
+
+ADMIN_LOG_PAGE_SIZE = 50
+
+
+def _paged_admin_logs(query, page_arg, per_page=ADMIN_LOG_PAGE_SIZE):
+    """Page through print or audit rows so the admin lists stay complete."""
+    try:
+        page = int(page_arg or 1)
+    except (TypeError, ValueError):
+        page = 1
+    page = max(1, page)
+    total = query.limit(None).offset(None).order_by(None).count()
+    pages = max(1, (total + per_page - 1) // per_page) if total else 1
+    if page > pages:
+        page = pages
+    rows = query.offset((page - 1) * per_page).limit(per_page).all()
+    start = 0 if total == 0 else (page - 1) * per_page + 1
+    end = min(total, page * per_page)
+    return rows, {
+        "page": page,
+        "pages": pages,
+        "per_page": per_page,
+        "total": total,
+        "start": start,
+        "end": end,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+    }
 
 
 def _admin_edit_requests_redirect():
@@ -1082,6 +1142,8 @@ def inject_template_globals():
         "flash_tone": flash_tone,
         "flash_title": flash_title,
         "user_photo_url": _user_photo_url,
+        "format_audit_log": format_audit_log,
+        "office_emoji_only": _office_emoji_only,
     }
 
 
@@ -1106,7 +1168,11 @@ def login_required(f):
 
         if not session.get("user_id"):
             return _login_block("Please log in to continue.")
-        user = db.session.get(User, session["user_id"])
+        try:
+            user = db.session.get(User, session["user_id"])
+        except OperationalError:
+            db.session.rollback()
+            return _login_block("Database is not running. Start PostgreSQL, then try again.")
         if not user:
             session.clear()
             return _login_block("Please log in to continue.")
@@ -1122,7 +1188,11 @@ def login_required(f):
 def get_current_user():
     if not session.get("user_id"):
         return None
-    return db.session.get(User, session["user_id"])
+    try:
+        return db.session.get(User, session["user_id"])
+    except OperationalError:
+        db.session.rollback()
+        return None
 
 
 def _parse_requested_doc_type():
@@ -1213,7 +1283,8 @@ def _parse_ocr_input_from_request():
     doc_type = _parse_requested_doc_type()
     if doc_type is None:
         return None, None, None, "Please select a valid document type."
-    save_path, image_filename, err = _save_ocr_image_from_request()
+    new_file = bool(request.files.get("image") and request.files["image"].filename)
+    save_path, image_filename, err = _save_ocr_image_from_request(straighten=new_file)
     if err:
         return None, None, None, err
     return doc_type, save_path, image_filename, None
@@ -1404,7 +1475,7 @@ def _job_display_progress(job: dict) -> int:
     if started is None:
         return max(raw, 8)
     elapsed = max(0.0, (datetime.utcnow() - started).total_seconds())
-    estimated = min(88, 12 + int(elapsed * 2))
+    estimated = min(95, 18 + int(elapsed * 2.4))
     return max(raw, estimated)
 
 
@@ -1500,7 +1571,6 @@ def _detect_document_type_sync(
     save_path: Path, prefer_worker: bool = True, ocr_fallback: bool = True
 ) -> dict:
     from ocr.detect import detect_from_image
-    from ocr.engine import document_type_label
 
     visual = detect_from_image(str(save_path), ocr_fallback=False)
     doc_type = (visual.get("doc_type") or "").strip().lower()
@@ -1511,49 +1581,11 @@ def _detect_document_type_sync(
             "confidence": visual.get("confidence") or "high",
             "reason": visual.get("reason") or "",
         }
-    if not ocr_fallback:
-        return {
-            "doc_type": None,
-            "label": "",
-            "confidence": "none",
-            "reason": visual.get("reason") or "Could not identify the document type",
-        }
-
-    job_id = f"detect-{uuid.uuid4().hex}"
-    holder = _register_detect_wait(job_id)
-    queued = False
-    if prefer_worker and (worker_is_alive() or start_ocr_worker()):
-        _ensure_ocr_listener()
-        queued = submit_detect_job(job_id, str(save_path))
-    if prefer_worker and queued:
-        holder["event"].wait(timeout=8)
-        _pop_detect_wait(job_id)
-        payload = holder.get("payload") or {}
-        found = (payload.get("doc_type") or "").strip().lower()
-        if found in DOCUMENT_TYPES:
-            return {
-                "doc_type": found,
-                "label": payload.get("label") or DOCUMENT_TYPES[found],
-                "confidence": payload.get("confidence") or "medium",
-                "reason": payload.get("reason") or "",
-            }
-        return {
-            "doc_type": None,
-            "label": "",
-            "confidence": "none",
-            "reason": payload.get("reason") or "Could not identify the document type",
-        }
-
-    _pop_detect_wait(job_id)
-    result = detect_from_image(str(save_path), ocr_fallback=True)
-    found = (result.get("doc_type") or "").strip().lower()
-    if found not in DOCUMENT_TYPES:
-        found = None
     return {
-        "doc_type": found,
-        "label": result.get("label") or document_type_label(found),
-        "confidence": result.get("confidence") or ("none" if not found else "medium"),
-        "reason": result.get("reason") or "",
+        "doc_type": None,
+        "label": "",
+        "confidence": "none",
+        "reason": visual.get("reason") or "Could not identify the document type",
     }
 
 
@@ -1640,6 +1672,7 @@ def _run_ocr_job(job_id: str, doc_type: str, save_path: Path, image_filename: st
                 )
                 return
             _set_ocr_job(job_id, doc_type=doc_type)
+        started = time.time()
         if doc_type == "birth":
             _set_ocr_job(job_id, progress=45, message="Extracting birth fields...")
             data = extract_birth_data(str(save_path))
@@ -1649,6 +1682,10 @@ def _run_ocr_job(job_id: str, doc_type: str, save_path: Path, image_filename: st
         else:
             _set_ocr_job(job_id, progress=45, message="Extracting death fields...")
             data = extract_death_data(str(save_path))
+        print(
+            f"OCR {doc_type} finished in {time.time() - started:.1f}s path=flask",
+            flush=True,
+        )
         with _OCR_JOBS_LOCK:
             job = _OCR_JOBS.get(job_id)
             if not job or job.get("status") == "cancelled":
@@ -1697,10 +1734,24 @@ def _start_ocr_job(doc_type: str, save_path: Path, image_filename: str) -> str:
             "updated_at": now_iso,
         }
     queued = False
-    if worker_is_alive() or start_ocr_worker():
-        _ensure_ocr_listener()
-        queued = submit_ocr_job(job_id, doc_type, str(save_path), image_filename)
+    for _attempt in range(40):
+        if worker_is_alive() or start_ocr_worker():
+            _ensure_ocr_listener()
+            queued = submit_ocr_job(job_id, doc_type, str(save_path), image_filename)
+            if queued:
+                break
+        time.sleep(0.25)
     if not queued:
+        start_ocr_worker()
+        time.sleep(1.0)
+        if worker_is_alive():
+            _ensure_ocr_listener()
+            queued = submit_ocr_job(job_id, doc_type, str(save_path), image_filename)
+    if not queued:
+        print(
+            "OCR worker unavailable; Flask-thread fallback (slower). Restart the app if times swing.",
+            flush=True,
+        )
         threading.Thread(
             target=_run_ocr_job,
             args=(job_id, doc_type, save_path, image_filename),
@@ -1723,6 +1774,153 @@ def admin_required(f):
         return f(*args, **kwargs)
 
     return wrapper
+
+
+_AUDIT_ACTION_LABELS = {
+    "PRINT_DOCUMENT": "Printed document",
+    "PRINT_REQUEST_SUBMIT": "Print request sent",
+    "PRINT_REQUEST_APPROVE": "Print request approved",
+    "PRINT_REQUEST_REJECT": "Print request rejected",
+    "EDIT_REQUEST_SUBMIT": "Edit request sent",
+    "EDIT_REQUEST_APPROVE": "Edit request approved",
+    "EDIT_REQUEST_REJECT": "Edit request rejected",
+    "LOGIN": "Signed in",
+    "LOGOUT": "Signed out",
+    "RECORD_CREATE": "Saved record",
+    "RECORD_EDIT": "Edited record",
+    "RECORD_DELETE": "Deleted record",
+    "RECORD_ANNOTATION": "Updated annotation",
+    "ATTACHMENT_ADD": "Added supporting document",
+    "ATTACHMENT_REMOVE": "Removed supporting document",
+    "RESTORE_DATA": "Restored backup",
+    "LOG_RETENTION_SETTINGS": "Office log settings",
+    "LOG_RETENTION_PURGE": "Cleared old office logs",
+    "USER_CREATE": "Created account",
+    "USER_DELETE": "Deleted account",
+    "USER_PASSWORD_RESET": "Reset password",
+    "USER_FORCE_LOGOUT": "Signed out user",
+    "PASSWORD_CHANGE": "Changed password",
+    "SESSION_REVOKE": "Signed out sessions",
+    "ACCOUNT_PHOTO_UPLOAD": "Uploaded photo",
+    "ACCOUNT_PHOTO_REMOVE": "Removed photo",
+    "AUTO_BACKUP": "Automatic backup",
+    "AUTO_BACKUP_SETTINGS": "Backup settings",
+    "AUTO_BACKUP_DELETED": "Deleted backup",
+    "AUTO_BACKUP_GET": "Copied backup",
+    "BACKUP_FULL": "Manual backup",
+    "OFFICE_MESSAGE": "Office message",
+}
+
+_AUDIT_KEY_LABELS = {
+    "record_id": "Record",
+    "request_id": "Request",
+    "print_type": "Copy",
+    "print_format": "Copy",
+    "registry": "Registry No.",
+    "username": "Account",
+    "role": "Role",
+    "code": "Code",
+    "kind": "Kind",
+    "period": "Period",
+    "records": "Records",
+    "file": "File",
+    "files": "Files",
+    "folder": "Folder",
+    "keep_days": "Keep days",
+    "enabled": "Automatic clearing",
+    "mode": "Mode",
+    "server": "Server",
+    "status": "Status",
+    "frequency": "Schedule",
+    "dest": "Folder",
+    "copied": "Copied",
+    "failed": "Failed",
+    "by": "By",
+    "type": "Type",
+    "source": "Source",
+    "run_id": "Backup",
+    "_note": "Note",
+}
+
+_AUDIT_VALUE_LABELS = {
+    "print_type": {
+        "original": "Original scan",
+        "certification": "Certification form",
+        "both": "Both copies",
+    },
+    "print_format": {
+        "original": "Original scan",
+        "certification": "Certification form",
+        "both": "Both copies",
+    },
+    "role": {"ADMIN": "Administrator", "STAFF": "Staff"},
+    "server": {"skipped": "Not copied", "ok": "Copied", "failed": "Failed"},
+    "status": {"enabled": "On", "disabled": "Off"},
+    "enabled": {
+        "True": "On",
+        "False": "Off",
+        "true": "On",
+        "false": "Off",
+        "1": "On",
+        "0": "Off",
+    },
+}
+
+
+def _audit_action_label(action: str) -> str:
+    raw = (action or "").strip()
+    if not raw:
+        return "Activity"
+    key = raw.upper().replace(" ", "_")
+    if raw in _AUDIT_ACTION_LABELS:
+        return _AUDIT_ACTION_LABELS[raw]
+    if key in _AUDIT_ACTION_LABELS:
+        return _AUDIT_ACTION_LABELS[key]
+    return raw.replace("_", " ").strip().capitalize()
+
+
+def _audit_parse_details(raw: str) -> list[tuple[str, str]]:
+    text = re.sub(r"\s+", " ", (raw or "").strip())
+    if not text:
+        return []
+    pairs: list[tuple[str, str]] = []
+    leftover: list[str] = []
+    for part in text.split(" "):
+        if "=" in part:
+            key, value = part.split("=", 1)
+            if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", key or ""):
+                pairs.append((key, value))
+                continue
+        leftover.append(part)
+    if leftover:
+        note = " ".join(leftover).strip(" ·-")
+        if note:
+            pairs.append(("_note", note))
+    return pairs
+
+
+def format_audit_log(action: str, details: str = "") -> dict:
+    """Turn stored audit codes into office-readable action + detail chips."""
+    items = []
+    for key, value in _audit_parse_details(details):
+        shown = str(value or "").strip()
+        if not shown:
+            continue
+        if key == "file":
+            shown = shown.replace("\\", "/").rstrip("/").split("/")[-1] or shown
+        mapped = (_AUDIT_VALUE_LABELS.get(key) or {}).get(shown) or (
+            _AUDIT_VALUE_LABELS.get(key) or {}
+        ).get(shown.upper())
+        items.append(
+            {
+                "label": _AUDIT_KEY_LABELS.get(key) or key.replace("_", " ").title(),
+                "value": mapped or shown,
+            }
+        )
+    return {"action": _audit_action_label(action), "chips": items}
+
+
+app.jinja_env.globals["format_audit_log"] = format_audit_log
 
 
 def _log_audit(user_id, action: str, details: str = ""):
@@ -1779,6 +1977,7 @@ def login():
         session["session_version"] = int(getattr(user, "session_version", 0) or 0)
         user.last_login_at = datetime.utcnow()
         db.session.commit()
+        _log_audit(user.id, "LOGIN", f"username={user.username} role={user.role or ''}")
         _remember_password_vault(user, password)
         if ajax:
             role = (user.role or "").strip().lower()
@@ -1799,6 +1998,9 @@ def login():
 
 @app.route("/logout")
 def logout():
+    user = get_current_user()
+    if user:
+        _log_audit(user.id, "LOGOUT", f"username={user.username} role={user.role or ''}")
     session.clear()
     return redirect(url_for("login"))
 
@@ -1828,12 +2030,21 @@ def _user_photo_file(user) -> Path | None:
 
 
 def _user_photo_url(user) -> str:
-    if not user or not getattr(user, "photo_path", None):
+    if not user:
+        return ""
+    cached = getattr(user, "_cached_photo_url", None)
+    if cached is not None:
+        return cached
+    if not getattr(user, "photo_path", None):
+        user._cached_photo_url = ""
         return ""
     path = _user_photo_file(user)
     if path is None:
+        user._cached_photo_url = ""
         return ""
-    return url_for("account_photo", user_id=user.id, v=int(path.stat().st_mtime))
+    url = url_for("account_photo", user_id=user.id, v=int(path.stat().st_mtime))
+    user._cached_photo_url = url
+    return url
 
 
 def _delete_user_photo_file(user) -> None:
@@ -1993,9 +2204,14 @@ def account_upload_photo():
 @app.route("/account/photo/<int:user_id>")
 @login_required
 def account_photo(user_id):
+    viewer = get_current_user()
     user = db.session.get(User, user_id)
-    if not user:
+    if not user or not viewer:
         return ("", 404)
+    same_person = int(viewer.id) == int(user.id)
+    admin_viewer = (viewer.role or "").upper() == "ADMIN"
+    if not same_person and not admin_viewer and not _office_can_message(viewer, user):
+        return ("", 403)
     path = _user_photo_file(user)
     if path is None:
         return ("", 404)
@@ -2137,7 +2353,7 @@ def api_detect_document_type():
     save_path, image_filename, err = _save_ocr_image_from_request(straighten=False)
     if err:
         return {"ok": False, "error": err}, 400
-    detected = _detect_document_type_sync(save_path, prefer_worker=False, ocr_fallback=True)
+    detected = _detect_document_type_sync(save_path, prefer_worker=True, ocr_fallback=True)
     doc_type = detected.get("doc_type") or ""
     if doc_type not in ("birth", "marriage", "death"):
         doc_type = ""
@@ -2313,11 +2529,33 @@ def api_ocr_cancel():
 def _record_notice_label(record) -> str:
     if not record:
         return "a record"
-    kind = (record.document_type or "record").capitalize()
-    reg = (record.registry_number or "").strip()
+    try:
+        kind = (record.document_type or "record").capitalize()
+        reg = (record.registry_number or "").strip()
+        rid = record.id
+    except ObjectDeletedError:
+        return "a deleted record"
     if reg:
         return f"{kind} · {reg}"
-    return f"{kind} record #{record.id}"
+    return f"{kind} record #{rid}"
+
+
+def _request_actor_name(req) -> str:
+    try:
+        who = getattr(req, "requested_by", None)
+        name = (who.username or "").strip() if who else ""
+        if name:
+            return name
+    except ObjectDeletedError:
+        pass
+    return "Staff"
+
+
+def _request_record_label(req) -> str:
+    try:
+        return _record_notice_label(getattr(req, "record", None))
+    except ObjectDeletedError:
+        return "a deleted record"
 
 
 def _notice_iso(dt) -> str:
@@ -2411,41 +2649,94 @@ def _collect_notifications(user) -> dict:
     role = (user.role or "").upper()
     items = []
     badges = {}
+    recent_done = datetime.utcnow() - timedelta(days=14)
 
     if role == "ADMIN":
-        pending_edits = (
-            EditRequest.query.filter_by(status="PENDING")
-            .order_by(EditRequest.requested_at.desc())
-            .limit(12)
+        open_edits = (
+            _filter_staff_edit_progress(EditRequest.query, "pending")
+            .options(joinedload(EditRequest.record), joinedload(EditRequest.requested_by))
+            .order_by(EditRequest.requested_at.desc(), EditRequest.id.desc())
+            .limit(200)
             .all()
         )
-        pending_prints = (
-            PrintRequest.query.filter_by(status="PENDING")
-            .order_by(PrintRequest.requested_at.desc())
-            .limit(12)
+        open_prints = (
+            _filter_staff_print_progress(PrintRequest.query, "pending")
+            .options(joinedload(PrintRequest.record), joinedload(PrintRequest.requested_by))
+            .order_by(PrintRequest.requested_at.desc(), PrintRequest.id.desc())
+            .limit(200)
             .all()
         )
-        for req in pending_edits:
-            who = req.requested_by.username if req.requested_by else "Staff"
+        done_edits = (
+            _filter_staff_edit_progress(EditRequest.query, "complete")
+            .options(joinedload(EditRequest.record), joinedload(EditRequest.requested_by))
+            .filter(
+                or_(
+                    EditRequest.reviewed_at >= recent_done,
+                    EditRequest.code_used_at >= recent_done,
+                    EditRequest.requested_at >= recent_done,
+                )
+            )
+            .order_by(EditRequest.reviewed_at.desc(), EditRequest.id.desc())
+            .limit(80)
+            .all()
+        )
+        done_prints = (
+            _filter_staff_print_progress(PrintRequest.query, "complete")
+            .options(joinedload(PrintRequest.record), joinedload(PrintRequest.requested_by))
+            .filter(
+                or_(
+                    PrintRequest.reviewed_at >= recent_done,
+                    PrintRequest.used_at >= recent_done,
+                    PrintRequest.requested_at >= recent_done,
+                )
+            )
+            .order_by(PrintRequest.reviewed_at.desc(), PrintRequest.id.desc())
+            .limit(80)
+            .all()
+        )
+        for req in open_edits:
+            waiting = (req.status or "").upper() == "PENDING"
             items.append({
                 "id": f"edit-{req.id}",
                 "kind": "edit",
-                "title": "New edit request",
-                "body": f"{who} asked to edit {_record_notice_label(req.record)}",
+                "title": "Edit request waiting" if waiting else "Edit approved — code unused",
+                "body": f"{_request_actor_name(req)} · {_request_record_label(req)}",
                 "detail": (req.reason or "").strip(),
-                "url": url_for("administration", tab="edit_requests"),
-                "at": _notice_iso(req.requested_at),
+                "url": url_for("administration", tab="edit_requests", status="pending"),
+                "at": _notice_iso(req.requested_at if waiting else (req.reviewed_at or req.requested_at)),
             })
-        for req in pending_prints:
-            who = req.requested_by.username if req.requested_by else "Staff"
+        for req in open_prints:
+            waiting = (req.status or "").upper() == "PENDING"
             items.append({
                 "id": f"print-{req.id}",
                 "kind": "print",
-                "title": "New print request",
-                "body": f"{who} asked to print {_record_notice_label(req.record)}",
+                "title": "Print request waiting" if waiting else "Print approved — code unused",
+                "body": f"{_request_actor_name(req)} · {_request_record_label(req)}",
                 "detail": (req.reason or "").strip(),
-                "url": url_for("administration", tab="print_requests"),
-                "at": _notice_iso(req.requested_at),
+                "url": url_for("administration", tab="print_requests", status="pending"),
+                "at": _notice_iso(req.requested_at if waiting else (req.reviewed_at or req.requested_at)),
+            })
+        for req in done_edits:
+            used = bool(req.code_used_at)
+            items.append({
+                "id": f"edit-done-{req.id}",
+                "kind": "edit-done",
+                "title": "Edit request completed" if used else "Edit request rejected",
+                "body": f"{_request_actor_name(req)} · {_request_record_label(req)}",
+                "detail": (req.rejection_reason or req.reason or "").strip(),
+                "url": url_for("administration", tab="edit_requests", status="complete"),
+                "at": _notice_iso(req.code_used_at or req.reviewed_at or req.requested_at),
+            })
+        for req in done_prints:
+            used = bool(req.used_at)
+            items.append({
+                "id": f"print-done-{req.id}",
+                "kind": "print-done",
+                "title": "Print request completed" if used else "Print request rejected",
+                "body": f"{_request_actor_name(req)} · {_request_record_label(req)}",
+                "detail": (req.rejection_reason or req.reason or "").strip(),
+                "url": url_for("administration", tab="print_requests", status="complete"),
+                "at": _notice_iso(req.used_at or req.reviewed_at or req.requested_at),
             })
         badges = _admin_attention_badges()
         try:
@@ -2503,42 +2794,64 @@ def _collect_notifications(user) -> dict:
         badges["total"] = int(badges.get("total") or 0)
 
     elif role == "STAFF":
+        mine_edits = EditRequest.query.filter_by(requested_by_id=user.id)
+        mine_prints = PrintRequest.query.filter_by(requested_by_id=user.id)
         pending_edits = (
-            EditRequest.query.filter_by(requested_by_id=user.id, status="PENDING")
-            .order_by(EditRequest.requested_at.desc())
-            .limit(8)
+            mine_edits.filter_by(status="PENDING")
+            .options(joinedload(EditRequest.record))
+            .order_by(EditRequest.requested_at.desc(), EditRequest.id.desc())
+            .limit(200)
             .all()
         )
         ready_edits = (
-            EditRequest.query.filter_by(requested_by_id=user.id, status="APPROVED")
+            mine_edits.filter_by(status="APPROVED")
             .filter(EditRequest.code_used_at.is_(None))
-            .order_by(EditRequest.reviewed_at.desc())
-            .limit(8)
+            .options(joinedload(EditRequest.record))
+            .order_by(EditRequest.reviewed_at.desc(), EditRequest.id.desc())
+            .limit(200)
             .all()
         )
         pending_prints = (
-            PrintRequest.query.filter_by(requested_by_id=user.id, status="PENDING")
-            .order_by(PrintRequest.requested_at.desc())
-            .limit(8)
+            mine_prints.filter_by(status="PENDING")
+            .options(joinedload(PrintRequest.record))
+            .order_by(PrintRequest.requested_at.desc(), PrintRequest.id.desc())
+            .limit(200)
             .all()
         )
         ready_prints = (
-            PrintRequest.query.filter_by(requested_by_id=user.id, status="APPROVED")
+            mine_prints.filter_by(status="APPROVED")
             .filter(PrintRequest.used_at.is_(None))
-            .order_by(PrintRequest.reviewed_at.desc())
-            .limit(8)
+            .options(joinedload(PrintRequest.record))
+            .order_by(PrintRequest.reviewed_at.desc(), PrintRequest.id.desc())
+            .limit(200)
             .all()
         )
-        rejected_edits = (
-            EditRequest.query.filter_by(requested_by_id=user.id, status="REJECTED")
-            .order_by(EditRequest.reviewed_at.desc())
-            .limit(6)
+        done_edits = (
+            _filter_staff_edit_progress(mine_edits, "complete")
+            .options(joinedload(EditRequest.record))
+            .filter(
+                or_(
+                    EditRequest.reviewed_at >= recent_done,
+                    EditRequest.code_used_at >= recent_done,
+                    EditRequest.requested_at >= recent_done,
+                )
+            )
+            .order_by(EditRequest.reviewed_at.desc(), EditRequest.id.desc())
+            .limit(80)
             .all()
         )
-        rejected_prints = (
-            PrintRequest.query.filter_by(requested_by_id=user.id, status="REJECTED")
-            .order_by(PrintRequest.reviewed_at.desc())
-            .limit(6)
+        done_prints = (
+            _filter_staff_print_progress(mine_prints, "complete")
+            .options(joinedload(PrintRequest.record))
+            .filter(
+                or_(
+                    PrintRequest.reviewed_at >= recent_done,
+                    PrintRequest.used_at >= recent_done,
+                    PrintRequest.requested_at >= recent_done,
+                )
+            )
+            .order_by(PrintRequest.reviewed_at.desc(), PrintRequest.id.desc())
+            .limit(80)
             .all()
         )
         for req in ready_edits:
@@ -2546,7 +2859,7 @@ def _collect_notifications(user) -> dict:
                 "id": f"edit-ready-{req.id}",
                 "kind": "edit-ready",
                 "title": "Edit approved",
-                "body": f"Use your 5-digit code on {_record_notice_label(req.record)}",
+                "body": f"Use your 5-digit code on {_request_record_label(req)}",
                 "url": url_for("record_detail", record_id=req.record_id) + "#staff-edit-code",
                 "at": _notice_iso(req.reviewed_at or req.requested_at),
             })
@@ -2555,7 +2868,7 @@ def _collect_notifications(user) -> dict:
                 "id": f"print-ready-{req.id}",
                 "kind": "print-ready",
                 "title": "Print approved",
-                "body": f"Type the 5-digit print code for {_record_notice_label(req.record)}",
+                "body": f"Type the 5-digit print code for {_request_record_label(req)}",
                 "url": url_for("record_detail", record_id=req.record_id) + "#staff-print-code",
                 "at": _notice_iso(req.reviewed_at or req.requested_at),
             })
@@ -2564,8 +2877,8 @@ def _collect_notifications(user) -> dict:
                 "id": f"edit-wait-{req.id}",
                 "kind": "edit",
                 "title": "Edit request pending",
-                "body": f"Waiting for admin on {_record_notice_label(req.record)}",
-                "url": url_for("my_edit_requests"),
+                "body": f"Waiting for admin on {_request_record_label(req)}",
+                "url": url_for("my_edit_requests", status="pending"),
                 "at": _notice_iso(req.requested_at),
             })
         for req in pending_prints:
@@ -2573,29 +2886,31 @@ def _collect_notifications(user) -> dict:
                 "id": f"print-wait-{req.id}",
                 "kind": "print",
                 "title": "Print request pending",
-                "body": f"Waiting for admin on {_record_notice_label(req.record)}",
-                "url": url_for("my_print_requests"),
+                "body": f"Waiting for admin on {_request_record_label(req)}",
+                "url": url_for("my_print_requests", status="pending"),
                 "at": _notice_iso(req.requested_at),
             })
-        for req in rejected_edits:
+        for req in done_edits:
+            used = bool(req.code_used_at)
             items.append({
-                "id": f"edit-rej-{req.id}",
-                "kind": "edit-rejected",
-                "title": "Edit request rejected",
-                "body": f"Admin rejected {_record_notice_label(req.record)}",
-                "detail": (req.rejection_reason or "").strip() or "No reason given",
-                "url": url_for("my_edit_requests"),
-                "at": _notice_iso(req.reviewed_at or req.requested_at),
+                "id": f"edit-rej-{req.id}" if not used else f"edit-done-{req.id}",
+                "kind": "edit-rejected" if not used else "edit-done",
+                "title": "Edit request completed" if used else "Edit request rejected",
+                "body": f"{'You used the code on' if used else 'Admin rejected'} {_request_record_label(req)}",
+                "detail": (req.rejection_reason or "").strip(),
+                "url": url_for("my_edit_requests", status="complete"),
+                "at": _notice_iso(req.code_used_at or req.reviewed_at or req.requested_at),
             })
-        for req in rejected_prints:
+        for req in done_prints:
+            used = bool(req.used_at)
             items.append({
-                "id": f"print-rej-{req.id}",
-                "kind": "print-rejected",
-                "title": "Print request rejected",
-                "body": f"Admin rejected {_record_notice_label(req.record)}",
-                "detail": (req.rejection_reason or "").strip() or "No reason given",
-                "url": url_for("my_print_requests"),
-                "at": _notice_iso(req.reviewed_at or req.requested_at),
+                "id": f"print-rej-{req.id}" if not used else f"print-done-{req.id}",
+                "kind": "print-rejected" if not used else "print-done",
+                "title": "Print request completed" if used else "Print request rejected",
+                "body": f"{'You printed' if used else 'Admin rejected'} {_request_record_label(req)}",
+                "detail": (req.rejection_reason or "").strip(),
+                "url": url_for("my_print_requests", status="complete"),
+                "at": _notice_iso(req.used_at or req.reviewed_at or req.requested_at),
             })
         badges = {
             "staff_my_requests_pending": EditRequest.query.filter_by(requested_by_id=user.id, status="PENDING").count(),
@@ -2618,8 +2933,38 @@ def _collect_notifications(user) -> dict:
             + badges["staff_print_pending"]
         )
 
+    try:
+        unread_msgs = (
+            OfficeMessage.query.filter_by(recipient_id=user.id)
+            .filter(OfficeMessage.read_at.is_(None))
+            .order_by(OfficeMessage.id.desc())
+            .limit(40)
+            .all()
+        )
+        for msg in unread_msgs:
+            sender = msg.sender
+            if sender is None and msg.sender_id:
+                sender = db.session.get(User, msg.sender_id)
+            who = (sender.username if sender else "Someone").strip() or "Someone"
+            items.append({
+                "id": f"omsg-{msg.id}",
+                "kind": "message",
+                "title": "Office message",
+                "body": f"{who} sent you a message",
+                "detail": _office_message_preview(msg.body),
+                "url": url_for("office_messages", peer_id=msg.sender_id),
+                "at": _notice_iso(msg.created_at),
+            })
+        unread_n = OfficeMessage.query.filter_by(recipient_id=user.id).filter(
+            OfficeMessage.read_at.is_(None)
+        ).count()
+        badges["office_messages_unread"] = unread_n
+    except Exception:
+        db.session.rollback()
+        badges["office_messages_unread"] = 0
+
     items.sort(key=lambda row: row.get("at") or "", reverse=True)
-    items = items[:20]
+    items = items[:200]
     try:
         read_map = {
             row.notice_id: bool(row.is_read)
@@ -2667,7 +3012,18 @@ def api_notifications():
     user = get_current_user()
     if not user:
         return {"ok": False}, 401
-    return _notifications_payload(user)
+    try:
+        return _notifications_payload(user)
+    except Exception:
+        db.session.rollback()
+        logging.getLogger(__name__).exception("Notifications failed")
+        return {
+            "ok": True,
+            "role": (user.role or "").upper(),
+            "count": 0,
+            "items": [],
+            "badges": {},
+        }
 
 
 @app.route("/api/notifications/read", methods=["POST"])
@@ -3176,6 +3532,17 @@ def record_detail(record_id):
     missing_print_fields = missing_required_review_fields(
         record.document_type, _record_print_payload(record, data)
     )
+    try:
+        support = _supporting_template_vars(record)
+        live = db.session.get(Record, record_id)
+        if live is None:
+            flash("This record is no longer available.")
+            return redirect(url_for("search_records"))
+        record = live
+    except ObjectDeletedError:
+        db.session.rollback()
+        flash("This record is no longer available.")
+        return redirect(url_for("search_records"))
     return render_template(
         "record_detail.html",
         record=record,
@@ -3192,7 +3559,7 @@ def record_detail(record_id):
         form_meta=form_meta(record.document_type),
         approved_print_format=approved_print_format,
         annotation_form=annotation_form_defaults(data),
-        **_supporting_template_vars(record),
+        **support,
     )
 
 
@@ -3292,8 +3659,8 @@ def record_add_attachment(record_id):
         db.session.commit()
         _log_audit(
             user.id,
-            "Add supporting document",
-            f"Record {record.id} · {saved} file(s) · {folder_rel}",
+            "ATTACHMENT_ADD",
+            f"record_id={record.id} files={saved} folder={folder_rel}",
         )
         flash(f"{saved} file{'s' if saved != 1 else ''} attached.")
     else:
@@ -3388,7 +3755,7 @@ def record_delete_attachment(record_id, attachment_id):
             full.unlink(missing_ok=True)
         except OSError:
             pass
-    _log_audit(user.id, "Remove supporting document", f"Record {record.id} · {original}")
+    _log_audit(user.id, "ATTACHMENT_REMOVE", f"record_id={record.id} file={original}")
     flash("File removed.")
     return redirect(url_for("record_detail", record_id=record_id) + "#rd-supporting")
 
@@ -3413,7 +3780,7 @@ def record_log_print(record_id):
     except Exception:
         missing_keys = []
         missing_labels = []
-    if missing_labels:
+    if missing_labels and (user.role or "").upper() != "ADMIN":
         return jsonify({
             "ok": False,
             "error": "Fill the missing Extracted metadata fields before printing: " + ", ".join(missing_labels) + ".",
@@ -3632,7 +3999,14 @@ def administration():
             PrintRequest, request_doc_type, request_progress, request.args.get("page")
         )
         request_list_args = _admin_request_query_args(tab, request_doc_type, request_progress)
-    audit_logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(100).all() if tab == "audit" else []
+    audit_logs = []
+    log_pager = {"page": 1, "pages": 1, "total": 0, "start": 0, "end": 0, "has_prev": False, "has_next": False, "per_page": ADMIN_LOG_PAGE_SIZE}
+    if tab == "audit":
+        audit_logs, log_pager = _paged_admin_logs(
+            AuditLog.query.options(joinedload(AuditLog.user)).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()),
+            request.args.get("page"),
+        )
+        request_list_args = {"tab": "audit"}
     users_list = []
     password_target = None
     if tab == "users":
@@ -3648,23 +4022,30 @@ def administration():
             password_target = next((u for u in users_list if u.id == set_id), None)
     print_logs = []
     if tab == "print_logs":
-        print_logs = (
-            PrintLog.query
-            .order_by(PrintLog.printed_at.desc())
-            .limit(100)
-            .all()
+        print_logs, log_pager = _paged_admin_logs(
+            PrintLog.query.options(joinedload(PrintLog.user), joinedload(PrintLog.record)).order_by(
+                PrintLog.printed_at.desc(), PrintLog.id.desc()
+            ),
+            request.args.get("page"),
         )
-    pending_count = EditRequest.query.filter_by(status="PENDING").count()
-    pending_print_count = PrintRequest.query.filter_by(status="PENDING").count()
-    # Dashboard stats
-    birth_count = Record.query.filter_by(document_type="birth").count()
-    marriage_count = Record.query.filter_by(document_type="marriage").count()
-    death_count = Record.query.filter_by(document_type="death").count()
-    total_records = birth_count + marriage_count + death_count
-    users_count = User.query.count()
-    staff_count = User.query.filter(db.func.upper(User.role) == "STAFF").count()
-    admin_users_count = User.query.filter(db.func.upper(User.role) == "ADMIN").count()
-    audit_recent_count = AuditLog.query.count()
+        request_list_args = {"tab": "print_logs"}
+    pending_count = 0
+    pending_print_count = 0
+    birth_count = marriage_count = death_count = total_records = 0
+    users_count = staff_count = admin_users_count = audit_recent_count = 0
+    if tab == "dashboard":
+        pending_count = EditRequest.query.filter_by(status="PENDING").count()
+        pending_print_count = PrintRequest.query.filter_by(status="PENDING").count()
+        birth_count = Record.query.filter_by(document_type="birth").count()
+        marriage_count = Record.query.filter_by(document_type="marriage").count()
+        death_count = Record.query.filter_by(document_type="death").count()
+        total_records = birth_count + marriage_count + death_count
+        users_count = User.query.count()
+        staff_count = User.query.filter(db.func.upper(User.role) == "STAFF").count()
+        admin_users_count = User.query.filter(db.func.upper(User.role) == "ADMIN").count()
+        audit_recent_count = AuditLog.query.count()
+    elif tab == "users":
+        admin_users_count = User.query.filter(db.func.upper(User.role) == "ADMIN").count()
     backup_tabs = tab == "automatic_backup"
     auto_backup_settings = load_auto_backup_settings(BASE_DIR) if backup_tabs else None
     auto_backup_files = []
@@ -3679,16 +4060,19 @@ def administration():
             backup_readiness = get_backup_readiness(BASE_DIR, auto_backup_settings)
         except Exception:
             backup_readiness = None
-    try:
-        scan_year_stats = _records_scanned_by_year()
-    except Exception:
-        now_year_n = (datetime.utcnow() + timedelta(hours=8)).year
-        scan_year_stats = {
-            "years": {str(now_year_n): {"birth": 0, "marriage": 0, "death": 0}},
-            "year_list": [str(y) for y in range(now_year_n, now_year_n + 16)],
-            "all": {"birth": 0, "marriage": 0, "death": 0},
-            "default_year": str(now_year_n),
-        }
+    if tab == "dashboard":
+        try:
+            scan_year_stats = _records_scanned_by_year()
+        except Exception:
+            now_year_n = (datetime.utcnow() + timedelta(hours=8)).year
+            scan_year_stats = {
+                "years": {str(now_year_n): {"birth": 0, "marriage": 0, "death": 0}},
+                "year_list": [str(y) for y in range(now_year_n, now_year_n + 16)],
+                "all": {"birth": 0, "marriage": 0, "death": 0},
+                "default_year": str(now_year_n),
+            }
+    else:
+        scan_year_stats = None
     return render_template(
         "administration.html",
         current_user=get_current_user(),
@@ -3714,7 +4098,7 @@ def administration():
         request_doc_type=request_doc_type,
         request_progress=request_progress,
         progress_counts=progress_counts,
-        request_pager=request_pager,
+        request_pager=log_pager if tab in ("audit", "print_logs") else request_pager,
         request_list_args=request_list_args,
         auto_backup_settings=auto_backup_settings,
         auto_backup_files=auto_backup_files,
@@ -3724,10 +4108,26 @@ def administration():
         auto_backup_server_folder=server_backup_display(BASE_DIR, auto_backup_settings) if backup_tabs else "",
         vault_info=vault_status(BASE_DIR, UPLOAD_DIR) if backup_tabs else None,
         backup_schedule_hint=schedule_summary(auto_backup_settings) if backup_tabs and auto_backup_settings else "",
-        log_retention=load_log_retention_settings(BASE_DIR),
-        log_retention_hint=retention_hint(load_log_retention_settings(BASE_DIR)),
+        log_retention=load_log_retention_settings(BASE_DIR) if tab in ("office_logs", "dashboard") else None,
+        log_retention_hint=retention_hint(load_log_retention_settings(BASE_DIR)) if tab in ("office_logs", "dashboard") else "",
         scan_year_stats=scan_year_stats,
         office_log_stats=office_log_counts() if tab in ("office_logs", "dashboard") else None,
+        office_print_logs=(
+            PrintLog.query.options(joinedload(PrintLog.user), joinedload(PrintLog.record))
+            .order_by(PrintLog.printed_at.desc(), PrintLog.id.desc())
+            .limit(8)
+            .all()
+            if tab == "office_logs"
+            else []
+        ),
+        office_audit_logs=(
+            AuditLog.query.options(joinedload(AuditLog.user))
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(8)
+            .all()
+            if tab == "office_logs"
+            else []
+        ),
         today_backup_stamp=daily_backup_stamp(),
         revealed_password=session.pop("admin_password_reveal", None) if tab == "users" else None,
         password_target=password_target,
@@ -4444,7 +4844,12 @@ def _unhandled_error(exc):
     if isinstance(exc, HTTPException):
         return exc
     logging.getLogger(__name__).exception("Unhandled application error")
-    message = "Something went wrong. Please try again."
+    if isinstance(exc, OperationalError):
+        message = "Database is not running. Start PostgreSQL, then try again."
+    elif isinstance(exc, ObjectDeletedError):
+        message = "This record is no longer available."
+    else:
+        message = "Something went wrong. Please try again."
     try:
         wants_json = (
             request.headers.get("X-Daraga-Restore") == "1"
@@ -4456,8 +4861,11 @@ def _unhandled_error(exc):
             return jsonify({"ok": False, "error": message, "message": message}), 500
         flash(message, "error")
         if session.get("user_id"):
-            target = request.referrer or url_for("index")
-            return redirect(target)
+            here = (request.path or "").split("?")[0]
+            ref = (request.referrer or "").split("?")[0]
+            if ref and here and here not in ref:
+                return redirect(request.referrer)
+            return redirect(url_for("index"))
         return redirect(url_for("login"))
     except Exception:
         return message, 500
@@ -5131,11 +5539,16 @@ def my_edit_requests():
             Record.document_type == request_doc_type
         )
     progress_counts = {
-        "all": requests_q.count(),
-        "pending": _filter_staff_edit_progress(requests_q, "pending").count(),
-        "complete": _filter_staff_edit_progress(requests_q, "complete").count(),
+        "all": requests_q.order_by(None).count(),
+        "pending": _filter_staff_edit_progress(requests_q, "pending").order_by(None).count(),
+        "complete": _filter_staff_edit_progress(requests_q, "complete").order_by(None).count(),
     }
-    requests_list = requests_q.order_by(EditRequest.requested_at.desc()).all()
+    requests_list = (
+        _filter_staff_edit_progress(requests_q, request_progress)
+        .options(joinedload(EditRequest.record))
+        .order_by(EditRequest.requested_at.desc(), EditRequest.id.desc())
+        .all()
+    )
     return render_template(
         "my_edit_requests.html",
         current_user=user,
@@ -5164,11 +5577,16 @@ def my_print_requests():
             Record.document_type == request_doc_type
         )
     progress_counts = {
-        "all": requests_q.count(),
-        "pending": _filter_staff_print_progress(requests_q, "pending").count(),
-        "complete": _filter_staff_print_progress(requests_q, "complete").count(),
+        "all": requests_q.order_by(None).count(),
+        "pending": _filter_staff_print_progress(requests_q, "pending").order_by(None).count(),
+        "complete": _filter_staff_print_progress(requests_q, "complete").order_by(None).count(),
     }
-    requests_list = requests_q.order_by(PrintRequest.requested_at.desc()).all()
+    requests_list = (
+        _filter_staff_print_progress(requests_q, request_progress)
+        .options(joinedload(PrintRequest.record))
+        .order_by(PrintRequest.requested_at.desc(), PrintRequest.id.desc())
+        .all()
+    )
     return render_template(
         "my_print_requests.html",
         current_user=user,
@@ -5178,6 +5596,217 @@ def my_print_requests():
         request_doc_type=request_doc_type,
         request_progress=request_progress,
         progress_counts=progress_counts,
+    )
+
+
+OFFICE_MESSAGE_MAX = 2000
+
+
+def _office_emoji_only(text: str) -> bool:
+    clean = (text or "").strip()
+    if not clean or len(clean) > 8:
+        return False
+    return re.search(r"[A-Za-z0-9]", clean) is None
+
+
+app.jinja_env.globals["office_emoji_only"] = _office_emoji_only
+
+
+def _office_message_preview(text: str, limit: int = 80) -> str:
+    clean = " ".join((text or "").replace("\x00", "").split())
+    if len(clean) <= limit:
+        return clean
+    return clean[: limit - 1].rstrip() + "…"
+
+
+def _office_can_message(me, peer) -> bool:
+    if not me or not peer or int(me.id) == int(peer.id):
+        return False
+    mine = (me.role or "").upper()
+    theirs = (peer.role or "").upper()
+    if mine == "STAFF":
+        return theirs == "ADMIN"
+    if mine == "ADMIN":
+        return theirs == "STAFF"
+    return False
+
+
+def _office_contacts(me):
+    mine = (me.role or "").upper()
+    want = "ADMIN" if mine == "STAFF" else "STAFF"
+    return (
+        User.query.filter(db.func.upper(User.role) == want)
+        .order_by(User.username.asc(), User.id.asc())
+        .all()
+    )
+
+
+def _office_thread_query(me_id: int, peer_id: int):
+    return OfficeMessage.query.filter(
+        or_(
+            and_(OfficeMessage.sender_id == me_id, OfficeMessage.recipient_id == peer_id),
+            and_(OfficeMessage.sender_id == peer_id, OfficeMessage.recipient_id == me_id),
+        )
+    )
+
+
+def _office_mark_read(me_id: int, peer_id: int) -> None:
+    (
+        OfficeMessage.query.filter_by(sender_id=peer_id, recipient_id=me_id)
+        .filter(OfficeMessage.read_at.is_(None))
+        .update({"read_at": datetime.utcnow()}, synchronize_session=False)
+    )
+
+
+def _office_public_message(msg, me_id: int) -> dict:
+    created = msg.created_at
+    return {
+        "id": int(msg.id),
+        "mine": int(msg.sender_id) == int(me_id),
+        "body": msg.body or "",
+        "at": created.strftime("%b %d · %I:%M %p") if created else "",
+        "iso": created.isoformat() if created else "",
+    }
+
+
+def _office_contact_rows(me, contacts, active_id=None):
+    rows = []
+    for person in contacts:
+        last = (
+            _office_thread_query(me.id, person.id)
+            .order_by(OfficeMessage.id.desc())
+            .first()
+        )
+        unread = (
+            OfficeMessage.query.filter_by(sender_id=person.id, recipient_id=me.id)
+            .filter(OfficeMessage.read_at.is_(None))
+            .count()
+        )
+        rows.append(
+            {
+                "user": person,
+                "photo_url": _user_photo_url(person),
+                "last_preview": _office_message_preview(last.body) if last else "",
+                "last_at": last.created_at.strftime("%b %d") if last and last.created_at else "",
+                "last_id": int(last.id) if last else 0,
+                "unread": unread,
+                "active": int(person.id) == int(active_id or 0),
+            }
+        )
+    rows.sort(key=lambda row: (0 if row["unread"] else 1, -row["last_id"], row["user"].username.lower()))
+    return rows
+
+
+@app.route("/office-messages")
+@app.route("/office-messages/<int:peer_id>")
+@login_required
+def office_messages(peer_id=None):
+    user = get_current_user()
+    if not user:
+        return redirect(url_for("login"))
+    contacts = _office_contacts(user)
+    peer = None
+    if peer_id:
+        peer = db.session.get(User, peer_id)
+        if not _office_can_message(user, peer):
+            flash("You can only message office staff and administrators.", "error")
+            return redirect(url_for("office_messages"))
+    if peer is None and len(contacts) == 1:
+        peer = contacts[0]
+        return redirect(url_for("office_messages", peer_id=peer.id))
+    thread = []
+    if peer:
+        try:
+            _office_mark_read(user.id, peer.id)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        thread = (
+            _office_thread_query(user.id, peer.id)
+            .order_by(OfficeMessage.id.asc())
+            .limit(400)
+            .all()
+        )
+    return render_template(
+        "office_messages.html",
+        current_user=user,
+        nav_active="messages",
+        contact_rows=_office_contact_rows(user, contacts, peer.id if peer else None),
+        peer=peer,
+        peer_photo=_user_photo_url(peer) if peer else "",
+        thread=thread,
+        thread_json=[_office_public_message(msg, user.id) for msg in thread],
+        directory_label="Administrators" if (user.role or "").upper() == "STAFF" else "Staff",
+    )
+
+
+@app.route("/office-messages/<int:peer_id>/send", methods=["POST"])
+@login_required
+def office_messages_send(peer_id):
+    user = get_current_user()
+    if not user:
+        return redirect(url_for("login"))
+    wants_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    peer = db.session.get(User, peer_id)
+    if not _office_can_message(user, peer):
+        message = "You can only message office staff and administrators."
+        if wants_json:
+            return jsonify({"ok": False, "error": message}), 403
+        flash(message, "error")
+        return redirect(url_for("office_messages"))
+    payload = request.get_json(silent=True) if wants_json else None
+    raw = (payload or {}).get("body") if isinstance(payload, dict) else request.form.get("body")
+    body = str(raw or "").replace("\x00", "").replace("\r\n", "\n").strip()
+    if not body:
+        message = "Type a message first."
+        if wants_json:
+            return jsonify({"ok": False, "error": message}), 400
+        flash(message, "error")
+        return redirect(url_for("office_messages", peer_id=peer.id))
+    if len(body) > OFFICE_MESSAGE_MAX:
+        body = body[:OFFICE_MESSAGE_MAX]
+    row = OfficeMessage(sender_id=user.id, recipient_id=peer.id, body=body)
+    db.session.add(row)
+    db.session.commit()
+    _log_audit(user.id, "OFFICE_MESSAGE", f"to={peer.username} to_id={peer.id}")
+    if wants_json:
+        return jsonify({"ok": True, "message": _office_public_message(row, user.id)})
+    return redirect(url_for("office_messages", peer_id=peer.id))
+
+
+@app.route("/api/office-messages/<int:peer_id>")
+@login_required
+def api_office_messages(peer_id):
+    user = get_current_user()
+    if not user:
+        return jsonify({"ok": False, "error": "Please log in."}), 401
+    peer = db.session.get(User, peer_id)
+    if not _office_can_message(user, peer):
+        return jsonify({"ok": False, "error": "Not allowed."}), 403
+    after_id = 0
+    try:
+        after_id = int(request.args.get("after") or 0)
+    except (TypeError, ValueError):
+        after_id = 0
+    try:
+        _office_mark_read(user.id, peer.id)
+        db.session.commit()
+        q = _office_thread_query(user.id, peer.id)
+        if after_id > 0:
+            q = q.filter(OfficeMessage.id > after_id)
+        rows = q.order_by(OfficeMessage.id.asc()).limit(200).all()
+        unread = OfficeMessage.query.filter_by(recipient_id=user.id).filter(
+            OfficeMessage.read_at.is_(None)
+        ).count()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": "Could not load messages."}), 500
+    return jsonify(
+        {
+            "ok": True,
+            "messages": [_office_public_message(msg, user.id) for msg in rows],
+            "unread": unread,
+        }
     )
 
 
@@ -5212,6 +5841,25 @@ def confirm(doc_type):
 
     submitted = _submitted_from_request_form()
     image_filename = submitted.pop("image_filename", None) or request.form.get("image_filename")
+    scan_rel = _scanned_certificate_relpath(image_filename)
+    if not scan_rel:
+        flash(
+            "This record was not archived. Scan or upload the certificate in Scan Workflow first, "
+            "then open Auto-Filled Form to confirm. Manual entry without a scan cannot be saved.",
+            "error",
+        )
+        return render_template(
+            f"form_{doc_type}.html",
+            doc_type=doc_type,
+            doc_label=DOCUMENT_TYPES[doc_type],
+            data=submitted,
+            image_filename="",
+            blank_entry=True,
+            current_user=get_current_user(),
+            nav_active="form",
+            can_print=False,
+        )
+    image_filename = scan_rel
     if doc_type == "death":
         submitted.pop("Name of Mother", None)
     submitted = _normalize_submitted_registry_keys(submitted)
@@ -5353,6 +6001,12 @@ def confirm(doc_type):
     db.session.commit()
     _place_certificate_in_client_folder(record)
     _consume_ocr_session()
+    saver = get_current_user()
+    _log_audit(
+        saver.id if saver else None,
+        "RECORD_CREATE",
+        f"record_id={record.id} type={doc_type} registry={registry_number or ''}",
+    )
 
     user = get_current_user()
     want_print = (request.form.get("after_save") or "").strip().lower() == "request_print"
@@ -5735,10 +6389,35 @@ def _print_startup_banner(host: str, port: int) -> None:
     print("", flush=True)
 
 
+_APP_MUTEX = None
+
+
+def _claim_single_instance() -> bool:
+    """One office server only. A second python app.py used to leave extra OCR workers running."""
+    global _APP_MUTEX
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetLastError(0)
+        _APP_MUTEX = kernel32.CreateMutexW(None, False, "Local\\DaragaCivilRegistryApp")
+        return int(kernel32.GetLastError()) != 183
+    except Exception:
+        return True
+
+
 if __name__ == "__main__":
-    from multiprocessing import freeze_support
+    from multiprocessing import current_process, freeze_support
 
     freeze_support()
+    if current_process().name != "MainProcess":
+        raise SystemExit(0)
+    if not _claim_single_instance():
+        print("Daraga Civil Registry is already running at http://127.0.0.1:5001", flush=True)
+        print("Close that window first, or use the restart command.", flush=True)
+        raise SystemExit(0)
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
     logging.getLogger("apscheduler").setLevel(logging.WARNING)
     logging.getLogger("apscheduler.executors").setLevel(logging.WARNING)

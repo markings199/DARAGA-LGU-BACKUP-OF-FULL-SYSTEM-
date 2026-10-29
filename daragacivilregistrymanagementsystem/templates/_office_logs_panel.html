@@ -6,7 +6,7 @@
     <div class="ol-hero-copy">
       <p class="ol-kicker">Municipality of Daraga</p>
       <h2 class="section-title">Office logs</h2>
-      <p class="ol-lead">How long queues and activity logs stay on this server.</p>
+      <p class="ol-lead">Live counts and the latest print and audit activity. Retention only clears old closed items, never civil registry records.</p>
     </div>
     <div class="ol-hero-aside">
       <span class="ol-chip {% if lr.get('enabled', True) %}is-ok{% else %}is-off{% endif %}">
@@ -93,5 +93,49 @@
         </ul>
       </section>
     </div>
+  </div>
+
+  <div class="ol-live">
+    <section class="ol-card ol-recent" aria-labelledby="ol-recent-print-title">
+      <div class="ol-card-head">
+        <h3 id="ol-recent-print-title">Latest prints</h3>
+        <p>From the Print logs table.</p>
+      </div>
+      {% if office_print_logs %}
+        <ul class="ol-recent-list">
+          {% for pl in office_print_logs %}
+            <li>
+              <span class="ol-recent-when">{{ pl.printed_at.strftime('%Y-%m-%d %H:%M') if pl.printed_at else '—' }}</span>
+              <span class="ol-recent-who">{{ pl.user.username if pl.user else '—' }}</span>
+              <span class="ol-recent-what">{% if pl.record %}<a href="{{ url_for('record_detail', record_id=pl.record_id) }}">{{ pl.record.registry_number or pl.record_id }}</a>{% else %}{{ pl.record_id }}{% endif %}</span>
+            </li>
+          {% endfor %}
+        </ul>
+        <a class="ol-recent-more" href="{{ url_for('administration', tab='print_logs') }}">Open full print logs</a>
+      {% else %}
+        <p class="ol-recent-empty">No prints yet.</p>
+      {% endif %}
+    </section>
+    <section class="ol-card ol-recent" aria-labelledby="ol-recent-audit-title">
+      <div class="ol-card-head">
+        <h3 id="ol-recent-audit-title">Latest audit activity</h3>
+        <p>From the Audit log table.</p>
+      </div>
+      {% if office_audit_logs %}
+        <ul class="ol-recent-list">
+          {% for log in office_audit_logs %}
+            {% set audit_view = format_audit_log(log.action, log.details) %}
+            <li>
+              <span class="ol-recent-when">{{ log.created_at.strftime('%Y-%m-%d %H:%M') if log.created_at else '—' }}</span>
+              <span class="ol-recent-who">{{ log.user.username if log.user else 'System' }}</span>
+              <span class="ol-recent-what">{{ audit_view.action }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+        <a class="ol-recent-more" href="{{ url_for('administration', tab='audit') }}">Open full audit log</a>
+      {% else %}
+        <p class="ol-recent-empty">No audit entries yet.</p>
+      {% endif %}
+    </section>
   </div>
 </div>

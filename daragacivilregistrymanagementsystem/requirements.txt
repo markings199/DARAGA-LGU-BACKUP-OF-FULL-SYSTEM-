@@ -5,8 +5,8 @@ sqlalchemy>=2.0.0
 werkzeug
 psycopg2-binary
 python-dotenv
-paddleocr
-paddlepaddle==3.2.2
+paddleocr==2.7.3
+paddlepaddle==2.6.2
 opencv-python
 numpy
 APScheduler>=3.10.0

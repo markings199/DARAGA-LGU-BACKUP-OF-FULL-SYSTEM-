@@ -91,120 +91,127 @@
     };
   }
 
-  function bindZoom(form, scroller, stage) {
-    if (!form || !scroller || !document.body.classList.contains("reg-focus")) {
-      return function () {};
-    }
-    var label = document.getElementById("reg-zoom-pct");
+  var zoomPct = 100;
+  var zoomMode = document.body.classList.contains("reg-is-fitted") ? "fit" : "manual";
+
+  function zoomStage() { return document.querySelector(".reg-zoom-stage"); }
+  function zoomForm() { return document.querySelector(".reg-form"); }
+  function zoomScroller() { return document.querySelector(".reg-scroll"); }
+
+  function paintZoomButtons() {
     var fitBtn = document.getElementById("reg-zoom-fit");
     var full = document.getElementById("reg-zoom-100");
-    var useZoom = typeof CSS !== "undefined" && CSS.supports && CSS.supports("zoom", "0.5");
-    var pct = 100;
-    var mode = "fit";
-
-    function paintButtons() {
-      if (fitBtn) fitBtn.classList.toggle("is-zoom-on", mode === "fit");
-      if (full) full.classList.toggle("is-zoom-on", mode === "manual" && pct === 100);
-      document.body.classList.toggle("reg-is-fitted", mode === "fit");
-      if (scroller) {
-        if (mode === "fit") scroller.removeAttribute("title");
-        else scroller.setAttribute("title", "Scroll right to see more columns");
-      }
+    var label = document.getElementById("reg-zoom-pct");
+    if (fitBtn) fitBtn.classList.toggle("is-zoom-on", zoomMode === "fit");
+    if (full) full.classList.toggle("is-zoom-on", zoomMode === "manual" && zoomPct === 100);
+    if (label) label.textContent = zoomMode === "fit" ? "Fit" : zoomPct + "%";
+    document.body.classList.toggle("reg-is-fitted", zoomMode === "fit");
+    document.body.classList.toggle("reg-manual-zoom", zoomMode === "manual");
+    var scroller = zoomScroller();
+    if (scroller) {
+      if (zoomMode === "fit") scroller.removeAttribute("title");
+      else scroller.setAttribute("title", "Scroll to see more of the register");
     }
+  }
 
-    function clearScale() {
+  function clearZoomScale() {
+    var form = zoomForm();
+    var stage = zoomStage();
+    if (form) {
       form.style.zoom = "";
       form.style.transform = "";
-      if (stage) {
-        stage.style.width = "";
-        stage.style.height = "";
+      form.style.transformOrigin = "";
+    }
+    if (stage) {
+      stage.style.width = "";
+      stage.style.height = "";
+    }
+  }
+
+  function fittedPercent() {
+    var scroller = zoomScroller();
+    var form = zoomForm();
+    if (!scroller || !form) return 100;
+    clearZoomScale();
+    var avail = Math.max(120, scroller.clientWidth - 28);
+    var need = Math.max(form.scrollWidth, form.offsetWidth);
+    if (need < 20) return 100;
+    return Math.max(32, Math.min(100, Math.round((avail / need) * 100)));
+  }
+
+  function applyZoom(nextPct) {
+    zoomMode = "manual";
+    zoomPct = Math.max(32, Math.min(200, Math.round(nextPct)));
+    var form = zoomForm();
+    var stage = zoomStage();
+    if (!form) {
+      paintZoomButtons();
+      return;
+    }
+    var scale = zoomPct / 100;
+    form.style.zoom = "";
+    form.style.transformOrigin = "top left";
+    form.style.transform = "scale(" + scale + ")";
+    var width = form.scrollWidth || form.offsetWidth;
+    var height = form.scrollHeight || form.offsetHeight;
+    if (stage) {
+      stage.style.width = Math.ceil(width * scale) + "px";
+      stage.style.height = Math.ceil(height * scale) + "px";
+    }
+    paintZoomButtons();
+  }
+
+  function fitZoom() {
+    zoomMode = "fit";
+    zoomPct = 100;
+    clearZoomScale();
+    paintZoomButtons();
+    var scroller = zoomScroller();
+    if (scroller) scroller.scrollLeft = 0;
+  }
+
+  function bumpZoom(delta) {
+    var base = zoomMode === "fit" ? fittedPercent() : zoomPct;
+    applyZoom(base + delta);
+  }
+
+  function bindZoom() {
+    paintZoomButtons();
+    return function () {};
+  }
+
+  if (!window.__crRegZoomBound) {
+    window.__crRegZoomBound = true;
+    document.addEventListener("click", function (event) {
+      var btn = event.target && event.target.closest ? event.target.closest("button") : null;
+      if (!btn || !btn.id) return;
+      if (btn.id === "reg-zoom-out") {
+        event.preventDefault();
+        bumpZoom(-10);
+      } else if (btn.id === "reg-zoom-in") {
+        event.preventDefault();
+        bumpZoom(10);
+      } else if (btn.id === "reg-zoom-fit") {
+        event.preventDefault();
+        fitZoom();
+      } else if (btn.id === "reg-zoom-100") {
+        event.preventDefault();
+        applyZoom(100);
       }
-    }
-
-    function apply(next) {
-      pct = Math.max(32, Math.min(160, Math.round(next)));
-      var scale = pct / 100;
-      if (useZoom) {
-        form.style.zoom = String(scale);
-        form.style.transform = "";
-        if (stage) {
-          stage.style.width = "";
-          stage.style.height = "";
-        }
-      } else {
-        form.style.zoom = "";
-        var width = form.scrollWidth;
-        var height = form.offsetHeight;
-        form.style.transformOrigin = "top left";
-        form.style.transform = "scale(" + scale + ")";
-        if (stage) {
-          stage.style.width = Math.ceil(width * scale) + "px";
-          stage.style.height = Math.ceil(height * scale) + "px";
-        }
-      }
-      if (label) label.textContent = mode === "fit" ? "Fit" : pct + "%";
-      paintButtons();
-      scroller.scrollLeft = 0;
-    }
-
-    function fitWidth() {
-      mode = "fit";
-      pct = 100;
-      clearScale();
-      if (label) label.textContent = "Fit";
-      paintButtons();
-      scroller.scrollLeft = 0;
-    }
-
-    function bump(delta) {
-      mode = "manual";
-      apply(pct + delta);
-    }
-
-    var out = document.getElementById("reg-zoom-out");
-    var inn = document.getElementById("reg-zoom-in");
-    function onOut() { bump(-10); }
-    function onIn() { bump(10); }
-    function onFit() { fitWidth(); }
-    function onFull() {
-      mode = "manual";
-      apply(100);
-    }
-    function onCtrlWheel(event) {
-      if (!event.ctrlKey) return;
-      event.preventDefault();
-      bump(event.deltaY > 0 ? -10 : 10);
-    }
-    function onResize() {
-      if (mode === "fit") fitWidth();
-    }
-    function onBeforePrint() { apply(100); }
-    function onAfterPrint() {
-      if (mode === "fit") fitWidth();
-    }
-
-    if (out) out.addEventListener("click", onOut);
-    if (inn) inn.addEventListener("click", onIn);
-    if (fitBtn) fitBtn.addEventListener("click", onFit);
-    if (full) full.addEventListener("click", onFull);
-    scroller.addEventListener("wheel", onCtrlWheel, { passive: false });
-    window.addEventListener("resize", onResize);
-    window.addEventListener("beforeprint", onBeforePrint);
-    window.addEventListener("afterprint", onAfterPrint);
-    window.requestAnimationFrame(function () {
-      window.requestAnimationFrame(fitWidth);
     });
-
-    return function () {
-      if (out) out.removeEventListener("click", onOut);
-      if (inn) inn.removeEventListener("click", onIn);
-      if (fitBtn) fitBtn.removeEventListener("click", onFit);
-      if (full) full.removeEventListener("click", onFull);
-      scroller.removeEventListener("wheel", onCtrlWheel);
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("beforeprint", onBeforePrint);
-      window.removeEventListener("afterprint", onAfterPrint);
-    };
+    document.addEventListener(
+      "wheel",
+      function (event) {
+        if (!event.ctrlKey) return;
+        if (!event.target || !event.target.closest || !event.target.closest(".reg-scroll, .reg-zoom-controls")) return;
+        event.preventDefault();
+        bumpZoom(event.deltaY > 0 ? -10 : 10);
+      },
+      { passive: false }
+    );
+    window.addEventListener("resize", function () {
+      if (zoomMode === "fit") fitZoom();
+    });
   }
 
   function initRegisterPage() {
